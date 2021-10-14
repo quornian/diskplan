@@ -16,18 +16,18 @@ pub enum MetaError {
     SerdeJsonError(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ItemMeta {
     owner: Option<String>,
     group: Option<String>,
     permissions: Option<Permissions>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct RawItemMeta {
-    owner: Option<String>,
-    group: Option<String>,
-    permissions: Option<RawPerms>,
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct RawItemMeta {
+    pub owner: Option<String>,
+    pub group: Option<String>,
+    pub permissions: Option<RawPerms>,
 }
 
 impl ItemMeta {
@@ -61,11 +61,11 @@ impl TryFrom<RawItemMeta> for ItemMeta {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Permissions(u16);
 
 #[derive(Debug, Serialize, Deserialize)]
-struct RawPerms(String);
+pub struct RawPerms(pub String);
 
 impl TryFrom<RawPerms> for Permissions {
     type Error = MetaError;
@@ -95,5 +95,11 @@ impl From<Permissions> for u16 {
 impl Debug for Permissions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Permissions(0o{:03o})", self.0)
+    }
+}
+
+impl Permissions {
+    pub fn mode(&self) -> u16 {
+        self.0
     }
 }
