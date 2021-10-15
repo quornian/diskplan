@@ -1,3 +1,5 @@
+mod eval;
 mod parse;
 
-pub use parse::parse;
+pub use eval::*;
+pub use parse::*;

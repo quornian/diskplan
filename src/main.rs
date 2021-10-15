@@ -3,7 +3,10 @@ use std::{env::current_dir, path::Path};
 use anyhow::{Context, Result};
 use clap::{App, Arg};
 
-use diskplan::item::{apply_tree, print_item_tree, Item};
+use diskplan::{
+    apply_tree,
+    item::{print_tree, Item},
+};
 
 fn main() -> Result<()> {
     // Parse command line arguments
@@ -16,14 +19,21 @@ fn main() -> Result<()> {
                 .takes_value(true)
                 .required(true),
         )
+        .arg(
+            Arg::with_name("target")
+                .help("The root directory on which to apply the schema")
+                .takes_value(true)
+                .required(true),
+        )
         .get_matches();
 
-    let schema_root = matches.value_of("schema").expect("<schema> required");
+    let schema = matches.value_of("schema").expect("<schema> required");
+    let target = matches.value_of("target").expect("<target> required");
 
-    // Note: PathBuf::from_str ->
-    let node = Item::from_path(Path::new(&schema_root).to_owned())?;
-    // print!("{:#?}", node);
-    print_item_tree(&node);
-    apply_tree(&current_dir()?, ".", &node, &[])?;
+    let schema = diskplan::read_schema(Path::new(schema))?;
+    let target = diskplan::expr::Context::new(Path::new(target));
+
+    print_tree(&schema);
+    apply_tree(&current_dir()?, ".", &schema, &target)?;
     Ok(())
 }

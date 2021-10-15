@@ -1,9 +1,7 @@
-use regex::Captures;
-
 use crate::meta::{ItemMeta, MetaError, RawItemMeta, RawPerms};
 use std::convert::TryInto;
-use std::path::PathBuf;
-use std::{collections::HashMap, fs, path::Path};
+use std::path::{Path, PathBuf};
+use std::{collections::HashMap, fs};
 
 #[derive(Debug, PartialEq)]
 pub struct Item {
@@ -65,12 +63,6 @@ pub enum ItemError {
     UnexpectedItemError(PathBuf),
 }
 
-#[derive(thiserror::Error, Debug, PartialEq)]
-pub enum EvaluationError {
-    #[error("No such variable: {0}")]
-    NoSuchVariable(String),
-}
-
 impl Item {
     pub fn default_typed(itemtype: ItemType) -> Item {
         Item {
@@ -87,12 +79,20 @@ impl Item {
     /// All Items, including file items, are described by directories containing one or more
     /// "_."-prefixed entries
     ///
-    pub fn from_path(path: PathBuf) -> Result<Item, ItemError> {
+    pub fn from_path(path: &Path) -> Result<Item, ItemError> {
         item_from_path(path)
+    }
+
+    pub fn meta(&self) -> &ItemMeta {
+        &self.meta
+    }
+
+    pub fn itemtype(&self) -> &ItemType {
+        &self.itemtype
     }
 }
 
-fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
+fn item_from_path(path: &Path) -> Result<Item, ItemError> {
     let mut vars = HashMap::new();
     let mut defs = HashMap::new();
     let mut children = HashMap::new();
@@ -101,7 +101,7 @@ fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
     let mut filter = None;
     let name = String::from(
         path.file_name()
-            .ok_or_else(|| ItemError::UnexpectedItemError(path.clone()))?
+            .ok_or_else(|| ItemError::UnexpectedItemError(path.to_owned()))?
             .to_string_lossy(),
     );
     if !name.starts_with("@") {
@@ -109,7 +109,7 @@ fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
     }
 
     // Add context to directory read errors
-    let with_path = |err| ItemError::DirectoryIOError(path.clone(), err);
+    let with_path = |err| ItemError::DirectoryIOError(path.to_owned(), err);
 
     for entry in fs::read_dir(&path).map_err(with_path)? {
         let entry = entry.map_err(with_path)?;
@@ -163,7 +163,7 @@ fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
         //
         if let Some(at_name) = filename.strip_prefix("_.def.") {
             // TODO: Validate variable name
-            let sub_item = Item::from_path(entry.path())?;
+            let sub_item = Item::from_path(&entry.path())?;
             defs.insert(at_name.to_owned(), sub_item);
             continue;
         }
@@ -196,7 +196,7 @@ fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
         if filetype.is_file() {
             children.insert(filename, Item::default_typed(ItemType::File));
         } else if filetype.is_dir() {
-            let child = item_from_path(entry.path())?;
+            let child = item_from_path(&entry.path())?;
             children.insert(filename, child);
         } else if filetype.is_symlink() {
             let target = parse_linked_string(&entry)?;
@@ -212,7 +212,7 @@ fn item_from_path(path: PathBuf) -> Result<Item, ItemError> {
     match itemtype {
         ItemType::File => {
             if !children.is_empty() {
-                return Err(ItemError::ItemHasChildren(path));
+                return Err(ItemError::ItemHasChildren(path.to_owned()));
             }
         }
         ItemType::Directory => {}
@@ -232,7 +232,7 @@ fn parse_linked_string(entry: &fs::DirEntry) -> Result<String, ItemError> {
     Ok(String::from(fs::read_link(entry.path())?.to_string_lossy()))
 }
 
-pub fn print_item_tree(item: &Item) {
+pub fn print_tree(item: &Item) {
     fn print_item(name: &str, item: &Item, indent: usize) {
         if !item.vars.is_empty() {
             println!("--[ Variables ]--");
@@ -262,78 +262,6 @@ pub fn print_item_tree(item: &Item) {
         }
     }
     print_item("<root>", item, 0);
-}
-
-pub fn apply_tree(
-    root: &PathBuf,
-    name: &str,
-    item: &Item,
-    vars: &[HashMap<String, String>],
-) -> Result<(), EvaluationError> {
-    let mut install_args = vec!["install".to_owned()];
-    if let Some(owner) = item.meta.owner() {
-        install_args.push(format!("--owner={}", owner));
-    }
-    if let Some(group) = item.meta.group() {
-        install_args.push(format!("--group={}", group));
-    }
-    if let Some(perms) = item.meta.permissions() {
-        install_args.push(format!("--mode={:o}", perms.mode()));
-    }
-    let action = match item.itemtype {
-        ItemType::Directory => {
-            let mut path = root.to_owned();
-            path.push(name);
-            install_args.push("--directory".to_owned());
-            install_args.push(String::from(path.to_string_lossy()));
-            println!("Run: {:?}", install_args);
-
-            for (name, child) in item.children.iter() {
-                let name = evaluate_name(name, vars)?;
-                apply_tree(&path, &name, child, vars)?;
-            }
-        }
-        _ => eprintln!("NOT IMPLEMENTED"),
-    };
-    Ok(())
-}
-
-fn evaluate_name<S>(
-    name: S,
-    var_stack: &[HashMap<String, String>],
-) -> Result<String, EvaluationError>
-where
-    S: AsRef<str>,
-{
-    // No variables: "some value"
-    if !name.as_ref().contains("@") {
-        return Ok(name.as_ref().to_owned());
-    }
-    // Simple expression: "@varname"
-    let pattern = regex::Regex::new(r"@\w+$").unwrap();
-    if pattern.is_match(name.as_ref()) {
-        for vars in var_stack {
-            if let Some(value) = vars.get(name.as_ref()) {
-                return Ok(value.clone());
-            }
-        }
-        return Err(EvaluationError::NoSuchVariable(name.as_ref().to_owned()));
-    }
-    // Complex expression: "@var1/{@var2}_fixed"
-    let pattern = regex::Regex::new(r"\{([^{}]+)\}|@\w+|[^{}@]*").unwrap();
-    let result = pattern.replace_all(name.as_ref(), |captures: &Captures| {
-        evaluate_name(
-            captures
-                .get(1)
-                .or(captures.get(0))
-                .unwrap()
-                .as_str()
-                .to_owned(),
-            var_stack,
-        )
-        .unwrap() // TODO: Lost my nice error handling due to closure :(
-    });
-    return Ok(String::from(result));
 }
 
 // #[cfg(test)]

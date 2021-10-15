@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -17,6 +19,9 @@ pub enum ExprError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Expr<'a>(Vec<Token<'a>>);
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token<'a> {
     Text(&'a str),
     AtVar(&'a str),
@@ -30,13 +35,25 @@ pub enum Builtin {
     Name,
 }
 
-pub fn parse(s: &str) -> Result<Vec<Token<'_>>, ExprError> {
-    expr(s).map(|(_, tokens)| tokens).map_err(|err| match err {
-        nom::Err::Error(nom::error::Error { input, code }) => {
-            ExprError::SyntaxError(input.to_owned(), code)
-        }
-        _ => ExprError::ParseError(err.to_string()),
-    })
+impl<'a> TryFrom<&'a str> for Expr<'a> {
+    type Error = ExprError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        expr(value)
+            .map(|(_, tokens)| Expr(tokens))
+            .map_err(|err| match err {
+                nom::Err::Error(nom::error::Error { input, code }) => {
+                    ExprError::SyntaxError(input.to_owned(), code)
+                }
+                _ => ExprError::ParseError(err.to_string()),
+            })
+    }
+}
+
+impl<'a> Expr<'a> {
+    pub fn tokens(&self) -> &Vec<Token<'a>> {
+        &self.0
+    }
 }
 
 /// Expression, such as "static/@varA_{@varB}v2/{NAME}"
@@ -152,28 +169,28 @@ mod tests {
     #[test]
     fn test_parse_text() {
         assert_eq!(
-            parse("some/text+with.other-=chars"),
-            Ok(vec![Text("some/text+with.other-=chars")])
+            Expr::try_from("some/text+with.other-=chars"),
+            Ok(Expr(vec![Text("some/text+with.other-=chars")]))
         )
     }
 
     #[test]
     fn test_parse_var() {
-        assert_eq!(parse("@var"), Ok(vec![AtVar("var")]))
+        assert_eq!(Expr::try_from("@var"), Ok(Expr(vec![AtVar("var")])))
     }
 
     #[test]
     fn test_parse_var_trailing_text() {
         assert_eq!(
-            parse("@var_not_this"),
-            Ok(vec![AtVar("var"), Text("_not_this")])
+            Expr::try_from("@var_not_this"),
+            Ok(Expr(vec![AtVar("var"), Text("_not_this")]))
         )
     }
 
     #[test]
     fn test_parse_empty_var() {
         assert_eq!(
-            parse("@"),
+            Expr::try_from("@"),
             Err(ExprError::SyntaxError("@".to_owned(), ErrorKind::Eof))
         )
     }
@@ -181,7 +198,7 @@ mod tests {
     #[test]
     fn test_parse_incomplete_at() {
         assert_eq!(
-            parse("before@"),
+            Expr::try_from("before@"),
             Err(ExprError::SyntaxError("@".to_owned(), ErrorKind::Eof))
         );
     }
@@ -189,7 +206,7 @@ mod tests {
     #[test]
     fn test_parse_invalid_at() {
         assert_eq!(
-            parse("before@_invalid"),
+            Expr::try_from("before@_invalid"),
             Err(ExprError::SyntaxError(
                 "@_invalid".to_owned(),
                 ErrorKind::Eof
@@ -200,7 +217,7 @@ mod tests {
     #[test]
     fn test_parse_incomplete_brace() {
         assert_eq!(
-            parse("something{else"),
+            Expr::try_from("something{else"),
             Err(ExprError::SyntaxError("{else".to_owned(), ErrorKind::Eof))
         );
     }
@@ -208,21 +225,21 @@ mod tests {
     #[test]
     fn test_parse_complete_brace_match() {
         assert_eq!(
-            parse("{PARENT}/{NAME}={PATH}"),
-            Ok(vec![
+            Expr::try_from("{PARENT}/{NAME}={PATH}"),
+            Ok(Expr(vec![
                 Builtin(Parent),
                 Text("/"),
                 Builtin(Name),
                 Text("="),
                 Builtin(Path)
-            ])
+            ]))
         );
     }
 
     #[test]
     fn test_parse_complete_brace_no_match() {
         assert_eq!(
-            parse("{parent}/{name}={path}"),
+            Expr::try_from("{parent}/{name}={path}"),
             Err(ExprError::SyntaxError(
                 "{parent}/{name}={path}".to_owned(),
                 ErrorKind::Eof
