@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     let target = matches.value_of("target").expect("<target> required");
 
     let schema = diskplan::read_schema(Path::new(schema))?;
-    let target = diskplan::expr::Context::new(Path::new(target));
+    let target = diskplan::context::Context::new(Path::new(target));
 
     print_tree(&schema);
     apply_tree(&current_dir()?, ".", &schema, &target)?;

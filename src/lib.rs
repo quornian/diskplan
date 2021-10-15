@@ -3,11 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::expr::{Expr, Token};
+use crate::{eval::Evaluate, parse::Expr};
 
-pub mod expr;
+pub mod context;
+pub mod eval;
 pub mod item;
 pub mod meta;
+pub mod parse;
 pub mod schema;
 
 pub fn read_schema(path: &Path) -> Result<item::Item, item::ItemError> {
@@ -18,17 +20,17 @@ pub fn apply_tree(
     root: &PathBuf,
     name: &str,
     item: &item::Item,
-    context: &expr::Context,
-) -> Result<(), expr::EvaluationError> {
+    context: &context::Context,
+) -> Result<(), eval::EvaluationError> {
     // Each item may be named with a @variable or text (but only one; not @var_text)
     let expr = Expr::try_from(name)?;
     let token = {
         let mut tokens = expr.tokens().iter();
         let token = tokens
             .next()
-            .ok_or_else(|| expr::EvaluationError::NameHasNoTokens(name.to_owned()));
+            .ok_or_else(|| eval::EvaluationError::NameHasNoTokens(name.to_owned()));
         tokens.next().map_or(Ok(()), |extra| {
-            Err(expr::EvaluationError::NameHasMultipleTokens(
+            Err(eval::EvaluationError::NameHasMultipleTokens(
                 name.to_owned(),
                 format!("{:?}", extra),
             ))

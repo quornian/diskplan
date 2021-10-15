@@ -1,9 +1,7 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+use crate::{
+    context::Context,
+    parse::{Builtin, Expr, ExprError, Token},
 };
-
-use super::{Builtin, Expr, ExprError, Token};
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum EvaluationError {
@@ -23,20 +21,12 @@ pub enum EvaluationError {
     NameHasMultipleTokens(String, String),
 }
 
-pub struct Context<'a> {
-    pub path: PathBuf,
-    pub stack: Stack<'a>,
+pub trait Evaluate {
+    fn evaluate(&self, expr: &Expr) -> Result<String, EvaluationError>;
 }
 
-impl Context<'_> {
-    pub fn new(path: &Path) -> Context {
-        Context {
-            path: path.to_owned(),
-            stack: Stack::default(),
-        }
-    }
-
-    pub fn evaluate(&self, expr: &Expr) -> Result<String, EvaluationError> {
+impl Evaluate for Context<'_> {
+    fn evaluate(&self, expr: &Expr) -> Result<String, EvaluationError> {
         let mut buffer = String::new();
         for token in expr.tokens() {
             match token {
@@ -63,22 +53,5 @@ impl Context<'_> {
             }
         }
         return Ok(buffer);
-    }
-}
-
-#[derive(Default)]
-pub struct Stack<'a> {
-    vars: HashMap<String, String>,
-    parent: Option<&'a Stack<'a>>,
-}
-
-impl Stack<'_> {
-    pub fn lookup<S>(&self, var: S) -> Option<&String>
-    where
-        S: AsRef<str>,
-    {
-        self.vars
-            .get(var.as_ref())
-            .or_else(|| self.parent.as_deref().and_then(|parent| parent.lookup(var)))
     }
 }
