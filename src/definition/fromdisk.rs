@@ -1,98 +1,11 @@
-use crate::meta::{ItemMeta, MetaError, RawItemMeta, RawPerms};
-use std::convert::TryInto;
-use std::path::{Path, PathBuf};
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, convert::TryInto, fs, path::Path};
 
-#[derive(Debug, PartialEq)]
-pub struct Item {
-    itemtype: ItemType,
-    vars: HashMap<String, String>,
-    children: HashMap<String, Item>,
-    meta: ItemMeta,
-    filter: Filter,
-}
+use super::{
+    meta::{RawItemMeta, RawPerms},
+    schema::{Filter, ItemError, ItemType, Schema},
+};
 
-#[derive(Debug, PartialEq)]
-pub enum ItemType {
-    File,
-    Directory,
-    Symlink(String),
-    Reuse(String),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Filter {
-    /// Match the exact name of the item
-    Exact,
-    /// Match the regular expression
-    Pattern(String),
-    /// Match any name
-    Freeform,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ItemError {
-    #[error("Unknown item type: {0}")]
-    UnknownItemType(PathBuf),
-
-    #[error("Duplicate type annotation: {0}")]
-    DuplicateTypeAnnotation(PathBuf),
-
-    #[error("File (or reused) item must not have children: {0}")]
-    ItemHasChildren(PathBuf),
-
-    #[error("Usage may not have a type set")]
-    UsageTypeError(PathBuf),
-
-    #[error(transparent)]
-    MetaError(#[from] MetaError),
-
-    #[error("IO error reading item info from directory: {0}")]
-    DirectoryIOError(PathBuf, #[source] std::io::Error),
-
-    #[error("Conflicting filter entry: {0}")]
-    ConflictingFilter(PathBuf),
-
-    #[error("Invalid property entry: {0}")]
-    InvalidPropertyEntry(PathBuf),
-
-    #[error("IO error reading item info from directory")]
-    IOError(#[from] std::io::Error),
-
-    #[error("Unexpected error processing: {0}")]
-    UnexpectedItemError(PathBuf),
-}
-
-impl Item {
-    pub fn default_typed(itemtype: ItemType) -> Item {
-        Item {
-            vars: HashMap::new(),
-            children: HashMap::new(),
-            meta: ItemMeta::default(),
-            itemtype: itemtype,
-            filter: Filter::Exact,
-        }
-    }
-
-    /// Construct an Item from a directory
-    ///
-    /// All Items, including file items, are described by directories containing one or more
-    /// "_."-prefixed entries
-    ///
-    pub fn from_path(path: &Path) -> Result<Item, ItemError> {
-        item_from_path(path)
-    }
-
-    pub fn meta(&self) -> &ItemMeta {
-        &self.meta
-    }
-
-    pub fn itemtype(&self) -> &ItemType {
-        &self.itemtype
-    }
-}
-
-fn item_from_path(path: &Path) -> Result<Item, ItemError> {
+pub fn item_from_path(path: &Path) -> Result<Schema, ItemError> {
     let mut vars = HashMap::new();
     let mut defs = HashMap::new();
     let mut children = HashMap::new();
@@ -163,7 +76,7 @@ fn item_from_path(path: &Path) -> Result<Item, ItemError> {
         //
         if let Some(at_name) = filename.strip_prefix("_.def.") {
             // TODO: Validate variable name
-            let sub_item = Item::from_path(&entry.path())?;
+            let sub_item = item_from_path(&entry.path())?;
             defs.insert(at_name.to_owned(), sub_item);
             continue;
         }
@@ -194,13 +107,13 @@ fn item_from_path(path: &Path) -> Result<Item, ItemError> {
         //
         let filename = filename.into_owned();
         if filetype.is_file() {
-            children.insert(filename, Item::default_typed(ItemType::File));
+            children.insert(filename, Schema::default_typed(ItemType::File));
         } else if filetype.is_dir() {
             let child = item_from_path(&entry.path())?;
             children.insert(filename, child);
         } else if filetype.is_symlink() {
             let target = parse_linked_string(&entry)?;
-            children.insert(filename, Item::default_typed(ItemType::Symlink(target)));
+            children.insert(filename, Schema::default_typed(ItemType::Symlink(target)));
         } else {
             eprintln!("Invalid filetype: {}", filename);
         }
@@ -219,64 +132,15 @@ fn item_from_path(path: &Path) -> Result<Item, ItemError> {
         ItemType::Symlink(_) => {}
         ItemType::Reuse(_) => {}
     }
-    Ok(Item {
-        vars: vars,
-        children: children,
-        meta: meta.try_into()?,
-        itemtype: itemtype,
-        filter: filter.unwrap_or(Filter::Freeform),
-    })
+    Ok(Schema::new(
+        vars,
+        children,
+        itemtype,
+        meta.try_into()?,
+        filter.unwrap_or(Filter::Freeform),
+    ))
 }
 
 fn parse_linked_string(entry: &fs::DirEntry) -> Result<String, ItemError> {
     Ok(String::from(fs::read_link(entry.path())?.to_string_lossy()))
 }
-
-pub fn print_tree(item: &Item) {
-    fn print_item(name: &str, item: &Item, indent: usize) {
-        if !item.vars.is_empty() {
-            println!("--[ Variables ]--");
-            for (var_name, var_expr) in item.vars.iter() {
-                println!(
-                    "{pad:indent$}{name} = {value}",
-                    pad = "",
-                    indent = indent,
-                    name = var_name,
-                    value = var_expr,
-                );
-            }
-            println!("--[ Tree ]--");
-        }
-        println!(
-            "{pad:indent$}{name:name_width$}{typename:30}{matcher:20}{meta}",
-            pad = "",
-            indent = indent,
-            name = name,
-            name_width = 30 - indent,
-            typename = format!("{:?}", item.itemtype),
-            matcher = format!("{:?}", item.filter),
-            meta = format!("{:?}", item.meta)
-        );
-        for (child_name, child_item) in item.children.iter() {
-            print_item(&child_name, child_item, indent + 4);
-        }
-    }
-    print_item("<root>", item, 0);
-}
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn test_item() {
-//         let mut vars = HashMap::new();
-//         vars.insert("@var1".to_owned(), "one".to_owned());
-//         vars.insert("@var2".to_owned(), "two".to_owned());
-//         let expr = "@var1/{@var2}_fixed".to_owned();
-//         assert_eq!(
-//             Ok("one/two_fixed".to_owned()),
-//             evaluate_name(&expr, &[vars])
-//         );
-//     }
-// }

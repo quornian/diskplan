@@ -17,7 +17,7 @@ pub enum MetaError {
 }
 
 #[derive(Debug, Default, PartialEq)]
-pub struct ItemMeta {
+pub struct Meta {
     owner: Option<String>,
     group: Option<String>,
     permissions: Option<Permissions>,
@@ -30,10 +30,10 @@ pub struct RawItemMeta {
     pub permissions: Option<RawPerms>,
 }
 
-impl ItemMeta {
-    pub fn from_str(config: &str) -> Result<ItemMeta, MetaError> {
+impl Meta {
+    pub fn from_str(config: &str) -> Result<Meta, MetaError> {
         let schema: RawItemMeta = serde_json::from_str(config)?;
-        let schema: ItemMeta = schema.try_into()?;
+        let schema: Meta = schema.try_into()?;
         Ok(schema)
     }
     pub fn owner(&self) -> &Option<String> {
@@ -47,10 +47,10 @@ impl ItemMeta {
     }
 }
 
-impl TryFrom<RawItemMeta> for ItemMeta {
+impl TryFrom<RawItemMeta> for Meta {
     type Error = MetaError;
     fn try_from(raw: RawItemMeta) -> Result<Self, MetaError> {
-        Ok(ItemMeta {
+        Ok(Meta {
             owner: raw.owner,
             group: raw.group,
             permissions: match raw.permissions {

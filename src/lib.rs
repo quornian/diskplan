@@ -1,70 +1,25 @@
-use std::{
-    convert::TryFrom,
-    path::{Path, PathBuf},
-};
+//! Disk Scheme
+//!
+//! An abstract directory structure, used to describe and construct a POSIX-like
+//! filesystem.
+//!
+//! Some notable features include:
+//! * Pattern matching
+//! * Variable substitution
+//! * Reusable definitions (sub-schemas)
+//! * Symlinked directory construction
+//!
+//! The abstract directory structure is defined and manipulated by the [`definition`] module,
+//! which also provides a means to load schemas from disk.
+//!
+//! Construction of physical disk entries is handled by the [`application`] module.
 
-use crate::{eval::Evaluate, parse::Expr};
+/// Definition of a schema and means for creating them
+///
+/// The [fromdisk] sub-module specifies a disk-based Schema and the mechanism for loading it
+///
+pub mod definition;
 
-pub mod context;
-pub mod eval;
-pub mod item;
-pub mod meta;
-pub mod parse;
-pub mod schema;
-
-pub fn read_schema(path: &Path) -> Result<item::Item, item::ItemError> {
-    item::Item::from_path(path)
-}
-
-pub fn apply_tree(
-    root: &PathBuf,
-    name: &str,
-    item: &item::Item,
-    context: &context::Context,
-) -> Result<(), eval::EvaluationError> {
-    // Each item may be named with a @variable or text (but only one; not @var_text)
-    let expr = Expr::try_from(name)?;
-    let token = {
-        let mut tokens = expr.tokens().iter();
-        let token = tokens
-            .next()
-            .ok_or_else(|| eval::EvaluationError::NameHasNoTokens(name.to_owned()));
-        tokens.next().map_or(Ok(()), |extra| {
-            Err(eval::EvaluationError::NameHasMultipleTokens(
-                name.to_owned(),
-                format!("{:?}", extra),
-            ))
-        })?;
-        token
-    };
-    // TODO: Use this Token (WIP)
-
-    let name = context.evaluate(&Expr::try_from(name)?)?;
-    let mut install_args = vec!["install".to_owned()];
-    if let Some(owner) = item.meta().owner() {
-        install_args.push(format!("--owner={}", owner));
-    }
-    if let Some(group) = item.meta().group() {
-        install_args.push(format!("--group={}", group));
-    }
-    if let Some(perms) = item.meta().permissions() {
-        install_args.push(format!("--mode={:o}", perms.mode()));
-    }
-    let action = match item.itemtype() {
-        item::ItemType::Directory => {
-            let mut path = root.to_owned();
-            path.push(name);
-            install_args.push("--directory".to_owned());
-            install_args.push(String::from(path.to_string_lossy()));
-            println!("Run: {:?}", install_args);
-
-            // TODO: Use stack with injected var binding from token/name
-            // let child_context = ...
-            // for (name, child) in item.children.iter() {
-            //     apply_tree(&path, &name, child, stack)?;
-            // }
-        }
-        _ => eprintln!("NOT IMPLEMENTED FOR {:?}", item.itemtype()),
-    };
-    Ok(())
-}
+/// Application of a schema to construct filesystem entities on disk
+///
+pub mod application;

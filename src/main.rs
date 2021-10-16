@@ -3,10 +3,7 @@ use std::{env::current_dir, path::Path};
 use anyhow::{Context, Result};
 use clap::{App, Arg};
 
-use diskplan::{
-    apply_tree,
-    item::{print_tree, Item},
-};
+use diskplan::definition::schema::print_tree;
 
 fn main() -> Result<()> {
     // Parse command line arguments
@@ -30,10 +27,10 @@ fn main() -> Result<()> {
     let schema = matches.value_of("schema").expect("<schema> required");
     let target = matches.value_of("target").expect("<target> required");
 
-    let schema = diskplan::read_schema(Path::new(schema))?;
-    let target = diskplan::context::Context::new(Path::new(target));
+    let schema = diskplan::definition::fromdisk::item_from_path(Path::new(schema))?;
+    // let target = diskplan::context::Context::new(Path::new(target));
 
     print_tree(&schema);
-    apply_tree(&current_dir()?, ".", &schema, &target)?;
+    // apply_tree(&current_dir()?, ".", &schema, &target)?;
     Ok(())
 }
