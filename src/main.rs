@@ -1,6 +1,6 @@
-use std::{env::current_dir, path::Path};
+use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{App, Arg};
 
 use diskplan::definition::schema::print_tree;
@@ -13,24 +13,22 @@ fn main() -> Result<()> {
         .arg(
             Arg::with_name("schema")
                 .help("The node schema file to load for testing")
-                .takes_value(true)
-                .required(true),
+                .takes_value(true), // .required(true),
         )
         .arg(
             Arg::with_name("target")
                 .help("The root directory on which to apply the schema")
-                .takes_value(true)
-                .required(true),
+                .takes_value(true), // .required(true),
         )
         .get_matches();
 
-    let schema = matches.value_of("schema").expect("<schema> required");
-    let target = matches.value_of("target").expect("<target> required");
+    let schema = matches.value_of("schema").unwrap_or("mockups/root_5");
+    let target = matches.value_of("target").unwrap_or("/tmp/root");
 
-    let schema = diskplan::definition::fromdisk::item_from_path(Path::new(schema))?;
-    // let target = diskplan::context::Context::new(Path::new(target));
+    let schema = diskplan::definition::fromdisk::schema_from_path(Path::new(schema))?;
+    let context = diskplan::application::context::Context::new(&schema, &Path::new(target));
 
     print_tree(&schema);
-    // apply_tree(&current_dir()?, ".", &schema, &target)?;
+    // apply_tree(context)?;
     Ok(())
 }

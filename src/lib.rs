@@ -16,7 +16,7 @@
 
 /// Definition of a schema and means for creating them
 ///
-/// The [fromdisk] sub-module specifies a disk-based Schema and the mechanism for loading it
+/// The [`definition::fromdisk`] sub-module specifies a disk-based Schema and the mechanism for loading it
 ///
 pub mod definition;
 

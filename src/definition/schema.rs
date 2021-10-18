@@ -3,131 +3,242 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
-pub struct Schema {
+pub enum Schema {
+    Directory(DirectorySchema),
+    File(FileSchema),
+    Symlink(LinkSchema),
+    Use(String),
+}
+
+/// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
+#[derive(Debug, PartialEq)]
+pub struct DirectorySchema {
+    /// Text replacement variables
     vars: HashMap<String, String>,
-    children: HashMap<String, Schema>,
-    itemtype: ItemType,
+
+    /// Definitions of sub-schemas
+    defs: HashMap<String, Schema>,
+
+    /// Properties of this directory
     meta: Meta,
-    filter: Filter,
+
+    /// Disk entries to be created within this directory
+    entries: Vec<(MatchCriteria, Schema)>,
+}
+
+impl DirectorySchema {
+    pub fn new(
+        vars: HashMap<String, String>,
+        defs: HashMap<String, Schema>,
+        meta: Meta,
+        entries: Vec<(MatchCriteria, Schema)>,
+    ) -> DirectorySchema {
+        DirectorySchema {
+            vars,
+            defs,
+            meta,
+            entries,
+        }
+    }
+    pub fn vars(&self) -> &HashMap<String, String> {
+        &self.vars
+    }
+    pub fn defs(&self) -> &HashMap<String, Schema> {
+        &self.defs
+    }
+    pub fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    pub fn entries(&self) -> &Vec<(MatchCriteria, Schema)> {
+        &self.entries
+    }
+
+    pub fn is_no_op(&self) -> bool {
+        self.entries.is_empty() && self.meta.is_no_op()
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub struct FileSchema {
+    /// Properties of this directory
+    meta: Meta,
+
+    /// Path to the resource to be copied as file content
+    source: PathBuf,
+}
+
+impl FileSchema {
+    pub fn new(meta: Meta, source: PathBuf) -> FileSchema {
+        FileSchema { meta, source }
+    }
+    pub fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    pub fn source(&self) -> &PathBuf {
+        &self.source
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ItemType {
-    File,
-    Directory,
-    Symlink(String),
-    Reuse(String),
+pub struct LinkSchema {
+    /// Symlink target
+    target: String,
+
+    /// What to ensure, if anything, should be found at the other end
+    far_schema: Box<Schema>,
+}
+
+impl LinkSchema {
+    pub fn new(target: String, far_schema: Schema) -> LinkSchema {
+        LinkSchema {
+            target,
+            far_schema: Box::new(far_schema),
+        }
+    }
+    pub fn target(&self) -> &String {
+        &self.target
+    }
+    pub fn far_schema(&self) -> &Schema {
+        &self.far_schema
+    }
+}
+
+/// Criteria for matching against names in a directory
+///
+#[derive(Debug, PartialEq)]
+pub struct MatchCriteria {
+    /// Used to sort criteria when matching against directory entries, lower numbers are tried
+    /// first with the first successful match winning
+    order: i16,
+    /// Method to use when testing for a match
+    mode: Match,
+}
+
+impl MatchCriteria {
+    pub fn new(order: i16, mode: Match) -> MatchCriteria {
+        MatchCriteria { order, mode }
+    }
+    pub fn order(&self) -> i16 {
+        self.order
+    }
+    pub fn mode(&self) -> &Match {
+        &self.mode
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Filter {
+pub enum Match {
     /// Match the exact name of the item
-    Exact,
+    Fixed(String),
     /// Match the regular expression
-    Pattern(String),
+    Regex { pattern: String, binding: String },
     /// Match any name
-    Freeform,
+    Any { binding: String },
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ItemError {
-    #[error("Unknown item type: {0}")]
-    UnknownItemType(PathBuf),
+pub enum SchemaError {
+    // SCHEMA --------------------------------
+    #[error("Schema entry is not variable (e.g. @varname) but has pattern: {0}")]
+    NonVariableWithPattern(PathBuf),
 
-    #[error("Duplicate type annotation: {0}")]
-    DuplicateTypeAnnotation(PathBuf),
+    #[error("Only directories are allowed in the schema; encountered: {0}\nConsider replacing with a directory containing _.is.file or _.is_link")]
+    NonDirectorySchemaEntry(PathBuf),
 
-    #[error("File (or reused) item must not have children: {0}")]
-    ItemHasChildren(PathBuf),
+    #[error("Error parsing metadata from: {0}")]
+    MetaError(PathBuf, #[source] MetaError),
 
-    #[error("Usage may not have a type set")]
-    UsageTypeError(PathBuf),
-
-    #[error(transparent)]
-    MetaError(#[from] MetaError),
+    // FROM DISK -----------------------------
+    #[error("Multiple type annotations found under: {0}")]
+    MultipleTypeAnnotation(PathBuf),
 
     #[error("IO error reading item info from directory: {0}")]
     DirectoryIOError(PathBuf, #[source] std::io::Error),
 
-    #[error("Conflicting filter entry: {0}")]
-    ConflictingFilter(PathBuf),
+    #[error("Unable to parse property value from: {0} ({1})")]
+    PropertyParseFailure(PathBuf, String),
 
-    #[error("Invalid property entry: {0}")]
-    InvalidPropertyEntry(PathBuf),
-
-    #[error("IO error reading item info from directory")]
-    IOError(#[from] std::io::Error),
-
-    #[error("Unexpected error processing: {0}")]
+    #[error("An unexpected item was encountered: {0}")]
     UnexpectedItemError(PathBuf),
 }
 
-impl Schema {
-    pub fn new(
-        vars: HashMap<String, String>,
-        children: HashMap<String, Schema>,
-        itemtype: ItemType,
-        meta: Meta,
-        filter: Filter,
-    ) -> Schema {
-        Schema {
-            vars,
-            children,
-            itemtype,
-            meta,
-            filter,
+pub fn print_tree(schema: &Schema) {
+    fn print_schema(schema: &Schema, indent: usize) {
+        match schema {
+            Schema::File(file_schema) => print_file_schema(&file_schema, indent),
+            Schema::Directory(dir_schema) => print_dir_schema(&dir_schema, indent),
+            Schema::Symlink(link_schema) => print_link_schema(&link_schema, indent),
+            Schema::Use(refname) => println!("[REF == {}]", refname),
         }
     }
-
-    pub fn default_typed(itemtype: ItemType) -> Schema {
-        Schema {
-            vars: HashMap::new(),
-            children: HashMap::new(),
-            meta: Meta::default(),
-            itemtype,
-            filter: Filter::Exact,
+    fn print_dir_schema(dir_schema: &DirectorySchema, indent: usize) {
+        println!("{pad:indent$}[DIRECTORY]", pad = "", indent = indent);
+        for (name, value) in dir_schema.vars.iter() {
+            println!(
+                "{pad:indent$}var {name} = {value}",
+                pad = "",
+                indent = indent,
+                name = name,
+                value = value,
+            );
+        }
+        for (name, def) in dir_schema.defs.iter() {
+            println!(
+                "{pad:indent$}def {name}:",
+                pad = "",
+                indent = indent,
+                name = name,
+            );
+            print_schema(def, indent + 4);
+        }
+        print_meta(&dir_schema.meta, indent);
+        for (criteria, entry) in &dir_schema.entries {
+            println!(
+                "{pad:indent$}--> {:?}",
+                criteria.mode(),
+                pad = "",
+                indent = indent
+            );
+            print_schema(entry, indent + 4);
         }
     }
-
-    pub fn meta(&self) -> &Meta {
-        &self.meta
-    }
-
-    pub fn itemtype(&self) -> &ItemType {
-        &self.itemtype
-    }
-}
-
-pub fn print_tree(item: &Schema) {
-    fn print_item(name: &str, item: &Schema, indent: usize) {
-        if !item.vars.is_empty() {
-            println!("--[ Variables ]--");
-            for (var_name, var_expr) in item.vars.iter() {
-                println!(
-                    "{pad:indent$}{name} = {value}",
-                    pad = "",
-                    indent = indent,
-                    name = var_name,
-                    value = var_expr,
-                );
-            }
-            println!("--[ Tree ]--");
-        }
+    fn print_file_schema(file_schema: &FileSchema, indent: usize) {
         println!(
-            "{pad:indent$}{name:name_width$}{typename:30}{matcher:20}{meta}",
+            "{pad:indent$}[FILE <- {}]",
+            file_schema.source().to_string_lossy(),
             pad = "",
             indent = indent,
-            name = name,
-            name_width = 30 - indent,
-            typename = format!("{:?}", item.itemtype),
-            matcher = format!("{:?}", item.filter),
-            meta = format!("{:?}", item.meta)
         );
-        for (child_name, child_item) in item.children.iter() {
-            print_item(&child_name, child_item, indent + 4);
-        }
+        print_meta(&file_schema.meta, indent);
     }
-    print_item("<root>", item, 0);
+    fn print_link_schema(link_schema: &LinkSchema, indent: usize) {
+        println!(
+            "{pad:indent$}[LINK -> {}]",
+            link_schema.target,
+            pad = "",
+            indent = indent
+        );
+        print_schema(link_schema.far_schema(), indent + 4);
+    }
+    fn print_meta(meta: &Meta, indent: usize) {
+        print!("{pad:indent$}meta ", pad = "", indent = indent);
+        match meta.owner() {
+            Some(owner) => print!("{}", owner),
+            None => print!("(keep)"),
+        }
+        print!(":");
+        match meta.group() {
+            Some(group) => print!("{}", group),
+            None => print!("(keep)"),
+        }
+        print!(" mode=");
+        match meta.permissions() {
+            Some(perms) => print!("{:o}", perms.mode()),
+            None => print!("(keep)"),
+        }
+        println!();
+    }
+    print_schema(schema, 0);
 }
 
 // #[cfg(test)]

@@ -38,14 +38,14 @@ impl Evaluate for Context<'_> {
                         .ok_or_else(|| EvaluationError::NoSuchVariable(var.to_string()))?,
                 ),
                 Token::Builtin(builtin) => buffer.push_str(&match builtin {
-                    Builtin::Path => self.path.to_string_lossy(),
+                    Builtin::Path => self.target.to_string_lossy(),
                     Builtin::Parent => self
-                        .path
+                        .target
                         .parent()
                         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
                         .to_string_lossy(),
                     Builtin::Name => self
-                        .path
+                        .target
                         .file_name()
                         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
                         .to_string_lossy(),

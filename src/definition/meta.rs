@@ -45,6 +45,16 @@ impl Meta {
     pub fn permissions(&self) -> Option<Permissions> {
         self.permissions
     }
+    pub fn is_no_op(&self) -> bool {
+        match self {
+            Meta {
+                owner: None,
+                group: None,
+                permissions: None,
+            } => true,
+            _ => false,
+        }
+    }
 }
 
 impl TryFrom<RawItemMeta> for Meta {

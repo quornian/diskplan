@@ -1,30 +1,21 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::Path};
+
+use crate::definition::schema::Schema;
 
 type Vars = HashMap<String, String>;
 
 pub struct Context<'a> {
-    pub path: PathBuf,
+    pub schema: &'a Schema,
+    pub target: &'a Path,
     pub stack: Stack<'a>,
 }
 
-impl Context<'_> {
-    pub fn new(path: &Path) -> Context {
+impl<'a> Context<'a> {
+    pub fn new(schema: &'a Schema, target: &'a Path) -> Context<'a> {
         Context {
-            path: path.to_owned(),
+            schema,
+            target,
             stack: Stack::default(),
-        }
-    }
-
-    pub fn child(&self, name: &str, vars: Vars) -> Context {
-        Context {
-            path: self.path.join(name),
-            stack: Stack {
-                vars: vars,
-                parent: Some(&self.stack),
-            },
         }
     }
 }
