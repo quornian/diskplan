@@ -13,22 +13,25 @@ fn main() -> Result<()> {
         .arg(
             Arg::with_name("schema")
                 .help("The node schema file to load for testing")
-                .takes_value(true), // .required(true),
+                .takes_value(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("target")
                 .help("The root directory on which to apply the schema")
-                .takes_value(true), // .required(true),
+                .takes_value(true)
+                .required(true),
         )
         .get_matches();
 
-    let schema = matches.value_of("schema").unwrap_or("mockups/root_5");
-    let target = matches.value_of("target").unwrap_or("/tmp/root");
+    let schema = matches.value_of("schema").unwrap();
+    let target = matches.value_of("target").unwrap();
 
     let schema = diskplan::definition::fromdisk::schema_from_path(Path::new(schema))?;
     let context = diskplan::application::context::Context::new(&schema, &Path::new(target));
 
-    // print_tree(&schema);
+    println!("{:#?}", schema);
+    print_tree(&schema);
     apply_tree(&context)?;
     Ok(())
 }

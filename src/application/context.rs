@@ -29,13 +29,13 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn child<'ch>(&'a self, name: &str, schema: &'a Schema) -> Context<'ch>
+    pub fn child<'ch>(&'a self, target: PathBuf, schema: &'a Schema) -> Context<'ch>
     where
         'a: 'ch,
     {
         Context {
             schema,
-            target: self.target.join(name),
+            target,
             parent: Some(&self),
             vars: HashMap::new(),
         }
@@ -50,18 +50,23 @@ impl<'a> Context<'a> {
             .or_else(|| self.parent.as_deref().and_then(|parent| parent.lookup(var)))
     }
 
-    pub fn reference<'ch, S>(&'a self, var: S) -> Option<Context<'ch>>
+    pub fn follow<'ch, S>(&'a self, var: S) -> Option<Context<'ch>>
     where
         'a: 'ch,
         S: AsRef<str>,
     {
+        let var = var.as_ref();
+        self.follow_schema(var)
+            .and_then(|far_schema| Some(self.child(self.target.clone(), far_schema)))
+    }
+
+    fn follow_schema(&'a self, var: &str) -> Option<&Schema> {
         if let Schema::Directory(directory_schema) = self.schema {
-            if let Some(child_schema) = directory_schema.defs().get(var.as_ref()) {
-                let name = "TODO: Resilve expr";
-                return Some(self.child(name, child_schema));
+            if let Some(child_schema) = directory_schema.defs().get(var) {
+                return Some(child_schema);
             }
         }
-        None
+        self.parent.and_then(|parent| parent.follow_schema(var))
     }
 
     pub fn bind(&mut self, var: &'a str, value: &str) {

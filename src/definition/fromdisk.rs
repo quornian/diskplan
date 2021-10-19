@@ -32,6 +32,13 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     let file_indicator = path.join("_.is.file");
     let link_indicator = path.join("_.is.link");
     let use_indicator = path.join("_.is.use");
+    let parse_linked_use = |ind| {
+        let value = parse_linked_string(ind)?;
+        value
+            .strip_prefix("@")
+            .map(|s| s.to_owned())
+            .ok_or_else(|| SchemaError::PropertyParseFailure(ind.into(), value))
+    };
     let schema = match (
         file_indicator.present(),
         link_indicator.present(),
@@ -42,7 +49,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
         }
         (true, _, _) => Schema::File(file_schema_from_path(path, file_indicator)?),
         (_, true, _) => Schema::Symlink(link_schema_from_path(path, link_indicator)?),
-        (_, _, true) => Schema::Use(parse_linked_string(&use_indicator)?),
+        (_, _, true) => Schema::Use(parse_linked_use(&use_indicator)?),
         (_, _, _) => Schema::Directory(directory_schema_from_path(path)?),
     };
 
