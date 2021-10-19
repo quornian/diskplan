@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::{App, Arg};
 
-use diskplan::definition::schema::print_tree;
+use diskplan::{application::apply_tree, definition::schema::print_tree};
 
 fn main() -> Result<()> {
     // Parse command line arguments
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
     let schema = diskplan::definition::fromdisk::schema_from_path(Path::new(schema))?;
     let context = diskplan::application::context::Context::new(&schema, &Path::new(target));
 
-    print_tree(&schema);
-    // apply_tree(context)?;
+    // print_tree(&schema);
+    apply_tree(&context)?;
     Ok(())
 }

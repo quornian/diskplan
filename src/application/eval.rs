@@ -33,7 +33,6 @@ impl Evaluate for Context<'_> {
                 Token::Text(text) => buffer.push_str(text),
                 Token::AtVar(var) => buffer.push_str(
                     &self
-                        .stack
                         .lookup(var)
                         .ok_or_else(|| EvaluationError::NoSuchVariable(var.to_string()))?,
                 ),

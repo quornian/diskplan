@@ -1,3 +1,4 @@
+use super::criteria::MatchCriteria;
 use super::meta::{Meta, MetaError};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -33,6 +34,8 @@ impl DirectorySchema {
         meta: Meta,
         entries: Vec<(MatchCriteria, Schema)>,
     ) -> DirectorySchema {
+        let mut entries = entries;
+        entries.sort_by(|(a, _), (b, _)| a.order().cmp(&b.order()));
         DirectorySchema {
             vars,
             defs,
@@ -103,39 +106,6 @@ impl LinkSchema {
     }
 }
 
-/// Criteria for matching against names in a directory
-///
-#[derive(Debug, PartialEq)]
-pub struct MatchCriteria {
-    /// Used to sort criteria when matching against directory entries, lower numbers are tried
-    /// first with the first successful match winning
-    order: i16,
-    /// Method to use when testing for a match
-    mode: Match,
-}
-
-impl MatchCriteria {
-    pub fn new(order: i16, mode: Match) -> MatchCriteria {
-        MatchCriteria { order, mode }
-    }
-    pub fn order(&self) -> i16 {
-        self.order
-    }
-    pub fn mode(&self) -> &Match {
-        &self.mode
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Match {
-    /// Match the exact name of the item
-    Fixed(String),
-    /// Match the regular expression
-    Regex { pattern: String, binding: String },
-    /// Match any name
-    Any { binding: String },
-}
-
 #[derive(thiserror::Error, Debug)]
 pub enum SchemaError {
     // SCHEMA --------------------------------
@@ -157,6 +127,9 @@ pub enum SchemaError {
 
     #[error("Unable to parse property value from: {0} ({1})")]
     PropertyParseFailure(PathBuf, String),
+
+    #[error("Unable to parse regular expression value from: {0} ({1})")]
+    RegexParseFailure(PathBuf, #[source] regex::Error),
 
     #[error("An unexpected item was encountered: {0}")]
     UnexpectedItemError(PathBuf),

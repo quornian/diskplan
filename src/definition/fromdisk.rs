@@ -7,11 +7,14 @@ use std::{
     str::FromStr,
 };
 
-use crate::definition::{meta::Meta, schema::Match};
+use crate::definition::{
+    criteria::{Match, MatchCriteria},
+    meta::Meta,
+};
 
 use super::{
     meta::{RawItemMeta, RawPerms},
-    schema::{DirectorySchema, FileSchema, LinkSchema, MatchCriteria, Schema, SchemaError},
+    schema::{DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError},
 };
 
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
@@ -96,16 +99,17 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                         0i16
                     }
                 };
+                let map_regex_err = |e| SchemaError::RegexParseFailure(path.to_owned(), e);
                 let binding = name.strip_prefix("@");
                 let mode = {
                     match (pattern_indicator.present(), binding) {
                         (false, Some(binding)) => Match::Any {
                             binding: binding.to_owned(),
                         },
-                        (true, Some(binding)) => Match::Regex {
-                            pattern: parse_linked_string(&pattern_indicator)?,
-                            binding: binding.to_owned(),
-                        },
+                        (true, Some(binding)) => {
+                            let pattern = parse_linked_string(&pattern_indicator)?;
+                            Match::from_regex(&pattern, binding).map_err(map_regex_err)?
+                        }
                         (false, None) => Match::Fixed(String::from(name)),
                         (true, None) => {
                             return Err(SchemaError::NonVariableWithPattern(path.to_owned()))
