@@ -12,7 +12,7 @@ pub enum Schema {
 }
 
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct DirectorySchema {
     /// Text replacement variables
     vars: HashMap<String, String>,

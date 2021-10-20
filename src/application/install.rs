@@ -1,4 +1,4 @@
-use std::{path::Path, process::Command};
+use std::{fs::read_link, os::unix::fs::symlink, path::Path, process::Command};
 
 use crate::definition::meta::Meta;
 
@@ -20,6 +20,15 @@ pub fn install_file(path: &Path, source: &Path, meta: &Meta) -> Result<(), Appli
     add_meta_args(&mut command, meta, DEFAULT_FILE_MODE);
     command.arg(source);
     run_for(path, command.arg(path))
+}
+
+pub fn install_link(path: &Path, target: &Path) -> Result<(), ApplicationError> {
+    if let Ok(existing) = read_link(path) {
+        if existing == target {
+            return Ok(());
+        }
+    }
+    symlink(target, path).map_err(|e| ApplicationError::IOError(path.into(), e))
 }
 
 fn add_meta_args(command: &mut Command, meta: &Meta, default_mode: u16) {

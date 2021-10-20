@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs, io, path::PathBuf};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     application::context::Context,
@@ -7,6 +12,8 @@ use crate::{
         schema::{DirectorySchema, FileSchema, LinkSchema, Schema},
     },
 };
+
+use self::{eval::Evaluate, parse::Expr};
 
 pub mod context;
 pub mod eval;
@@ -21,14 +28,17 @@ pub enum ApplicationError {
     #[error("Command failed to run (exit code {1}) on: {0}\n  {2}")]
     CommandError(PathBuf, i32, String),
 
-    #[error(transparent)]
-    EvaluationError(#[from] eval::EvaluationError),
+    #[error("Error evaluating expression for: {0}")]
+    EvaluationError(PathBuf, #[source] eval::EvaluationError),
 
     #[error("No definition found for {1} under: {0}")]
     DefNotFound(PathBuf, String),
 
     #[error("Pattern {0} does not match {1}")]
     PatternMismatch(String, String),
+
+    #[error("Link has non-absolute target path\n  Link: {0}\n  Expr: {1}\n  Path: {2}")]
+    LinkTargetNotAbsolute(PathBuf, String, String),
 }
 
 pub fn apply_tree(context: &context::Context) -> Result<(), ApplicationError> {
@@ -53,17 +63,29 @@ fn apply_def_use(name: &String, context: &Context) -> Result<(), ApplicationErro
 fn apply_file(file_schema: &FileSchema, context: &Context) -> Result<(), ApplicationError> {
     // Ensure the file exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
-    install::install_file(&context.target, file_schema.source(), file_schema.meta())?;
-    Ok(())
+    install::install_file(&context.target, file_schema.source(), file_schema.meta())
 }
 
 fn apply_link(link_schema: &LinkSchema, context: &Context) -> Result<(), ApplicationError> {
-    eprintln!(
-        "Not implemented: create_link({:?}, ...)\n  {}",
-        link_schema,
-        context.target.to_string_lossy()
-    );
-    Ok(())
+    // Ensure the link exists and its evaluated target path is absolute
+    let link_target = context
+        .evaluate(link_schema.target())
+        .map_err(|e| ApplicationError::EvaluationError(context.target.clone(), e))?;
+    let link_target_path = Path::new(&link_target);
+
+    if !link_target_path.is_absolute() {
+        return Err(ApplicationError::LinkTargetNotAbsolute(
+            context.target.clone(),
+            link_schema.target().to_owned(),
+            link_target,
+        ));
+    }
+
+    // TODO: Consider skipping if link already exists
+    install::install_link(&context.target, link_target_path)?;
+    let far_context = Context::new(link_schema.far_schema(), link_target_path);
+
+    apply_tree(&far_context)
 }
 
 fn apply_directory(

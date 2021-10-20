@@ -15,7 +15,7 @@ pub struct Context<'a> {
     pub schema: &'a Schema,
     pub target: PathBuf,
 
-    vars: HashMap<&'a str, String>,
+    bound_vars: HashMap<&'a str, String>,
     parent: Option<&'a Context<'a>>,
 }
 
@@ -24,7 +24,7 @@ impl<'a> Context<'a> {
         Context {
             schema,
             target: target.to_owned(),
-            vars: HashMap::new(),
+            bound_vars: HashMap::new(),
             parent: None,
         }
     }
@@ -37,7 +37,7 @@ impl<'a> Context<'a> {
             schema,
             target,
             parent: Some(&self),
-            vars: HashMap::new(),
+            bound_vars: HashMap::new(),
         }
     }
 
@@ -45,9 +45,16 @@ impl<'a> Context<'a> {
     where
         S: AsRef<str>,
     {
-        self.vars
+        self.bound_vars
             .get(var.as_ref())
-            .or_else(|| self.parent.as_deref().and_then(|parent| parent.lookup(var)))
+            .or_else(|| {
+                if let Schema::Directory(directory_schema) = self.schema {
+                    directory_schema.vars().get(var.as_ref())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| self.parent.and_then(|parent| parent.lookup(var)))
     }
 
     pub fn follow<'ch, S>(&'a self, var: S) -> Option<Context<'ch>>
@@ -70,6 +77,48 @@ impl<'a> Context<'a> {
     }
 
     pub fn bind(&mut self, var: &'a str, value: &str) {
-        self.vars.insert(var, value.into());
+        self.bound_vars.insert(var, value.into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+
+    use crate::{
+        application::{eval::Evaluate, parse::Expr},
+        definition::{
+            criteria::{Match, MatchCriteria},
+            meta::Meta,
+            schema::{DirectorySchema, LinkSchema},
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_full_schema_expr() {
+        let schema = Schema::Directory({
+            let vars = [("absvar".to_owned(), "/tmp/abs".to_owned())]
+                .iter()
+                .cloned()
+                .collect();
+            let defs = HashMap::new();
+            let meta = Meta::default();
+            let entries = vec![(
+                MatchCriteria::new(0, Match::Fixed("link".to_owned())),
+                Schema::Symlink(LinkSchema::new(
+                    "@absvar/sub".to_owned(),
+                    Schema::Directory(DirectorySchema::default()),
+                )),
+            )];
+            DirectorySchema::new(vars, defs, meta, entries)
+        });
+        let target = Path::new("/tmp/root");
+        let context = Context::new(&schema, target);
+
+        assert_eq!(context.lookup("absvar"), Some(&"/tmp/abs".to_owned()));
+
+        assert_eq!(context.evaluate("@absvar"), Ok("/tmp/abs".to_owned()));
     }
 }
