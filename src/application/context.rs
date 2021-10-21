@@ -83,10 +83,8 @@ impl<'a> Context<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use crate::{
-        application::{eval::Evaluate, parse::Expr},
+        application::eval::Evaluate,
         definition::{
             criteria::{Match, MatchCriteria},
             meta::Meta,

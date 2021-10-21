@@ -16,7 +16,7 @@ pub enum MetaError {
     SerdeJsonError(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Meta {
     owner: Option<String>,
     group: Option<String>,

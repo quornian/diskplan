@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -9,16 +8,34 @@ use crate::{
     application::context::Context,
     definition::{
         criteria::{Match, MatchCriteria},
+        meta::Meta,
         schema::{DirectorySchema, FileSchema, LinkSchema, Schema},
     },
 };
 
-use self::{eval::Evaluate, parse::Expr};
+use self::eval::Evaluate;
 
 pub mod context;
 pub mod eval;
 pub mod install;
 pub mod parse;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Action {
+    CreateDirectory {
+        path: PathBuf,
+        meta: Meta,
+    },
+    CreateSymlink {
+        path: PathBuf,
+        target: PathBuf,
+    },
+    CreateFile {
+        path: PathBuf,
+        source: PathBuf,
+        meta: Meta,
+    },
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ApplicationError {
@@ -41,32 +58,55 @@ pub enum ApplicationError {
     LinkTargetNotAbsolute(PathBuf, String, String),
 }
 
-pub fn apply_tree(context: &context::Context) -> Result<(), ApplicationError> {
+pub fn gather_actions(context: &Context) -> Result<Vec<Action>, ApplicationError> {
+    let mut actions = Vec::new();
+    apply_tree(context, &mut actions).map(|()| actions)
+}
+
+fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), ApplicationError> {
     eprintln!("Applying to {}", &context.target.to_str().unwrap());
     match context.schema {
-        Schema::File(file_schema) => apply_file(file_schema, context)?,
-        Schema::Symlink(link_schema) => apply_link(link_schema, context)?,
-        Schema::Directory(dir_schema) => apply_directory(dir_schema, context)?,
-        Schema::Use(name) => apply_def_use(name, context)?,
+        Schema::File(file_schema) => apply_file(file_schema, context, actions)?,
+        Schema::Symlink(link_schema) => apply_link(link_schema, context, actions)?,
+        Schema::Directory(dir_schema) => apply_directory(dir_schema, context, actions)?,
+        Schema::Use(name) => apply_def_use(name, context, actions)?,
     }
     Ok(())
 }
 
-fn apply_def_use(name: &String, context: &Context) -> Result<(), ApplicationError> {
+fn apply_def_use(
+    name: &String,
+    context: &Context,
+    actions: &mut Vec<Action>,
+) -> Result<(), ApplicationError> {
     eprintln!("Looking up definition {}", name);
     let child = context
         .follow(name)
         .ok_or_else(|| ApplicationError::DefNotFound(context.target.clone(), name.clone()))?;
-    apply_tree(&child)
+    apply_tree(&child, actions)
 }
 
-fn apply_file(file_schema: &FileSchema, context: &Context) -> Result<(), ApplicationError> {
+fn apply_file(
+    file_schema: &FileSchema,
+    context: &Context,
+    actions: &mut Vec<Action>,
+) -> Result<(), ApplicationError> {
     // Ensure the file exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
-    install::install_file(&context.target, file_schema.source(), file_schema.meta())
+    // install::install_file(&context.target, file_schema.source(), file_schema.meta());
+    actions.push(Action::CreateFile {
+        path: context.target.to_owned(),
+        source: file_schema.source().to_owned(),
+        meta: (*file_schema.meta()).clone(),
+    });
+    Ok(())
 }
 
-fn apply_link(link_schema: &LinkSchema, context: &Context) -> Result<(), ApplicationError> {
+fn apply_link(
+    link_schema: &LinkSchema,
+    context: &Context,
+    actions: &mut Vec<Action>,
+) -> Result<(), ApplicationError> {
     // Ensure the link exists and its evaluated target path is absolute
     let link_target = context
         .evaluate(link_schema.target())
@@ -82,38 +122,49 @@ fn apply_link(link_schema: &LinkSchema, context: &Context) -> Result<(), Applica
     }
 
     // TODO: Consider skipping if link already exists
-    install::install_link(&context.target, link_target_path)?;
+    // install::install_link(&context.target, link_target_path)?;
+    actions.push(Action::CreateSymlink {
+        path: context.target.to_owned(),
+        target: link_target_path.to_owned(),
+    });
     let far_context = Context::new(link_schema.far_schema(), link_target_path);
 
-    apply_tree(&far_context)
+    apply_tree(&far_context, actions)
 }
 
 fn apply_directory(
     directory_schema: &DirectorySchema,
     context: &Context,
+    actions: &mut Vec<Action>,
 ) -> Result<(), ApplicationError> {
     // Ensure the directory exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
-    install::install_directory(&context.target, directory_schema.meta())?;
+    // install::install_directory(&context.target, directory_schema.meta())?;
+    actions.push(Action::CreateDirectory {
+        path: context.target.to_owned(),
+        meta: (*directory_schema.meta()).clone(),
+    });
 
-    handle_entries(directory_schema.entries(), context)
+    handle_entries(directory_schema.entries(), context, actions)
 }
 
 fn handle_entries(
     entries: &Vec<(MatchCriteria, Schema)>,
     context: &Context,
+    actions: &mut Vec<Action>,
 ) -> Result<(), ApplicationError> {
     let target = &context.target;
     let map_io_err = |e| ApplicationError::IOError(target.to_owned(), e);
 
     // Handle entries within this directory
-    let mut entries_handled = {
+    let mut entries_handled = (|| {
         let listing: Result<HashMap<_, bool>, _> = fs::read_dir(&context.target)
             .map_err(map_io_err)?
             .map(|x| x.map(|ent| (ent.file_name(), false)))
             .collect();
-        listing.map_err(map_io_err)?
-    };
+        listing.map_err(map_io_err)
+    })()
+    .unwrap_or_default();
 
     // Algorithm overview:
     //  - Loop over schema entries, which are sorted by their criteria orders
@@ -127,12 +178,12 @@ fn handle_entries(
                     None => {
                         // New
                         let child_path = target.join(name);
-                        apply_tree(&context.child(child_path, schema))?;
+                        apply_tree(&context.child(child_path, schema), actions)?;
                     }
                     Some(false) => {
                         // Update
                         let child_path = target.join(name);
-                        apply_tree(&context.child(child_path, schema))?;
+                        apply_tree(&context.child(child_path, schema), actions)?;
                     }
                     Some(true) => {
                         // Earlier rule handled this, but this is a Fixed match. Seems suspicious...
@@ -159,12 +210,12 @@ fn handle_entries(
                         None => {
                             // New
                             let child_path = target.join(name);
-                            apply_tree(&context.child(child_path, schema))?;
+                            apply_tree(&context.child(child_path, schema), actions)?;
                         }
                         Some(false) => {
                             // Update
                             let child_path = target.join(name);
-                            apply_tree(&context.child(child_path, schema))?;
+                            apply_tree(&context.child(child_path, schema), actions)?;
                         }
                         Some(true) => (), // Earlier rule handled
                     }
@@ -180,13 +231,13 @@ fn handle_entries(
                                     let child_path = target.join(name);
                                     let mut child_context = context.child(child_path, schema);
                                     child_context.bind(binding, name);
-                                    apply_tree(&child_context)?;
+                                    apply_tree(&child_context, actions)?;
                                 } else {
                                     // Update
                                     let child_path = target.join(name);
                                     let mut child_context = context.child(child_path, schema);
                                     child_context.bind(binding, name);
-                                    apply_tree(&child_context)?;
+                                    apply_tree(&child_context, actions)?;
                                 }
                             }
                         }
@@ -204,13 +255,13 @@ fn handle_entries(
                             let child_path = target.join(name);
                             let mut child_context = context.child(child_path, schema);
                             child_context.bind(binding, name);
-                            apply_tree(&child_context)?;
+                            apply_tree(&child_context, actions)?;
                         } else {
                             // Update
                             let child_path = target.join(name);
                             let mut child_context = context.child(child_path, schema);
                             child_context.bind(binding, name);
-                            apply_tree(&child_context)?;
+                            apply_tree(&child_context, actions)?;
                         }
                     }
                     // else: Ignore file names we couldn't read

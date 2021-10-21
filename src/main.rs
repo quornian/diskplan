@@ -3,7 +3,10 @@ use std::path::Path;
 use anyhow::Result;
 use clap::{App, Arg};
 
-use diskplan::{application::apply_tree, definition::schema::print_tree};
+use diskplan::{
+    application::{gather_actions, install, Action},
+    definition::schema::print_tree,
+};
 
 fn main() -> Result<()> {
     // Parse command line arguments
@@ -55,7 +58,20 @@ fn main() -> Result<()> {
     }
 
     println!("{:#?}", schema);
+
     print_tree(&schema);
-    apply_tree(&context)?;
+
+    let actions = gather_actions(&context)?;
+
+    for action in actions {
+        println!("Performing Action: {:?}", action);
+        match action {
+            Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
+            Action::CreateFile { path, source, meta } => {
+                install::install_file(&path, &source, &meta)?
+            }
+            Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
+        }
+    }
     Ok(())
 }
