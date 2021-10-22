@@ -133,6 +133,9 @@ pub enum SchemaError {
 
     #[error("An unexpected item was encountered: {0}")]
     UnexpectedItemError(PathBuf),
+
+    #[error("Syntax error in file {0} line {1}:\n{2}\n{3}")]
+    SyntaxError(PathBuf, usize, String, String),
 }
 
 pub fn print_tree(schema: &Schema) {
