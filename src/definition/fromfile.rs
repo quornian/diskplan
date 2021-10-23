@@ -74,12 +74,12 @@ fn schema(current_indent: usize) -> impl Fn(&str) -> IResult<&str, Schema> {
                 // }
                 println!("{:?}", op);
             }
-            if s.len() == 0 {
+            if remaining.len() == 0 {
                 break;
             }
         }
         Ok((
-            s,
+            remaining,
             Schema::Directory(DirectorySchema::new(vars, defs, meta, entries)),
         ))
     }
