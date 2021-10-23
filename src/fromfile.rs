@@ -1,9 +1,8 @@
 use std::{
-    borrow::Borrow,
     collections::HashMap,
     fs::File,
-    io::{self, BufRead, BufReader, Read},
-    iter::{once, repeat},
+    io::{self, Read},
+    iter::repeat,
     path::Path,
 };
 
@@ -19,9 +18,10 @@ use nom::{
     IResult,
 };
 
-use super::{
+use crate::schema::{
+    expr::{Expression, Token},
     meta::Meta,
-    schema::{DirectorySchema, Expression, Schema, SchemaError, Token},
+    DirectorySchema, Schema, SchemaError,
 };
 
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {

@@ -9,17 +9,14 @@
 //! * Reusable definitions (sub-schemas)
 //! * Symlinked directory construction
 //!
-//! The abstract directory structure is defined and manipulated by the [`definition`] module,
+//! The abstract directory structure is defined and manipulated by the [`schema`] module,
 //! which also provides a means to load schemas from disk.
 //!
 //! Construction of physical disk entries is handled by the [`application`] module.
 
-/// Definition of a schema and means for creating them
-///
-/// The [`definition::fromdisk`] sub-module specifies a disk-based Schema and the mechanism for loading it
-///
-pub mod definition;
-
-/// Application of a schema to construct filesystem entities on disk
-///
-pub mod application;
+pub mod apply;
+pub mod context;
+pub mod fromdisk;
+pub mod fromfile;
+pub mod install;
+pub mod schema;

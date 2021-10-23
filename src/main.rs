@@ -2,13 +2,10 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::{App, Arg};
-
 use diskplan::{
-    application::{gather_actions, install, Action},
-    definition::{
-        fromfile::schema_from_path,
-        schema::{print_tree, Expression, Token},
-    },
+    apply::{gather_actions, Action},
+    install,
+    schema::expr::{Expression, Token},
 };
 
 fn main() -> Result<()> {
@@ -48,8 +45,8 @@ fn main() -> Result<()> {
     let schema = matches.value_of("schema").unwrap();
     let target = matches.value_of("target").unwrap();
 
-    let schema = diskplan::definition::fromfile::schema_from_path(Path::new(schema))?;
-    let mut context = diskplan::application::context::Context::new(&schema, &Path::new(target));
+    let schema = diskplan::fromfile::schema_from_path(Path::new(schema))?;
+    let mut context = diskplan::context::Context::new(&schema, &Path::new(target));
 
     if let Some(keyvalues) = matches.values_of("let") {
         let keys = keyvalues.clone().into_iter().step_by(2);
@@ -57,6 +54,7 @@ fn main() -> Result<()> {
         for (key, value) in keys.zip(values) {
             println!("{} = {}", key, value);
             //FIXME: Parse this!
+            assert!(!value.contains("$"));
             let expr = Expression::new(vec![Token::text(value)]);
             context.bind(key, expr);
         }

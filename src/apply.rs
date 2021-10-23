@@ -5,20 +5,14 @@ use std::{
 };
 
 use crate::{
-    application::context::Context,
-    definition::{
+    context::Context,
+    schema::{
         criteria::{Match, MatchCriteria},
+        expr::{EvaluationError, Expression, Token},
         meta::Meta,
-        schema::{DirectorySchema, Expression, FileSchema, LinkSchema, Schema, Token},
+        DirectorySchema, FileSchema, LinkSchema, Schema,
     },
 };
-
-use self::eval::Evaluate;
-
-pub mod context;
-pub mod eval;
-pub mod install;
-//FIXME: pub mod parse;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -46,7 +40,7 @@ pub enum ApplicationError {
     CommandError(PathBuf, i32, String),
 
     #[error("Error evaluating expression for: {0}")]
-    EvaluationError(PathBuf, #[source] eval::EvaluationError),
+    EvaluationError(PathBuf, #[source] EvaluationError),
 
     #[error("No definition found for {1} under: {0}")]
     DefNotFound(PathBuf, String),
@@ -199,7 +193,7 @@ fn handle_entries(
                 // issuing an error if the pattern doesn't match (no need to re-bind)
                 let expr = context.lookup(binding);
                 if let Some(expr) = expr {
-                    let name = context
+                    let name: String = context
                         .evaluate(&expr)
                         .map_err(|e| ApplicationError::EvaluationError(PathBuf::from("?"), e))?; //FIXME
                     if !pattern.is_match(&name) {

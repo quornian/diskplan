@@ -7,14 +7,11 @@ use std::{
     str::FromStr,
 };
 
-use crate::definition::{
+use crate::schema::{
     criteria::{Match, MatchCriteria},
-    meta::Meta,
-};
-
-use super::{
-    meta::{RawItemMeta, RawPerms},
-    schema::{DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError},
+    expr::{Expression, Token},
+    meta::{Meta, RawItemMeta, RawPerms},
+    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError,
 };
 
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
@@ -73,6 +70,9 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                 if let Some(var) = name.strip_prefix("_.let.@") {
                     // TODO: Validate variable name
                     let expr = parse_linked_string(&dir_entry.path())?;
+                    // FIXME: Parse expression
+                    assert!(!expr.contains("$"));
+                    let expr = Expression::new(vec![Token::text(expr)]);
                     vars.insert(var.to_owned(), expr);
                     continue;
                 }
@@ -139,10 +139,13 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     fn link_schema_from_path(path: &Path, ind: PathBuf) -> Result<LinkSchema, SchemaError> {
         let with_path = |err| SchemaError::IOError(path.to_owned(), err);
         let target = String::from(ind.read_link().map_err(with_path)?.to_string_lossy());
+        // FIXME: Parse expression
+        assert!(!target.contains("$"));
+        let expr = Expression::new(vec![Token::text(target)]);
         // For now we always assume the other end of a link is a directory, and has a directory
         // schema, but will only create this target if the schema is not a no-op
         Ok(LinkSchema::new(
-            target,
+            expr,
             Schema::Directory(directory_schema_from_path(path)?),
         ))
     }

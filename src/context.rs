@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::definition::schema::{Expression, Schema};
+use crate::schema::{
+    expr::{EvaluationError, Expression, Token},
+    Schema,
+};
 
 // A note on lifetimes:
 //  - The Context refers to a Schema, so the Schema must outlive the Context
@@ -77,21 +80,54 @@ impl<'a> Context<'a> {
     }
 
     // FIXME: Parse and error after parsing refactor
-    pub fn bind(&mut self, var: &'a str, value: Expression) -> Result<(), ()> {
+    pub fn bind(&mut self, var: &'a str, value: Expression) {
         self.bound_vars.insert(var, value);
-        Ok(())
+    }
+
+    pub fn evaluate(&self, expr: &Expression) -> Result<String, EvaluationError> {
+        let mut buffer = String::new();
+        for token in expr.tokens() {
+            match token {
+                Token::Text(text) => buffer.push_str(text),
+                Token::Variable(var) => {
+                    let value = self
+                        .lookup(var)
+                        .ok_or_else(|| EvaluationError::NoSuchVariable(var.to_string()))?;
+                    buffer.push_str(&self.evaluate(&value).map_err(|e| {
+                        EvaluationError::Recursion(
+                            expr.to_string(),
+                            var.to_string(),
+                            value.to_string(),
+                            Box::new(e),
+                        )
+                    })?);
+                }
+                //FIXME:
+                // Token::Builtin(builtin) => buffer.push_str(&match builtin {
+                //     Builtin::Path => self.target.to_string_lossy(),
+                //     Builtin::Parent => self
+                //         .target
+                //         .parent()
+                //         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
+                //         .to_string_lossy(),
+                //     Builtin::Name => self
+                //         .target
+                //         .file_name()
+                //         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
+                //         .to_string_lossy(),
+                // }),
+            }
+        }
+        return Ok(buffer);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        application::eval::Evaluate,
-        definition::{
-            criteria::{Match, MatchCriteria},
-            meta::Meta,
-            schema::{DirectorySchema, LinkSchema, Token},
-        },
+    use crate::schema::{
+        criteria::{Match, MatchCriteria},
+        meta::Meta,
+        DirectorySchema, LinkSchema,
     };
 
     use super::*;

@@ -1,8 +1,6 @@
 use std::{fs::read_link, os::unix::fs::symlink, path::Path, process::Command};
 
-use crate::definition::meta::Meta;
-
-use super::ApplicationError;
+use crate::{apply::ApplicationError, schema::meta::Meta};
 
 // The `install` command defaults to 755 for both files and directories
 pub const DEFAULT_DIRECTORY_MODE: u16 = 0o755;

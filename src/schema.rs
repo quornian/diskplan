@@ -1,8 +1,12 @@
-use super::criteria::MatchCriteria;
-use super::meta::{Meta, MetaError};
+use criteria::MatchCriteria;
+use expr::Expression;
+use meta::{Meta, MetaError};
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::path::PathBuf;
+
+pub mod criteria;
+pub mod expr;
+pub mod meta;
 
 #[derive(Debug, PartialEq)]
 pub enum Schema {
@@ -104,52 +108,6 @@ impl LinkSchema {
     }
     pub fn far_schema(&self) -> &Schema {
         &self.far_schema
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Expression(Vec<Token>);
-
-impl Expression {
-    pub fn new(tokens: Vec<Token>) -> Expression {
-        Expression(tokens)
-    }
-
-    pub fn tokens(&self) -> &Vec<Token> {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Token {
-    Text(String),
-    Variable(String),
-}
-
-impl Token {
-    pub fn text<S: AsRef<str>>(s: S) -> Self {
-        Self::Text(s.as_ref().to_owned())
-    }
-    pub fn variable<S: AsRef<str>>(s: S) -> Self {
-        Self::Variable(s.as_ref().to_owned())
-    }
-}
-
-impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for token in &self.0 {
-            write!(f, "{}", token)?
-        }
-        Ok(())
-    }
-}
-
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Token::Text(s) | Token::Variable(s) => write!(f, "{}", s)?,
-        }
-        Ok(())
     }
 }
 
@@ -263,20 +221,3 @@ pub fn print_tree(schema: &Schema) {
     }
     print_schema(schema, 0);
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn test_item() {
-//         let mut vars = HashMap::new();
-//         vars.insert("@var1".to_owned(), "one".to_owned());
-//         vars.insert("@var2".to_owned(), "two".to_owned());
-//         let expr = "@var1/{@var2}_fixed".to_owned();
-//         assert_eq!(
-//             Ok("one/two_fixed".to_owned()),
-//             evaluate_name(&expr, &[vars])
-//         );
-//     }
-// }
