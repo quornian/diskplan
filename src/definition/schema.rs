@@ -122,8 +122,8 @@ pub enum SchemaError {
     #[error("Multiple type annotations found under: {0}")]
     MultipleTypeAnnotation(PathBuf),
 
-    #[error("IO error reading item info from directory: {0}")]
-    DirectoryIOError(PathBuf, #[source] std::io::Error),
+    #[error("IO error reading info from: {0}")]
+    IOError(PathBuf, #[source] std::io::Error),
 
     #[error("Unable to parse property value from: {0} ({1})")]
     PropertyParseFailure(PathBuf, String),
@@ -134,8 +134,8 @@ pub enum SchemaError {
     #[error("An unexpected item was encountered: {0}")]
     UnexpectedItemError(PathBuf),
 
-    #[error("Syntax error in file {0} line {1}:\n{2}\n{3}")]
-    SyntaxError(PathBuf, usize, String, String),
+    #[error("Syntax error in file {path}: {details}")]
+    SyntaxError { path: PathBuf, details: String },
 }
 
 pub fn print_tree(schema: &Schema) {

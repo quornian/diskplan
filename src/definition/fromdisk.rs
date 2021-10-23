@@ -60,7 +60,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
         let mut entries = Vec::new();
 
         // Add context to directory read errors
-        let with_path = |err| SchemaError::DirectoryIOError(path.to_owned(), err);
+        let with_path = |err| SchemaError::IOError(path.to_owned(), err);
 
         for dir_entry in fs::read_dir(&path).map_err(with_path)? {
             let dir_entry = dir_entry.map_err(with_path)?;
@@ -137,7 +137,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     }
 
     fn link_schema_from_path(path: &Path, ind: PathBuf) -> Result<LinkSchema, SchemaError> {
-        let with_path = |err| SchemaError::DirectoryIOError(path.to_owned(), err);
+        let with_path = |err| SchemaError::IOError(path.to_owned(), err);
         let target = String::from(ind.read_link().map_err(with_path)?.to_string_lossy());
         // For now we always assume the other end of a link is a directory, and has a directory
         // schema, but will only create this target if the schema is not a no-op
@@ -162,7 +162,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
             match fs::read_link(path) {
                 Ok(path) => Ok(Some(String::from(path.to_string_lossy()))),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(SchemaError::DirectoryIOError(path.to_owned(), e)),
+                Err(e) => Err(SchemaError::IOError(path.to_owned(), e)),
             }
         }
         let raw = RawItemMeta {
@@ -179,7 +179,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
 fn parse_linked_string(path: &Path) -> Result<String, SchemaError> {
     fs::read_link(path)
         .map(|s| String::from(s.to_string_lossy()))
-        .map_err(|e| SchemaError::DirectoryIOError(path.to_owned(), e))
+        .map_err(|e| SchemaError::IOError(path.to_owned(), e))
 }
 
 fn parse_linked<T>(path: &Path) -> Result<T, SchemaError>
@@ -188,7 +188,7 @@ where
     <T as FromStr>::Err: Display,
 {
     fs::read_link(path)
-        .map_err(|e| SchemaError::DirectoryIOError(path.to_owned(), e))
+        .map_err(|e| SchemaError::IOError(path.to_owned(), e))
         .map(|s| str::parse::<T>(&s.to_string_lossy()))?
         .map_err(|err| SchemaError::PropertyParseFailure(path.to_owned(), format!("{}", err)))
 }
