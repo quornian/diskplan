@@ -9,7 +9,7 @@ use crate::{
     definition::{
         criteria::{Match, MatchCriteria},
         meta::Meta,
-        schema::{DirectorySchema, FileSchema, LinkSchema, Schema},
+        schema::{DirectorySchema, Expression, FileSchema, LinkSchema, Schema, Token},
     },
 };
 
@@ -18,7 +18,7 @@ use self::eval::Evaluate;
 pub mod context;
 pub mod eval;
 pub mod install;
-pub mod parse;
+//FIXME: pub mod parse;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -116,7 +116,7 @@ fn apply_link(
     if !link_target_path.is_absolute() {
         return Err(ApplicationError::LinkTargetNotAbsolute(
             context.target.clone(),
-            link_schema.target().to_owned(),
+            link_schema.target().to_string(),
             link_target,
         ));
     }
@@ -197,15 +197,15 @@ fn handle_entries(
             Match::Regex { pattern, binding } => {
                 // If we have this binding in our variables already, resolve it and use the fixed result
                 // issuing an error if the pattern doesn't match (no need to re-bind)
-                let name = context.lookup(binding);
-                if let Some(name) = name {
-                    if !pattern.is_match(name) {
-                        return Err(ApplicationError::PatternMismatch(
-                            pattern.to_string(),
-                            name.to_string(),
-                        ));
+                let expr = context.lookup(binding);
+                if let Some(expr) = expr {
+                    let name = context
+                        .evaluate(&expr)
+                        .map_err(|e| ApplicationError::EvaluationError(PathBuf::from("?"), e))?; //FIXME
+                    if !pattern.is_match(&name) {
+                        return Err(ApplicationError::PatternMismatch(pattern.to_string(), name));
                     }
-                    let was_handled = entries_handled.insert(name.into(), true);
+                    let was_handled = entries_handled.insert(name.clone().into(), true);
                     match was_handled {
                         None => {
                             // New
@@ -228,17 +228,15 @@ fn handle_entries(
                             if pattern.is_match(name) {
                                 if !handled {
                                     // New
-                                    let child_path = target.join(name);
-                                    let mut child_context = context.child(child_path, schema);
-                                    child_context.bind(binding, name);
-                                    apply_tree(&child_context, actions)?;
                                 } else {
                                     // Update
-                                    let child_path = target.join(name);
-                                    let mut child_context = context.child(child_path, schema);
-                                    child_context.bind(binding, name);
-                                    apply_tree(&child_context, actions)?;
                                 }
+                                let child_path = target.join(name);
+                                let mut child_context = context.child(child_path, schema);
+                                // No need to parse, we know this is a Text token
+                                let expr = Expression::new(vec![Token::text(name)]);
+                                child_context.bind(binding, expr);
+                                apply_tree(&child_context, actions)?;
                             }
                         }
                         // else: Ignore file names we couldn't read
@@ -252,17 +250,15 @@ fn handle_entries(
                     if let Some(name) = name.to_str() {
                         if !handled {
                             // New
-                            let child_path = target.join(name);
-                            let mut child_context = context.child(child_path, schema);
-                            child_context.bind(binding, name);
-                            apply_tree(&child_context, actions)?;
                         } else {
                             // Update
-                            let child_path = target.join(name);
-                            let mut child_context = context.child(child_path, schema);
-                            child_context.bind(binding, name);
-                            apply_tree(&child_context, actions)?;
                         }
+                        let child_path = target.join(name);
+                        let mut child_context = context.child(child_path, schema);
+                        // No need to parse, we know this is a Text token
+                        let expr = Expression::new(vec![Token::text(name)]);
+                        child_context.bind(binding, expr);
+                        apply_tree(&child_context, actions)?;
                     }
                     // else: Ignore file names we couldn't read
                 }

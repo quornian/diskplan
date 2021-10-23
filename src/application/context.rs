@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::definition::schema::Schema;
+use crate::definition::schema::{Expression, Schema};
 
 // A note on lifetimes:
 //  - The Context refers to a Schema, so the Schema must outlive the Context
@@ -15,7 +15,7 @@ pub struct Context<'a> {
     pub schema: &'a Schema,
     pub target: PathBuf,
 
-    bound_vars: HashMap<&'a str, String>,
+    bound_vars: HashMap<&'a str, Expression>,
     parent: Option<&'a Context<'a>>,
 }
 
@@ -41,7 +41,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn lookup<S>(&self, var: S) -> Option<&String>
+    pub fn lookup<S>(&self, var: S) -> Option<&Expression>
     where
         S: AsRef<str>,
     {
@@ -76,8 +76,10 @@ impl<'a> Context<'a> {
         self.parent.and_then(|parent| parent.follow_schema(var))
     }
 
-    pub fn bind(&mut self, var: &'a str, value: &str) {
-        self.bound_vars.insert(var, value.into());
+    // FIXME: Parse and error after parsing refactor
+    pub fn bind(&mut self, var: &'a str, value: Expression) -> Result<(), ()> {
+        self.bound_vars.insert(var, value);
+        Ok(())
     }
 }
 
@@ -88,7 +90,7 @@ mod tests {
         definition::{
             criteria::{Match, MatchCriteria},
             meta::Meta,
-            schema::{DirectorySchema, LinkSchema},
+            schema::{DirectorySchema, LinkSchema, Token},
         },
     };
 
@@ -97,16 +99,19 @@ mod tests {
     #[test]
     fn test_full_schema_expr() {
         let schema = Schema::Directory({
-            let vars = [("absvar".to_owned(), "/tmp/abs".to_owned())]
-                .iter()
-                .cloned()
-                .collect();
+            let vars = [(
+                "absvar".to_owned(),
+                Expression::new(vec![Token::text("/tmp/abs")]),
+            )]
+            .iter()
+            .cloned()
+            .collect();
             let defs = HashMap::new();
             let meta = Meta::default();
             let entries = vec![(
                 MatchCriteria::new(0, Match::Fixed("link".to_owned())),
                 Schema::Symlink(LinkSchema::new(
-                    "@absvar/sub".to_owned(),
+                    Expression::new(vec![Token::variable("@absvar"), Token::text("/sub")]),
                     Schema::Directory(DirectorySchema::default()),
                 )),
             )];
@@ -115,8 +120,12 @@ mod tests {
         let target = Path::new("/tmp/root");
         let context = Context::new(&schema, target);
 
-        assert_eq!(context.lookup("absvar"), Some(&"/tmp/abs".to_owned()));
+        assert_eq!(
+            context.lookup("absvar"),
+            Some(&Expression::new(vec![Token::text("/tmp/abs")]))
+        );
 
-        assert_eq!(context.evaluate("@absvar"), Ok("/tmp/abs".to_owned()));
+        let expr = Expression::new(vec![Token::variable("absvar")]);
+        assert_eq!(context.evaluate(&expr), Ok("/tmp/abs".to_owned()));
     }
 }

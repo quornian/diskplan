@@ -5,7 +5,10 @@ use clap::{App, Arg};
 
 use diskplan::{
     application::{gather_actions, install, Action},
-    definition::schema::print_tree,
+    definition::{
+        fromfile::schema_from_path,
+        schema::{print_tree, Expression, Token},
+    },
 };
 
 fn main() -> Result<()> {
@@ -16,7 +19,7 @@ fn main() -> Result<()> {
         .set_term_width(76)
         .arg(
             Arg::with_name("schema")
-                .help("The node schema file to load for testing")
+                .help("The path of the schema to apply")
                 .takes_value(true)
                 .required(true),
         )
@@ -45,7 +48,7 @@ fn main() -> Result<()> {
     let schema = matches.value_of("schema").unwrap();
     let target = matches.value_of("target").unwrap();
 
-    let schema = diskplan::definition::fromdisk::schema_from_path(Path::new(schema))?;
+    let schema = diskplan::definition::fromfile::schema_from_path(Path::new(schema))?;
     let mut context = diskplan::application::context::Context::new(&schema, &Path::new(target));
 
     if let Some(keyvalues) = matches.values_of("let") {
@@ -53,18 +56,23 @@ fn main() -> Result<()> {
         let values = keyvalues.into_iter().skip(1).step_by(2);
         for (key, value) in keys.zip(values) {
             println!("{} = {}", key, value);
-            context.bind(key, value);
+            //FIXME: Parse this!
+            let expr = Expression::new(vec![Token::text(value)]);
+            context.bind(key, expr);
         }
     }
 
     println!("{:#?}", schema);
 
-    print_tree(&schema);
+    //print_tree(&schema);
 
+    println!("before");
     let actions = gather_actions(&context)?;
+    println!("after");
 
     for action in actions {
         println!("Performing Action: {:?}", action);
+        continue;
         match action {
             Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
             Action::CreateFile { path, source, meta } => {

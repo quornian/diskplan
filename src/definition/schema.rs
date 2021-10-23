@@ -1,6 +1,7 @@
 use super::criteria::MatchCriteria;
 use super::meta::{Meta, MetaError};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
@@ -15,7 +16,7 @@ pub enum Schema {
 #[derive(Debug, Default, PartialEq)]
 pub struct DirectorySchema {
     /// Text replacement variables
-    vars: HashMap<String, String>,
+    vars: HashMap<String, Expression>,
 
     /// Definitions of sub-schemas
     defs: HashMap<String, Schema>,
@@ -29,7 +30,7 @@ pub struct DirectorySchema {
 
 impl DirectorySchema {
     pub fn new(
-        vars: HashMap<String, String>,
+        vars: HashMap<String, Expression>,
         defs: HashMap<String, Schema>,
         meta: Meta,
         entries: Vec<(MatchCriteria, Schema)>,
@@ -43,7 +44,7 @@ impl DirectorySchema {
             entries,
         }
     }
-    pub fn vars(&self) -> &HashMap<String, String> {
+    pub fn vars(&self) -> &HashMap<String, Expression> {
         &self.vars
     }
     pub fn defs(&self) -> &HashMap<String, Schema> {
@@ -85,24 +86,70 @@ impl FileSchema {
 #[derive(Debug, PartialEq)]
 pub struct LinkSchema {
     /// Symlink target
-    target: String,
+    target: Expression,
 
     /// What to ensure, if anything, should be found at the other end
     far_schema: Box<Schema>,
 }
 
 impl LinkSchema {
-    pub fn new(target: String, far_schema: Schema) -> LinkSchema {
+    pub fn new(target: Expression, far_schema: Schema) -> LinkSchema {
         LinkSchema {
             target,
             far_schema: Box::new(far_schema),
         }
     }
-    pub fn target(&self) -> &String {
+    pub fn target(&self) -> &Expression {
         &self.target
     }
     pub fn far_schema(&self) -> &Schema {
         &self.far_schema
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expression(Vec<Token>);
+
+impl Expression {
+    pub fn new(tokens: Vec<Token>) -> Expression {
+        Expression(tokens)
+    }
+
+    pub fn tokens(&self) -> &Vec<Token> {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Token {
+    Text(String),
+    Variable(String),
+}
+
+impl Token {
+    pub fn text<S: AsRef<str>>(s: S) -> Self {
+        Self::Text(s.as_ref().to_owned())
+    }
+    pub fn variable<S: AsRef<str>>(s: S) -> Self {
+        Self::Variable(s.as_ref().to_owned())
+    }
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for token in &self.0 {
+            write!(f, "{}", token)?
+        }
+        Ok(())
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Text(s) | Token::Variable(s) => write!(f, "{}", s)?,
+        }
+        Ok(())
     }
 }
 

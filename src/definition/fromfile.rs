@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader, Read},
@@ -20,7 +21,7 @@ use nom::{
 
 use super::{
     meta::Meta,
-    schema::{DirectorySchema, Schema, SchemaError},
+    schema::{DirectorySchema, Expression, Schema, SchemaError, Token},
 };
 
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
@@ -55,29 +56,40 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
 
 fn schema(current_indent: usize) -> impl Fn(&str) -> IResult<&str, Schema> {
     move |s: &str| -> IResult<&str, Schema> {
-        let mut vars = HashMap::new();
+        let mut vars: HashMap<&str, ExpressionRef> = HashMap::new();
         let mut defs = HashMap::new();
         let mut meta = Meta::default();
         let mut entries = Vec::new();
         let mut remaining = s;
         loop {
             // Read and parse a line
+            let pre_read = remaining;
             let (left, line) = alt((value(None, blank_line), map(line, Some)))(remaining)?;
             remaining = left;
 
             if let Some(Line(line_indent, op)) = line {
-                // if line_indent != current_indent {
-                //     return Err(nom::Err::Failure(nom::error::Error::new(
-                //         s,
-                //         nom::error::ErrorKind::Fail,
-                //     )));
-                // }
+                if line_indent != current_indent {
+                    return Err(nom::Err::Failure(nom::error::Error::new(
+                        pre_read,
+                        nom::error::ErrorKind::Fail,
+                    )));
+                }
                 println!("{:?}", op);
+                match op {
+                    Operator::Let { name, expr } => {
+                        vars.insert(name.0, expr);
+                    }
+                    _ => (),
+                }
             }
             if remaining.len() == 0 {
                 break;
             }
         }
+        let vars: HashMap<String, Expression> = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_expr()))
+            .collect();
         Ok((
             remaining,
             Schema::Directory(DirectorySchema::new(vars, defs, meta, entries)),
@@ -98,12 +110,42 @@ enum Binding<'a> {
 struct Identifier<'a>(&'a str);
 
 #[derive(Debug, Clone, PartialEq)]
-struct Expression<'a>(Vec<Token<'a>>);
+struct ExpressionRef<'a>(Vec<TokenRef<'a>>);
 
 #[derive(Debug, Clone, PartialEq)]
-enum Token<'a> {
+enum TokenRef<'a> {
     Text(&'a str),
     Variable(Identifier<'a>),
+}
+
+// impl<'a> Borrow<ExpressionRef<'a>> for Expression {
+//     fn borrow(&self) -> &ExpressionRef<'a> {
+//         &ExpressionRef(self.tokens().iter().map(|x| *x.borrow()).collect())
+//     }
+// }
+
+// impl<'a> Borrow<TokenRef<'a>> for Token {
+//     fn borrow(&self) -> &TokenRef<'a> {
+//         match self {
+//             &Self::Text(t) => &TokenRef::Text(&t),
+//             &Self::Variable(t) => &TokenRef::Variable(Identifier(&t)),
+//         }
+//     }
+// }
+
+impl ExpressionRef<'_> {
+    pub fn to_expr(&self) -> Expression {
+        Expression::new(self.0.iter().map(|t| t.to_token()).collect())
+    }
+}
+
+impl TokenRef<'_> {
+    pub fn to_token(&self) -> Token {
+        match self {
+            Self::Text(t) => Token::Text(t.to_string()),
+            Self::Variable(v) => Token::Variable(v.0.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,25 +153,25 @@ enum Operator<'a> {
     Item {
         binding: Binding<'a>,
         is_directory: bool,
-        link: Option<Expression<'a>>,
+        link: Option<ExpressionRef<'a>>,
     },
     Let {
         name: Identifier<'a>,
-        expr: Expression<'a>,
+        expr: ExpressionRef<'a>,
     },
     Def {
         name: Identifier<'a>,
         is_directory: bool,
-        link: Option<Expression<'a>>,
+        link: Option<ExpressionRef<'a>>,
     },
     Use {
         name: Identifier<'a>,
     },
-    Match(Expression<'a>),
+    Match(ExpressionRef<'a>),
     Mode(u16),
     Owner(&'a str),
     Group(&'a str),
-    Source(Expression<'a>),
+    Source(ExpressionRef<'a>),
 }
 
 fn blank_line(s: &str) -> IResult<&str, ()> {
@@ -281,25 +323,25 @@ fn identifier(s: &str) -> IResult<&str, Identifier> {
 
 /// Expression, such as "static/$varA/${varB}v2/${NAME}"
 ///
-fn expression(s: &str) -> IResult<&str, Expression> {
-    map(many1(alt((non_variable, variable))), Expression)(s)
+fn expression(s: &str) -> IResult<&str, ExpressionRef> {
+    map(many1(alt((non_variable, variable))), ExpressionRef)(s)
 }
 
 /// A sequence of characters that are not part of any variable
 ///
-fn non_variable(s: &str) -> IResult<&str, Token<'_>> {
-    map(is_not("$\n"), Token::Text)(s)
+fn non_variable(s: &str) -> IResult<&str, TokenRef<'_>> {
+    map(is_not("$\n"), TokenRef::Text)(s)
 }
 
 /// A variable name, optionally braced, prefixed by a dollar sign, such as `${example}`
 ///
-fn variable(s: &str) -> IResult<&str, Token<'_>> {
+fn variable(s: &str) -> IResult<&str, TokenRef<'_>> {
     map(
         preceded(
             char('$'),
             alt((delimited(char('{'), identifier, char('}')), identifier)),
         ),
-        Token::Variable,
+        TokenRef::Variable,
     )(s)
 }
 
@@ -315,7 +357,7 @@ mod test {
                 "",
                 Operator::Let {
                     name: Identifier("something"),
-                    expr: Expression(vec![Token::Text("expr")])
+                    expr: ExpressionRef(vec![TokenRef::Text("expr")])
                 }
             ))
         );
@@ -325,7 +367,7 @@ mod test {
                 "",
                 Operator::Let {
                     name: Identifier("with_underscores"),
-                    expr: Expression(vec![Token::Text("expr")])
+                    expr: ExpressionRef(vec![TokenRef::Text("expr")])
                 }
             ))
         );
@@ -335,7 +377,7 @@ mod test {
                 "",
                 Operator::Let {
                     name: Identifier("_with_underscores_"),
-                    expr: Expression(vec![Token::Text("expr")])
+                    expr: ExpressionRef(vec![TokenRef::Text("expr")])
                 }
             ))
         );
@@ -394,7 +436,7 @@ mod test {
                 Operator::Def {
                     name: Identifier("something"),
                     is_directory: false,
-                    link: Some(Expression(vec![Token::Text("/somewhere/else")])),
+                    link: Some(ExpressionRef(vec![TokenRef::Text("/somewhere/else")])),
                 }
             ))
         );
@@ -405,10 +447,10 @@ mod test {
                 Operator::Def {
                     name: Identifier("something"),
                     is_directory: false,
-                    link: Some(Expression(vec![
-                        Token::Text("/some"),
-                        Token::Variable(Identifier("where")),
-                        Token::Text("/else")
+                    link: Some(ExpressionRef(vec![
+                        TokenRef::Text("/some"),
+                        TokenRef::Variable(Identifier("where")),
+                        TokenRef::Text("/else")
                     ])),
                 }
             ))
@@ -462,7 +504,7 @@ mod test {
                 "",
                 Line(
                     0,
-                    Operator::Match(Expression(vec![Token::Text("[A-Z][A-Za-z]+")]))
+                    Operator::Match(ExpressionRef(vec![TokenRef::Text("[A-Z][A-Za-z]+")]))
                 )
             ))
         )
@@ -477,7 +519,7 @@ mod test {
                 "",
                 Line(
                     0,
-                    Operator::Source(Expression(vec![Token::Text("/a/file/path")]))
+                    Operator::Source(ExpressionRef(vec![TokenRef::Text("/a/file/path")]))
                 )
             ))
         )
