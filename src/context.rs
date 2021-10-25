@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::schema::{
-    expr::{EvaluationError, Expression, Token},
+    expr::{EvaluationError, Expression, Identifier, Token},
     Schema,
 };
 
@@ -18,7 +18,7 @@ pub struct Context<'a> {
     pub schema: &'a Schema,
     pub target: PathBuf,
 
-    bound_vars: HashMap<&'a str, Expression>,
+    bound_vars: HashMap<Identifier, Expression>,
     parent: Option<&'a Context<'a>>,
 }
 
@@ -44,15 +44,12 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn lookup<S>(&self, var: S) -> Option<&Expression>
-    where
-        S: AsRef<str>,
-    {
+    pub fn lookup(&self, var: &'a Identifier) -> Option<&Expression> {
         self.bound_vars
-            .get(var.as_ref())
+            .get(var)
             .or_else(|| {
                 if let Schema::Directory(directory_schema) = self.schema {
-                    directory_schema.vars().get(var.as_ref())
+                    directory_schema.vars().get(var)
                 } else {
                     None
                 }
@@ -60,17 +57,15 @@ impl<'a> Context<'a> {
             .or_else(|| self.parent.and_then(|parent| parent.lookup(var)))
     }
 
-    pub fn follow<'ch, S>(&'a self, var: S) -> Option<Context<'ch>>
+    pub fn follow<'ch>(&'a self, var: &'a Identifier) -> Option<Context<'ch>>
     where
         'a: 'ch,
-        S: AsRef<str>,
     {
-        let var = var.as_ref();
         self.follow_schema(var)
             .and_then(|far_schema| Some(self.child(self.target.clone(), far_schema)))
     }
 
-    fn follow_schema(&'a self, var: &str) -> Option<&Schema> {
+    fn follow_schema(&'a self, var: &Identifier) -> Option<&Schema> {
         if let Schema::Directory(directory_schema) = self.schema {
             if let Some(child_schema) = directory_schema.defs().get(var) {
                 return Some(child_schema);
@@ -80,7 +75,7 @@ impl<'a> Context<'a> {
     }
 
     // FIXME: Parse and error after parsing refactor
-    pub fn bind(&mut self, var: &'a str, value: Expression) {
+    pub fn bind(&mut self, var: Identifier, value: Expression) {
         self.bound_vars.insert(var, value);
     }
 
@@ -92,11 +87,11 @@ impl<'a> Context<'a> {
                 Token::Variable(var) => {
                     let value = self
                         .lookup(var)
-                        .ok_or_else(|| EvaluationError::NoSuchVariable(var.to_string()))?;
+                        .ok_or_else(|| EvaluationError::NoSuchVariable(var.value().clone()))?;
                     buffer.push_str(&self.evaluate(&value).map_err(|e| {
                         EvaluationError::Recursion(
                             expr.to_string(),
-                            var.to_string(),
+                            var.value().clone(),
                             value.to_string(),
                             Box::new(e),
                         )
@@ -126,6 +121,7 @@ impl<'a> Context<'a> {
 mod tests {
     use crate::schema::{
         criteria::{Match, MatchCriteria},
+        expr::Identifier,
         meta::Meta,
         DirectorySchema, LinkSchema,
     };
@@ -136,7 +132,7 @@ mod tests {
     fn test_full_schema_expr() {
         let schema = Schema::Directory({
             let vars = [(
-                "absvar".to_owned(),
+                Identifier::new("absvar"),
                 Expression::new(vec![Token::text("/tmp/abs")]),
             )]
             .iter()
@@ -157,7 +153,7 @@ mod tests {
         let context = Context::new(&schema, target);
 
         assert_eq!(
-            context.lookup("absvar"),
+            context.lookup(&Identifier::new("absvar")),
             Some(&Expression::new(vec![Token::text("/tmp/abs")]))
         );
 

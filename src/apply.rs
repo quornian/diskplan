@@ -4,11 +4,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use regex::Regex;
+
 use crate::{
     context::Context,
     schema::{
         criteria::{Match, MatchCriteria},
-        expr::{EvaluationError, Expression, Token},
+        expr::{EvaluationError, Expression, Identifier, Token},
         meta::Meta,
         DirectorySchema, FileSchema, LinkSchema, Schema,
     },
@@ -42,6 +44,9 @@ pub enum ApplicationError {
     #[error("Error evaluating expression for: {0}")]
     EvaluationError(PathBuf, #[source] EvaluationError),
 
+    #[error("Error parsing regular expression for: {0}")]
+    RegexError(PathBuf, #[source] regex::Error),
+
     #[error("No definition found for {1} under: {0}")]
     DefNotFound(PathBuf, String),
 
@@ -69,14 +74,14 @@ fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), Applic
 }
 
 fn apply_def_use(
-    name: &String,
+    name: &Identifier,
     context: &Context,
     actions: &mut Vec<Action>,
 ) -> Result<(), ApplicationError> {
-    eprintln!("Looking up definition {}", name);
-    let child = context
-        .follow(name)
-        .ok_or_else(|| ApplicationError::DefNotFound(context.target.clone(), name.clone()))?;
+    eprintln!("Looking up definition {}", name.value());
+    let child = context.follow(&name).ok_or_else(|| {
+        ApplicationError::DefNotFound(context.target.clone(), name.value().clone())
+    })?;
     apply_tree(&child, actions)
 }
 
@@ -88,9 +93,12 @@ fn apply_file(
     // Ensure the file exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
     // install::install_file(&context.target, file_schema.source(), file_schema.meta());
+    let source = context
+        .evaluate(file_schema.source())
+        .map_err(|e| ApplicationError::EvaluationError(context.target.to_owned(), e))?;
     actions.push(Action::CreateFile {
         path: context.target.to_owned(),
-        source: file_schema.source().to_owned(),
+        source: source.into(),
         meta: (*file_schema.meta()).clone(),
     });
     Ok(())
@@ -188,26 +196,42 @@ fn handle_entries(
                     }
                 }
             }
-            Match::Regex { pattern, binding } => {
+            Match::Variable { pattern, binding } => {
+                // Turn pattern into a regular expression
+                let pattern = match pattern {
+                    None => None,
+                    Some(pattern) => Some(
+                        context
+                            .evaluate(&pattern)
+                            .map_err(|e| {
+                                ApplicationError::EvaluationError(context.target.to_owned(), e)
+                            })
+                            .and_then(|pattern| {
+                                full_regex(&pattern).map_err(|e| {
+                                    ApplicationError::RegexError(context.target.to_owned(), e)
+                                })
+                            })?,
+                    ),
+                };
                 // If we have this binding in our variables already, resolve it and use the fixed result
                 // issuing an error if the pattern doesn't match (no need to re-bind)
-                let expr = context.lookup(binding);
+                let expr = context.lookup(&binding);
                 if let Some(expr) = expr {
                     let name: String = context
                         .evaluate(&expr)
                         .map_err(|e| ApplicationError::EvaluationError(PathBuf::from("?"), e))?; //FIXME
-                    if !pattern.is_match(&name) {
-                        return Err(ApplicationError::PatternMismatch(pattern.to_string(), name));
+                    if let Some(pattern) = pattern {
+                        if !pattern.is_match(&name) {
+                            return Err(ApplicationError::PatternMismatch(
+                                pattern.to_string(),
+                                name,
+                            ));
+                        }
                     }
                     let was_handled = entries_handled.insert(name.clone().into(), true);
                     match was_handled {
-                        None => {
-                            // New
-                            let child_path = target.join(name);
-                            apply_tree(&context.child(child_path, schema), actions)?;
-                        }
-                        Some(false) => {
-                            // Update
+                        None | Some(false) => {
+                            // New | Update
                             let child_path = target.join(name);
                             apply_tree(&context.child(child_path, schema), actions)?;
                         }
@@ -219,7 +243,11 @@ fn handle_entries(
                 else {
                     for (name, handled) in &entries_handled {
                         if let Some(name) = name.to_str() {
-                            if pattern.is_match(name) {
+                            let matched = match pattern {
+                                None => true,
+                                Some(ref pattern) => pattern.is_match(name),
+                            };
+                            if matched {
                                 if !handled {
                                     // New
                                 } else {
@@ -229,7 +257,7 @@ fn handle_entries(
                                 let mut child_context = context.child(child_path, schema);
                                 // No need to parse, we know this is a Text token
                                 let expr = Expression::new(vec![Token::text(name)]);
-                                child_context.bind(binding, expr);
+                                child_context.bind(binding.clone(), expr);
                                 apply_tree(&child_context, actions)?;
                             }
                         }
@@ -237,27 +265,12 @@ fn handle_entries(
                     }
                 }
             }
-            Match::Any { binding } => {
-                // Finally the Any type matches everything, mark everything as handled,
-                // and bind their names to the variable for the child schemas
-                for (name, handled) in &entries_handled {
-                    if let Some(name) = name.to_str() {
-                        if !handled {
-                            // New
-                        } else {
-                            // Update
-                        }
-                        let child_path = target.join(name);
-                        let mut child_context = context.child(child_path, schema);
-                        // No need to parse, we know this is a Text token
-                        let expr = Expression::new(vec![Token::text(name)]);
-                        child_context.bind(binding, expr);
-                        apply_tree(&child_context, actions)?;
-                    }
-                    // else: Ignore file names we couldn't read
-                }
-            }
         }
     }
     Ok(())
+}
+
+fn full_regex(pattern: &str) -> Result<Regex, regex::Error> {
+    Regex::new(&pattern);
+    regex::Regex::new(&format!("^(?:{})$", pattern))
 }

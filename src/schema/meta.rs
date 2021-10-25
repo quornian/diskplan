@@ -113,3 +113,23 @@ impl Permissions {
         self.0
     }
 }
+
+#[derive(Default)]
+pub struct MetaBuilder {
+    meta: Meta,
+}
+
+impl MetaBuilder {
+    pub fn owner<S: AsRef<str>>(&mut self, s: S) {
+        self.meta.owner = Some(s.as_ref().to_owned());
+    }
+    pub fn group<S: AsRef<str>>(&mut self, s: S) {
+        self.meta.group = Some(s.as_ref().to_owned());
+    }
+    pub fn mode(&mut self, mode: u16) {
+        self.meta.permissions = Some(Permissions(mode));
+    }
+    pub fn build(self) -> Meta {
+        self.meta
+    }
+}

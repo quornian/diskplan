@@ -9,7 +9,7 @@ use std::{
 
 use crate::schema::{
     criteria::{Match, MatchCriteria},
-    expr::{Expression, Token},
+    expr::{self, Expression, Identifier, Token},
     meta::{Meta, RawItemMeta, RawPerms},
     DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError,
 };
@@ -46,7 +46,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
         }
         (true, _, _) => Schema::File(file_schema_from_path(path, file_indicator)?),
         (_, true, _) => Schema::Symlink(link_schema_from_path(path, link_indicator)?),
-        (_, _, true) => Schema::Use(parse_linked_use(&use_indicator)?),
+        (_, _, true) => Schema::Use(Identifier::new(&parse_linked_use(&use_indicator)?)),
         (_, _, _) => Schema::Directory(directory_schema_from_path(path)?),
     };
 
@@ -73,7 +73,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                     // FIXME: Parse expression
                     assert!(!expr.contains("$"));
                     let expr = Expression::new(vec![Token::text(expr)]);
-                    vars.insert(var.to_owned(), expr);
+                    vars.insert(Identifier::new(var), expr);
                     continue;
                 }
 
@@ -84,7 +84,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                 if let Some(def) = name.strip_prefix("_.def.@") {
                     // TODO: Validate variable name
                     let sub_item = schema_from_path(&dir_entry.path())?;
-                    defs.insert(def.to_owned(), sub_item);
+                    defs.insert(Identifier::new(def), sub_item);
                     continue;
                 }
 
@@ -108,19 +108,20 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                 };
                 let map_regex_err = |e| SchemaError::RegexParseFailure(path.to_owned(), e);
                 let binding = name.strip_prefix("@");
+                let pattern = match pattern_indicator.present() {
+                    false => None,
+                    true => Some(Expression::new(vec![Token::text(parse_linked_string(
+                        &pattern_indicator,
+                    )?)])),
+                };
                 let mode = {
-                    match (pattern_indicator.present(), binding) {
-                        (false, Some(binding)) => Match::Any {
-                            binding: binding.to_owned(),
+                    match binding {
+                        Some(binding) => Match::Variable {
+                            binding: Identifier::new(binding),
+                            pattern,
                         },
-                        (true, Some(binding)) => {
-                            let pattern = parse_linked_string(&pattern_indicator)?;
-                            Match::from_regex(&pattern, binding).map_err(map_regex_err)?
-                        }
-                        (false, None) => Match::Fixed(String::from(name)),
-                        (true, None) => {
-                            return Err(SchemaError::NonVariableWithPattern(path.to_owned()))
-                        }
+                        None if pattern.is_none() => Match::Fixed(String::from(name)),
+                        None => return Err(SchemaError::NonVariableWithPattern(path.to_owned())),
                     }
                 };
                 let criteria = MatchCriteria::new(order, mode);
@@ -133,7 +134,8 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
 
     fn file_schema_from_path(path: &Path, ind: PathBuf) -> Result<FileSchema, SchemaError> {
         let meta = meta_from_path(path)?;
-        Ok(FileSchema::new(meta, ind))
+        let expr = expr::Expression::new(vec![expr::Token::text(ind.to_string_lossy())]);
+        Ok(FileSchema::new(meta, expr))
     }
 
     fn link_schema_from_path(path: &Path, ind: PathBuf) -> Result<LinkSchema, SchemaError> {

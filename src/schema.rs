@@ -4,6 +4,9 @@ use meta::{Meta, MetaError};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use self::expr::Identifier;
+
+pub mod builder;
 pub mod criteria;
 pub mod expr;
 pub mod meta;
@@ -13,17 +16,17 @@ pub enum Schema {
     Directory(DirectorySchema),
     File(FileSchema),
     Symlink(LinkSchema),
-    Use(String),
+    Use(Identifier),
 }
 
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
 #[derive(Debug, Default, PartialEq)]
 pub struct DirectorySchema {
     /// Text replacement variables
-    vars: HashMap<String, Expression>,
+    vars: HashMap<Identifier, Expression>,
 
     /// Definitions of sub-schemas
-    defs: HashMap<String, Schema>,
+    defs: HashMap<Identifier, Schema>,
 
     /// Properties of this directory
     meta: Meta,
@@ -34,8 +37,8 @@ pub struct DirectorySchema {
 
 impl DirectorySchema {
     pub fn new(
-        vars: HashMap<String, Expression>,
-        defs: HashMap<String, Schema>,
+        vars: HashMap<Identifier, Expression>,
+        defs: HashMap<Identifier, Schema>,
         meta: Meta,
         entries: Vec<(MatchCriteria, Schema)>,
     ) -> DirectorySchema {
@@ -48,10 +51,10 @@ impl DirectorySchema {
             entries,
         }
     }
-    pub fn vars(&self) -> &HashMap<String, Expression> {
+    pub fn vars(&self) -> &HashMap<Identifier, Expression> {
         &self.vars
     }
-    pub fn defs(&self) -> &HashMap<String, Schema> {
+    pub fn defs(&self) -> &HashMap<Identifier, Schema> {
         &self.defs
     }
     pub fn meta(&self) -> &Meta {
@@ -66,23 +69,23 @@ impl DirectorySchema {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct FileSchema {
     /// Properties of this directory
     meta: Meta,
 
     /// Path to the resource to be copied as file content
-    source: PathBuf,
+    source: Expression,
 }
 
 impl FileSchema {
-    pub fn new(meta: Meta, source: PathBuf) -> FileSchema {
+    pub fn new(meta: Meta, source: Expression) -> FileSchema {
         FileSchema { meta, source }
     }
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
-    pub fn source(&self) -> &PathBuf {
+    pub fn source(&self) -> &Expression {
         &self.source
     }
 }
@@ -149,7 +152,7 @@ pub fn print_tree(schema: &Schema) {
             Schema::File(file_schema) => print_file_schema(&file_schema, indent),
             Schema::Directory(dir_schema) => print_dir_schema(&dir_schema, indent),
             Schema::Symlink(link_schema) => print_link_schema(&link_schema, indent),
-            Schema::Use(refname) => println!("[REF == {}]", refname),
+            Schema::Use(refname) => println!("[REF == {}]", refname.value()),
         }
     }
     fn print_dir_schema(dir_schema: &DirectorySchema, indent: usize) {
@@ -159,7 +162,7 @@ pub fn print_tree(schema: &Schema) {
                 "{pad:indent$}var {name} = {value}",
                 pad = "",
                 indent = indent,
-                name = name,
+                name = String::from(name),
                 value = value,
             );
         }
@@ -168,7 +171,7 @@ pub fn print_tree(schema: &Schema) {
                 "{pad:indent$}def {name}:",
                 pad = "",
                 indent = indent,
-                name = name,
+                name = String::from(name),
             );
             print_schema(def, indent + 4);
         }
@@ -186,7 +189,7 @@ pub fn print_tree(schema: &Schema) {
     fn print_file_schema(file_schema: &FileSchema, indent: usize) {
         println!(
             "{pad:indent$}[FILE <- {}]",
-            file_schema.source().to_string_lossy(),
+            file_schema.source().to_string(),
             pad = "",
             indent = indent,
         );

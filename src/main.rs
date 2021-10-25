@@ -5,7 +5,7 @@ use clap::{App, Arg};
 use diskplan::{
     apply::{gather_actions, Action},
     install,
-    schema::expr::{Expression, Token},
+    schema::expr::{Expression, Identifier, Token},
 };
 
 fn main() -> Result<()> {
@@ -53,8 +53,10 @@ fn main() -> Result<()> {
         let values = keyvalues.into_iter().skip(1).step_by(2);
         for (key, value) in keys.zip(values) {
             println!("{} = {}", key, value);
-            //FIXME: Parse this!
+            //FIXME: Parse this! and Identifier
+            assert!(!key.contains("$"));
             assert!(!value.contains("$"));
+            let key = Identifier::new(key);
             let expr = Expression::new(vec![Token::text(value)]);
             context.bind(key, expr);
         }

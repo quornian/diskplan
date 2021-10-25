@@ -1,4 +1,4 @@
-use regex::Regex;
+use super::expr::{Expression, Identifier};
 
 /// Criteria for matching against names in a directory
 ///
@@ -23,47 +23,13 @@ impl MatchCriteria {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Match {
-    /// Match the exact name of the item
+    /// Match the exact name of the item, not bound
     Fixed(String),
-    /// Match the regular expression
-    Regex { pattern: Regex, binding: String },
-    /// Match any name
-    Any { binding: String },
-}
-
-impl Match {
-    pub fn from_regex(pattern: &str, binding: &str) -> Result<Match, regex::Error> {
-        // Encase as a full string match pattern, but first ensure it cannot escape
-        regex::Regex::new(pattern)?;
-        let regex = regex::Regex::new(&format!("^(?:{})$", pattern))?;
-        Ok(Match::Regex {
-            pattern: regex,
-            binding: binding.to_owned(),
-        })
-    }
-}
-
-// Regex doesn't implement PartialEq so we have to, by using Regex.as_str()
-impl PartialEq for Match {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Match::Fixed(a), Match::Fixed(b)) => a == b,
-            (Match::Fixed(_), _) => false,
-            (Match::Any { binding: a }, Match::Any { binding: b }) => a == b,
-            (Match::Any { .. }, _) => false,
-            (
-                Match::Regex {
-                    pattern: ap,
-                    binding: ab,
-                },
-                Match::Regex {
-                    pattern: bp,
-                    binding: bb,
-                },
-            ) => ap.as_str() == bp.as_str() && ab == bb,
-            (Match::Regex { .. }, _) => false,
-        }
-    }
+    /// Bind the name to an identifier, and match the (optional) regular expression
+    Variable {
+        pattern: Option<Expression>,
+        binding: Identifier,
+    },
 }
