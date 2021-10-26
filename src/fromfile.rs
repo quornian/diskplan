@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Write,
     fs::File,
     io::{self, Read},
     iter::repeat,
@@ -13,6 +14,7 @@ use nom::{
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
     combinator::{all_consuming, eof, map, opt, recognize, value},
+    error::{context, VerboseError, VerboseErrorKind},
     multi::{many0, many1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
@@ -29,6 +31,8 @@ use crate::{
     },
 };
 
+type Res<T, U> = IResult<T, U, VerboseError<T>>;
+
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     let content = (|| -> Result<String, io::Error> {
         let mut file = File::open(path)?;
@@ -39,22 +43,32 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     .map_err(|e| SchemaError::IOError(path.to_owned(), e))?;
 
     // Parse and process entire schema and handle any errors that arise
-    let (_, (match_regex, schema)) = all_consuming(block(0, BlockType::Directory))(&content)
-        .map_err(|e| {
+    let (_, (match_regex, schema)) =
+        all_consuming(block(0, BlockType::Directory, &content))(&content).map_err(|e| {
             let e = match e {
                 nom::Err::Error(e) | nom::Err::Failure(e) => e,
                 nom::Err::Incomplete(_) => unreachable!(),
             };
             // Create a nice syntax error message
-            let err_pos = e.input.as_ptr() as usize - content.as_ptr() as usize;
-            let line_number = content[..err_pos].chars().filter(|&c| c == '\n').count() + 1;
-            let line_start = content[..err_pos].rfind("\n").map(|n| n + 1).unwrap_or(0);
-            let column = err_pos - line_start;
-            let line = content[line_start..].split("\n").next().unwrap().to_owned();
-            let marker: String = repeat(' ').take(column).chain("^~~~".chars()).collect();
+            let mut details = String::new();
+            for (r, e) in e.errors.iter().rev() {
+                let err_pos = r.as_ptr() as usize - content.as_ptr() as usize;
+                let line_number = content[..err_pos].chars().filter(|&c| c == '\n').count() + 1;
+                let line_start = content[..err_pos].rfind("\n").map(|n| n + 1).unwrap_or(0);
+                let column = err_pos - line_start;
+                let line = content[line_start..].split("\n").next().unwrap().to_owned();
+                let marker: String = repeat(' ').take(column).chain("^~~~".chars()).collect();
+                write!(
+                    details,
+                    "\n     |\n{:4} | {}\n     : {}",
+                    line_number, line, marker
+                )
+                .unwrap();
+                write!(details, "{:?}", e).unwrap();
+            }
             SchemaError::SyntaxError {
                 path: path.to_owned(),
-                details: format!("\n     |\n{:4} | {}\n     : {}", line_number, line, marker),
+                details: details,
             }
         })?;
     match match_regex {
@@ -72,10 +86,11 @@ enum BlockType {
     Symlink(expr::Expression),
 }
 
-fn block(
+fn block<'a>(
     block_indent: usize,
     block_type: BlockType,
-) -> impl Fn(&str) -> IResult<&str, (Option<expr::Expression>, Schema)> {
+    block_header: &'a str,
+) -> impl Fn(&'a str) -> Res<&'a str, (Option<expr::Expression>, Schema)> {
     #[derive(Default)]
     struct Properties {
         match_regex: Option<expr::Expression>,
@@ -89,12 +104,13 @@ fn block(
         // Use only
         def_use: Option<expr::Identifier>,
     }
-    move |s: &str| -> IResult<&str, (Option<expr::Expression>, Schema)> {
+    move |s: &str| -> Res<&str, (Option<expr::Expression>, Schema)> {
         let mut props = Properties::default();
         let mut remaining = s;
         loop {
             // Read and parse a line
             let pre_read = remaining;
+
             let (left, line) = alt((value(None, blank_line), map(line, Some)))(remaining)?;
             remaining = left;
 
@@ -116,8 +132,10 @@ fn block(
                             (_, false) => BlockType::File,
                             (_, true) => BlockType::Directory,
                         };
-                        let (left, (sub_regex, sub_schema)) =
-                            block(block_indent + 4, sub_block_type)(remaining)?;
+                        let (left, (sub_regex, sub_schema)) = context(
+                            "block",
+                            block(block_indent + 4, sub_block_type, pre_read),
+                        )(remaining)?;
                         remaining = left;
 
                         let criteria = match binding {
@@ -146,14 +164,13 @@ fn block(
                             (_, true) => BlockType::Directory,
                         };
                         let (left, (sub_regex, sub_schema)) =
-                            block(block_indent + 4, sub_block_type)(remaining)?;
+                            block(block_indent + 4, sub_block_type, pre_read)(remaining)?;
                         remaining = left;
                         if sub_regex.is_some() {
                             // TODO: Better error types
                             eprintln!("#def has own #match");
-                            return Err(nom::Err::Error(nom::error::Error {
-                                input: pre_read,
-                                code: nom::error::ErrorKind::Fail,
+                            return Err(nom::Err::Error(VerboseError {
+                                errors: vec![(block_header, VerboseErrorKind::Context("#def"))],
                             }));
                         }
                         props.defs.insert(name.to_identifier(), sub_schema);
@@ -188,10 +205,11 @@ fn block(
                         if let Some(source) = props.source {
                             Schema::File(FileSchema::new(props.meta.build(), source))
                         } else {
-                            eprintln!("File has no #source");
-                            return Err(nom::Err::Error(nom::error::Error {
-                                input: s,
-                                code: nom::error::ErrorKind::Fail,
+                            return Err(nom::Err::Error(VerboseError {
+                                errors: vec![(
+                                    block_header,
+                                    VerboseErrorKind::Context("File has no #source"),
+                                )],
                             }));
                         }
                     }
@@ -279,33 +297,33 @@ enum Operator<'a> {
     Source(Expression<'a>),
 }
 
-fn blank_line(s: &str) -> IResult<&str, ()> {
+fn blank_line(s: &str) -> Res<&str, ()> {
     value((), terminated(space0, alt((line_ending, eof))))(s)
 }
 
-fn line(s: &str) -> IResult<&str, Line> {
+fn line(s: &str) -> Res<&str, Line> {
     map(
         terminated(tuple((indentation, operator)), alt((line_ending, eof))),
         |(indent, item)| Line(indent, item),
     )(s)
 }
 
-fn indentation(s: &str) -> IResult<&str, usize> {
+fn indentation(s: &str) -> Res<&str, usize> {
     map(space0, |x: &str| x.len())(s)
 }
 
-fn binding(s: &str) -> IResult<&str, Binding<'_>> {
+fn binding(s: &str) -> Res<&str, Binding<'_>> {
     alt((
         map(preceded(char('$'), identifier), |i| Binding::Dynamic(i)),
         map(filename, Binding::Static),
     ))(s)
 }
 
-fn filename(s: &str) -> IResult<&str, &str> {
+fn filename(s: &str) -> Res<&str, &str> {
     recognize(many1(alt((alphanumeric1, is_a("_-.@^+%=")))))(s)
 }
 
-fn operator(s: &str) -> IResult<&str, Operator<'_>> {
+fn operator(s: &str) -> Res<&str, Operator<'_>> {
     alt((
         preceded(
             char('#'),
@@ -319,7 +337,7 @@ fn operator(s: &str) -> IResult<&str, Operator<'_>> {
 
 // $name/ -> link
 // name   -> link
-fn item(s: &str) -> IResult<&str, Operator> {
+fn item(s: &str) -> Res<&str, Operator> {
     map(
         tuple((
             binding,
@@ -335,7 +353,7 @@ fn item(s: &str) -> IResult<&str, Operator> {
 }
 
 // let x = $var1/$var2/three
-fn let_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn let_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         tuple((
             preceded(tuple((tag("let"), space1)), identifier),
@@ -347,7 +365,7 @@ fn let_op(s: &str) -> IResult<&str, Operator<'_>> {
 
 // #def name/
 // #def name -> link
-fn def_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn def_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(
             tuple((tag("def"), space1)),
@@ -366,14 +384,14 @@ fn def_op(s: &str) -> IResult<&str, Operator<'_>> {
 }
 
 // #use name
-fn use_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn use_op(s: &str) -> Res<&str, Operator<'_>> {
     map(preceded(tuple((tag("use"), space1)), identifier), |name| {
         Operator::Use { name }
     })(s)
 }
 
 // #match patternexpr
-fn match_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn match_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(tuple((tag("match"), space1)), expression),
         Operator::Match,
@@ -381,7 +399,7 @@ fn match_op(s: &str) -> IResult<&str, Operator<'_>> {
 }
 
 // #mode 755
-fn mode_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn mode_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(tuple((tag("mode"), space1)), is_a("01234567")),
         |mode| Operator::Mode(u16::from_str_radix(mode, 8).unwrap()),
@@ -389,7 +407,7 @@ fn mode_op(s: &str) -> IResult<&str, Operator<'_>> {
 }
 
 // #owner user
-fn owner_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn owner_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(tuple((tag("owner"), space1)), username),
         Operator::Owner,
@@ -397,7 +415,7 @@ fn owner_op(s: &str) -> IResult<&str, Operator<'_>> {
 }
 
 // #group user
-fn group_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn group_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(tuple((tag("group"), space1)), username),
         Operator::Group,
@@ -405,18 +423,18 @@ fn group_op(s: &str) -> IResult<&str, Operator<'_>> {
 }
 
 // #source path
-fn source_op(s: &str) -> IResult<&str, Operator<'_>> {
+fn source_op(s: &str) -> Res<&str, Operator<'_>> {
     map(
         preceded(tuple((tag("source"), space1)), expression),
         Operator::Source,
     )(s)
 }
 
-fn username(s: &str) -> IResult<&str, &str> {
+fn username(s: &str) -> Res<&str, &str> {
     recognize(many1(alt((alphanumeric1, tag("-")))))(s)
 }
 
-fn identifier(s: &str) -> IResult<&str, Identifier> {
+fn identifier(s: &str) -> Res<&str, Identifier> {
     map(
         recognize(pair(
             alt((alpha1, tag("_"))),
@@ -428,19 +446,19 @@ fn identifier(s: &str) -> IResult<&str, Identifier> {
 
 /// Expression, such as "static/$varA/${varB}v2/${NAME}"
 ///
-fn expression(s: &str) -> IResult<&str, Expression> {
+fn expression(s: &str) -> Res<&str, Expression> {
     map(many1(alt((non_variable, variable))), Expression)(s)
 }
 
 /// A sequence of characters that are not part of any variable
 ///
-fn non_variable(s: &str) -> IResult<&str, Token<'_>> {
+fn non_variable(s: &str) -> Res<&str, Token<'_>> {
     map(is_not("$\n"), Token::Text)(s)
 }
 
 /// A variable name, optionally braced, prefixed by a dollar sign, such as `${example}`
 ///
-fn variable(s: &str) -> IResult<&str, Token<'_>> {
+fn variable(s: &str) -> Res<&str, Token<'_>> {
     map(
         preceded(
             char('$'),
