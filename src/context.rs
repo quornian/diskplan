@@ -16,6 +16,7 @@ use crate::schema::{
 
 pub struct Context<'a> {
     pub schema: &'a Schema,
+    pub root: &'a Path,
     pub target: PathBuf,
 
     bound_vars: HashMap<Identifier, Expression>,
@@ -23,9 +24,11 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(schema: &'a Schema, target: &'a Path) -> Context<'a> {
+    pub fn new(schema: &'a Schema, root: &'a Path, target: &'a Path) -> Context<'a> {
+        assert!(target.is_relative());
         Context {
             schema,
+            root,
             target: target.to_owned(),
             bound_vars: HashMap::new(),
             parent: None,
@@ -38,6 +41,7 @@ impl<'a> Context<'a> {
     {
         Context {
             schema,
+            root: self.root,
             target,
             parent: Some(&self),
             bound_vars: HashMap::new(),
@@ -85,32 +89,37 @@ impl<'a> Context<'a> {
             match token {
                 Token::Text(text) => buffer.push_str(text),
                 Token::Variable(var) => {
-                    let value = self
-                        .lookup(var)
-                        .ok_or_else(|| EvaluationError::NoSuchVariable(var.value().clone()))?;
-                    buffer.push_str(&self.evaluate(&value).map_err(|e| {
-                        EvaluationError::Recursion(
-                            expr.to_string(),
-                            var.value().clone(),
-                            value.to_string(),
-                            Box::new(e),
-                        )
-                    })?);
+                    let value = match var.value().as_ref() {
+                        "PATH" => String::from(self.target.to_string_lossy()),
+                        "PARENT" => String::from(
+                            self.target
+                                .parent()
+                                .ok_or_else(|| EvaluationError::BuiltinError(var.value().clone()))?
+                                .to_string_lossy(),
+                        ),
+                        "NAME" => String::from(
+                            self.target
+                                .file_name()
+                                .ok_or_else(|| EvaluationError::BuiltinError(var.value().clone()))?
+                                .to_string_lossy(),
+                        ),
+                        _ => {
+                            let value = self.lookup(var).ok_or_else(|| {
+                                EvaluationError::NoSuchVariable(var.value().clone())
+                            })?;
+
+                            self.evaluate(&value).map_err(|e| {
+                                EvaluationError::Recursion(
+                                    expr.to_string(),
+                                    var.value().clone(),
+                                    value.to_string(),
+                                    Box::new(e),
+                                )
+                            })?
+                        }
+                    };
+                    buffer.push_str(&value);
                 }
-                //FIXME:
-                // Token::Builtin(builtin) => buffer.push_str(&match builtin {
-                //     Builtin::Path => self.target.to_string_lossy(),
-                //     Builtin::Parent => self
-                //         .target
-                //         .parent()
-                //         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
-                //         .to_string_lossy(),
-                //     Builtin::Name => self
-                //         .target
-                //         .file_name()
-                //         .ok_or_else(|| EvaluationError::BuiltinError(builtin.clone()))?
-                //         .to_string_lossy(),
-                // }),
             }
         }
         return Ok(buffer);
@@ -149,8 +158,9 @@ mod tests {
             )];
             DirectorySchema::new(vars, defs, meta, entries)
         });
-        let target = Path::new("/tmp/root");
-        let context = Context::new(&schema, target);
+        let root = Path::new("/tmp/root");
+        let target = Path::new(".");
+        let context = Context::new(&schema, root, target);
 
         assert_eq!(
             context.lookup(&Identifier::new("absvar")),

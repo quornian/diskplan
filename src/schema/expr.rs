@@ -77,9 +77,9 @@ pub enum EvaluationError {
     NoSuchVariable(String),
 
     //FIXME
-    // #[error("Built-in variable failed to evaluate: {0:?}")]
-    // BuiltinError(Builtin),
-    //
+    #[error("Built-in variable failed to evaluate: {0:?}")]
+    BuiltinError(String),
+
     // #[error("Error parsing expression from: {0}")]
     // ExpressionError(String, #[source] ExprError),
     //

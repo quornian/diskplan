@@ -144,6 +144,12 @@ pub enum SchemaError {
 
     #[error("Syntax error in file {path}: {details}")]
     SyntaxError { path: PathBuf, details: String },
+
+    // TODO: Make more specific ones
+    #[error("General error: {0}")]
+    GeneralError(&'static str),
+    #[error("Error in block: {0}")]
+    NestedError(String, #[source] Option<Box<SchemaError>>),
 }
 
 pub fn print_tree(schema: &Schema) {

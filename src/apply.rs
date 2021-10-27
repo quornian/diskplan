@@ -63,7 +63,11 @@ pub fn gather_actions(context: &Context) -> Result<Vec<Action>, ApplicationError
 }
 
 fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), ApplicationError> {
-    eprintln!("Applying to {}", &context.target.to_str().unwrap());
+    eprintln!(
+        "Applying to {}: {}",
+        &context.root.to_str().unwrap(),
+        &context.target.to_str().unwrap()
+    );
     match context.schema {
         Schema::File(file_schema) => apply_file(file_schema, context, actions)?,
         Schema::Symlink(link_schema) => apply_link(link_schema, context, actions)?,
@@ -96,8 +100,9 @@ fn apply_file(
     let source = context
         .evaluate(file_schema.source())
         .map_err(|e| ApplicationError::EvaluationError(context.target.to_owned(), e))?;
+
     actions.push(Action::CreateFile {
-        path: context.target.to_owned(),
+        path: normalize(&context.root.join(&context.target)),
         source: source.into(),
         meta: (*file_schema.meta()).clone(),
     });
@@ -126,10 +131,11 @@ fn apply_link(
     // TODO: Consider skipping if link already exists
     // install::install_link(&context.target, link_target_path)?;
     actions.push(Action::CreateSymlink {
-        path: context.target.to_owned(),
-        target: link_target_path.to_owned(),
+        path: normalize(&context.root.join(&context.target)),
+        target: normalize(link_target_path),
     });
-    let far_context = Context::new(link_schema.far_schema(), link_target_path);
+    // TODO: Check root/target is okay like this
+    let far_context = Context::new(link_schema.far_schema(), link_target_path, Path::new("."));
 
     apply_tree(&far_context, actions)
 }
@@ -143,8 +149,8 @@ fn apply_directory(
     // TODO: Consider skipping subprocess call if metadata already matches
     // install::install_directory(&context.target, directory_schema.meta())?;
     actions.push(Action::CreateDirectory {
-        path: context.target.to_owned(),
-        meta: (*directory_schema.meta()).clone(),
+        path: normalize(&context.root.join(&context.target)),
+        meta: directory_schema.meta().clone(),
     });
 
     handle_entries(directory_schema.entries(), context, actions)
@@ -155,8 +161,7 @@ fn handle_entries(
     context: &Context,
     actions: &mut Vec<Action>,
 ) -> Result<(), ApplicationError> {
-    let target = &context.target;
-    let map_io_err = |e| ApplicationError::IOError(target.to_owned(), e);
+    let map_io_err = |e| ApplicationError::IOError(context.target.clone(), e);
 
     // Handle entries within this directory
     let mut entries_handled = (|| {
@@ -179,17 +184,17 @@ fn handle_entries(
                 match was_handled {
                     None => {
                         // New
-                        let child_path = target.join(name);
+                        let child_path = context.target.join(name);
                         apply_tree(&context.child(child_path, schema), actions)?;
                     }
                     Some(false) => {
                         // Update
-                        let child_path = target.join(name);
+                        let child_path = context.target.join(name);
                         apply_tree(&context.child(child_path, schema), actions)?;
                     }
                     Some(true) => {
                         // Earlier rule handled this, but this is a Fixed match. Seems suspicious...
-                        let child_path = target.join(name);
+                        let child_path = context.target.join(name);
                         eprintln!(
                             "Warning: Fixed({}) rule matches an entry in directory {}, but was already handled by earlier rule",
                             name, child_path.to_string_lossy());
@@ -204,11 +209,11 @@ fn handle_entries(
                         context
                             .evaluate(&pattern)
                             .map_err(|e| {
-                                ApplicationError::EvaluationError(context.target.to_owned(), e)
+                                ApplicationError::EvaluationError(context.target.clone(), e)
                             })
                             .and_then(|pattern| {
                                 full_regex(&pattern).map_err(|e| {
-                                    ApplicationError::RegexError(context.target.to_owned(), e)
+                                    ApplicationError::RegexError(context.target.clone(), e)
                                 })
                             })?,
                     ),
@@ -232,7 +237,7 @@ fn handle_entries(
                     match was_handled {
                         None | Some(false) => {
                             // New | Update
-                            let child_path = target.join(name);
+                            let child_path = context.target.join(name);
                             apply_tree(&context.child(child_path, schema), actions)?;
                         }
                         Some(true) => (), // Earlier rule handled
@@ -253,7 +258,7 @@ fn handle_entries(
                                 } else {
                                     // Update
                                 }
-                                let child_path = target.join(name);
+                                let child_path = context.target.join(name);
                                 let mut child_context = context.child(child_path, schema);
                                 // No need to parse, we know this is a Text token
                                 let expr = Expression::new(vec![Token::text(name)]);
@@ -271,6 +276,10 @@ fn handle_entries(
 }
 
 fn full_regex(pattern: &str) -> Result<Regex, regex::Error> {
-    Regex::new(&pattern);
+    Regex::new(&pattern)?;
     regex::Regex::new(&format!("^(?:{})$", pattern))
+}
+
+fn normalize(path: &Path) -> PathBuf {
+    path.components().collect()
 }

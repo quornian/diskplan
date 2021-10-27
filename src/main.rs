@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     let target = matches.value_of("target").unwrap();
 
     let schema = diskplan::fromfile::schema_from_path(Path::new(schema))?;
-    let mut context = diskplan::context::Context::new(&schema, &Path::new(target));
+    let mut context = diskplan::context::Context::new(&schema, Path::new(target), Path::new("."));
 
     if let Some(keyvalues) = matches.values_of("let") {
         let keys = keyvalues.clone().into_iter().step_by(2);
@@ -66,13 +66,12 @@ fn main() -> Result<()> {
 
     //print_tree(&schema);
 
-    println!("before");
+    //println!("before");
     let actions = gather_actions(&context)?;
-    println!("after");
+    //println!("after");
 
     for action in actions {
         println!("Performing Action: {:?}", action);
-        continue;
         match action {
             Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
             Action::CreateFile { path, source, meta } => {
