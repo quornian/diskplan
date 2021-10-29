@@ -69,7 +69,7 @@ impl<'a> Context<'a> {
             .and_then(|far_schema| Some(self.child(self.target.clone(), far_schema)))
     }
 
-    fn follow_schema(&'a self, var: &Identifier) -> Option<&Schema> {
+    pub fn follow_schema(&'a self, var: &Identifier) -> Option<&Schema> {
         if let Schema::Directory(directory_schema) = self.schema {
             if let Some(child_schema) = directory_schema.defs().get(var) {
                 return Some(child_schema);
@@ -129,10 +129,8 @@ impl<'a> Context<'a> {
 #[cfg(test)]
 mod tests {
     use crate::schema::{
-        criteria::{Match, MatchCriteria},
-        expr::Identifier,
-        meta::Meta,
-        DirectorySchema, LinkSchema,
+        criteria::Match, expr::Identifier, meta::Meta, DirectorySchema, LinkSchema, SchemaEntry,
+        Subschema,
     };
 
     use super::*;
@@ -149,13 +147,13 @@ mod tests {
             .collect();
             let defs = HashMap::new();
             let meta = Meta::default();
-            let entries = vec![(
-                MatchCriteria::new(0, Match::Fixed("link".to_owned())),
-                Schema::Symlink(LinkSchema::new(
+            let entries = vec![SchemaEntry {
+                criteria: Match::fixed("link"),
+                schema: Subschema::Original(Schema::Symlink(LinkSchema::new(
                     Expression::new(vec![Token::variable("@absvar"), Token::text("/sub")]),
                     Schema::Directory(DirectorySchema::default()),
-                )),
-            )];
+                ))),
+            }];
             DirectorySchema::new(vars, defs, meta, entries)
         });
         let root = Path::new("/tmp/root");

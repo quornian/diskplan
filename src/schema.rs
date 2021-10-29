@@ -1,9 +1,9 @@
-use criteria::MatchCriteria;
 use expr::Expression;
 use meta::{Meta, MetaError};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use self::criteria::Match;
 use self::expr::Identifier;
 
 pub mod builder;
@@ -16,7 +16,24 @@ pub enum Schema {
     Directory(DirectorySchema),
     File(FileSchema),
     Symlink(LinkSchema),
-    Use(Identifier),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SchemaEntry {
+    pub criteria: Match,
+    pub schema: Subschema,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Subschema {
+    Referenced(Identifier),
+    Original(Schema),
+}
+
+impl PartialOrd for SchemaEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.criteria.partial_cmp(&other.criteria)
+    }
 }
 
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
@@ -32,7 +49,7 @@ pub struct DirectorySchema {
     meta: Meta,
 
     /// Disk entries to be created within this directory
-    entries: Vec<(MatchCriteria, Schema)>,
+    entries: Vec<SchemaEntry>,
 }
 
 impl DirectorySchema {
@@ -40,10 +57,10 @@ impl DirectorySchema {
         vars: HashMap<Identifier, Expression>,
         defs: HashMap<Identifier, Schema>,
         meta: Meta,
-        entries: Vec<(MatchCriteria, Schema)>,
+        entries: Vec<SchemaEntry>,
     ) -> DirectorySchema {
         let mut entries = entries;
-        entries.sort_by(|(a, _), (b, _)| a.order().cmp(&b.order()));
+        entries.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         DirectorySchema {
             vars,
             defs,
@@ -60,7 +77,7 @@ impl DirectorySchema {
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
-    pub fn entries(&self) -> &Vec<(MatchCriteria, Schema)> {
+    pub fn entries(&self) -> &Vec<SchemaEntry> {
         &self.entries
     }
 
@@ -158,7 +175,6 @@ pub fn print_tree(schema: &Schema) {
             Schema::File(file_schema) => print_file_schema(&file_schema, indent),
             Schema::Directory(dir_schema) => print_dir_schema(&dir_schema, indent),
             Schema::Symlink(link_schema) => print_link_schema(&link_schema, indent),
-            Schema::Use(refname) => println!("[REF == {}]", refname.value()),
         }
     }
     fn print_dir_schema(dir_schema: &DirectorySchema, indent: usize) {
@@ -182,14 +198,22 @@ pub fn print_tree(schema: &Schema) {
             print_schema(def, indent + 4);
         }
         print_meta(&dir_schema.meta, indent);
-        for (criteria, entry) in &dir_schema.entries {
+        for entry in &dir_schema.entries {
             println!(
                 "{pad:indent$}--> {:?}",
-                criteria.mode(),
+                entry.criteria,
                 pad = "",
                 indent = indent
             );
-            print_schema(entry, indent + 4);
+            match &entry.schema {
+                Subschema::Referenced(use_def) => println!(
+                    "{pad:indent$}USE {}",
+                    use_def.value(),
+                    pad = "",
+                    indent = indent
+                ),
+                Subschema::Original(schema) => print_schema(&schema, indent + 4),
+            }
         }
     }
     fn print_file_schema(file_schema: &FileSchema, indent: usize) {

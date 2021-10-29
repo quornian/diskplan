@@ -21,10 +21,10 @@ use nom::{
 };
 
 use crate::schema::{
-    criteria::{Match, MatchCriteria},
+    criteria::Match,
     expr::{Expression, Identifier, Token},
-    meta::MetaBuilder,
-    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError,
+    meta::{Meta, MetaBuilder},
+    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, SchemaError, Subschema,
 };
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
@@ -66,32 +66,43 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
             details: details,
         }
     })?;
-    let (match_regex, schema) = schema(ops, ItemType::Directory)?;
-    match match_regex {
-        Some(match_regex) => Err(SchemaError::SyntaxError {
+    let (match_regex, subschema) = schema(ops, ItemType::Directory)?;
+    if let Some(_) = match_regex {
+        return Err(SchemaError::SyntaxError {
             path: path.to_owned(),
             details: format!("Top level #match is not allowed"),
+        });
+    }
+    match subschema {
+        Subschema::Referenced(_) => Err(SchemaError::SyntaxError {
+            path: path.to_owned(),
+            details: format!("Top level #use is not allowed"),
         }),
-        None => Ok(schema),
+        Subschema::Original(schema) => Ok(schema),
     }
 }
 
-// TODO: Better error
 fn schema(
     ops: Vec<Operator>,
     item_type: ItemType,
-) -> Result<(Option<Expression>, Schema), SchemaError> {
+) -> Result<(Option<Expression>, Subschema), SchemaError> {
     let mut props = Properties::default();
     for op in ops {
         match op {
-            // Operators that affect the parent
+            // Operators that affect the parent (when looking up this item)
             Operator::Match(expr) => props.match_regex = Some(expr),
 
             // Operators that apply to this item
-            Operator::Use { name } => props.def_use = Some(name),
-            Operator::Mode(mode) => props.meta.mode(mode),
-            Operator::Owner(owner) => props.meta.owner(owner),
-            Operator::Group(group) => props.meta.group(group),
+            Operator::Use { name } => props.use_def = Some(name),
+            Operator::Mode(mode) => {
+                props.meta.mode(mode);
+            }
+            Operator::Owner(owner) => {
+                props.meta.owner(owner);
+            }
+            Operator::Group(group) => {
+                props.meta.group(group);
+            }
             Operator::Source(source) => {
                 match item_type {
                     ItemType::File => (),
@@ -116,16 +127,18 @@ fn schema(
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, sub_schema) = schema(children, sub_item_type).map_err(|e| {
+                let (pattern, schema) = schema(children, sub_item_type).map_err(|e| {
                     SchemaError::NestedError(format!("{:?}", binding), Some(Box::new(e)))
                 })?;
                 let criteria = match binding {
-                    Binding::Static(s) => MatchCriteria::new(0, Match::Fixed(s.to_owned())),
-                    Binding::Dynamic(binding) => {
-                        MatchCriteria::new(0, Match::Variable { pattern, binding })
-                    }
+                    Binding::Static(s) => Match::fixed(s),
+                    Binding::Dynamic(binding) => Match::Variable {
+                        order: 0,
+                        pattern,
+                        binding,
+                    },
                 };
-                props.entries.push((criteria, sub_schema));
+                props.entries.push(SchemaEntry { criteria, schema });
             }
             Operator::Def {
                 name,
@@ -141,41 +154,57 @@ fn schema(
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, sub_schema) = schema(children, sub_item_type)?;
+                let (pattern, schema) = schema(children, sub_item_type)?;
                 if pattern.is_some() {
                     return Err(SchemaError::GeneralError("#def has own #match"));
                 }
-                props.defs.insert(name, sub_schema);
+                if let Subschema::Original(schema) = schema {
+                    props.defs.insert(name, schema);
+                } else {
+                    // TODO: This may be okay
+                    return Err(SchemaError::GeneralError("#def has own #use"));
+                }
             }
         }
     }
 
     Ok((
         props.match_regex,
-        match &item_type {
-            ItemType::Directory => Schema::Directory(DirectorySchema::new(
-                props.vars,
-                props.defs,
-                props.meta.build(),
-                props.entries,
-            )),
-            ItemType::File => {
-                if let Some(source) = props.source {
-                    Schema::File(FileSchema::new(props.meta.build(), source))
-                } else {
-                    return Err(SchemaError::GeneralError("File has no #source"));
-                }
+        match props.use_def {
+            Some(use_def) => {
+                // TODO: Override referenced schema with local values
+                assert!(props.vars.is_empty());
+                assert!(props.defs.is_empty());
+                assert!(props.entries.is_empty());
+                assert!(props.source.is_none());
+                assert_eq!(props.meta, MetaBuilder::default());
+                Subschema::Referenced(use_def)
             }
-            ItemType::Symlink(target) => Schema::Symlink(LinkSchema::new(
-                target.clone(),
-                // TODO: File-like symlinks
-                Schema::Directory(DirectorySchema::new(
+            None => Subschema::Original(match &item_type {
+                ItemType::Directory => Schema::Directory(DirectorySchema::new(
                     props.vars,
                     props.defs,
                     props.meta.build(),
                     props.entries,
                 )),
-            )),
+                ItemType::File => {
+                    if let Some(source) = props.source {
+                        Schema::File(FileSchema::new(props.meta.build(), source))
+                    } else {
+                        return Err(SchemaError::GeneralError("File has no #source"));
+                    }
+                }
+                ItemType::Symlink(target) => Schema::Symlink(LinkSchema::new(
+                    target.clone(),
+                    // TODO: File-like symlinks
+                    Schema::Directory(DirectorySchema::new(
+                        props.vars,
+                        props.defs,
+                        props.meta.build(),
+                        props.entries,
+                    )),
+                )),
+            }),
         },
     ))
 }
@@ -267,11 +296,12 @@ struct Properties {
     defs: HashMap<Identifier, Schema>,
     meta: MetaBuilder,
     // Directory only
-    entries: Vec<(MatchCriteria, Schema)>,
+    entries: Vec<SchemaEntry>,
     // File only
     source: Option<Expression>,
-    // Use only
-    def_use: Option<Identifier>,
+
+    // Set if this schema inherits a definition from elsewhere
+    use_def: Option<Identifier>,
 }
 
 // fn props_to_schema()
@@ -420,6 +450,10 @@ fn variable(s: &str) -> Res<&str, Token> {
 
 #[cfg(test)]
 mod test {
+    use std::vec;
+
+    use crate::schema::meta::Meta;
+
     use super::*;
 
     #[test]
@@ -624,12 +658,9 @@ mod test {
 
     #[test]
     fn test_def_with_block() {
-        let s = "#def defined/\n    file\n    dir/";
-        let (t, x) = preceded(indentation(0), def_header)(s).unwrap();
-        // assert_eq!(
-        //     many1(preceded(indentation(1), operator(level + 1)))(t),
-        //     Ok(())
-        // );
+        let s = "#def defined/\
+               \n    file\
+               \n    dir/";
         assert_eq!(
             operator(0)(s),
             Ok((
@@ -653,6 +684,87 @@ mod test {
                         }
                     ]
                 }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_usage() {
+        let s = concat!(
+            "#def defined/\n",
+            "    file\n",
+            "        #source $emptyfile\n",
+            "usage/\n",
+            "    #use defined\n"
+        );
+
+        // Test raw operators parsed from the "file"
+        let ops = many0(operator(0))(s);
+        assert_eq!(
+            ops,
+            Ok((
+                "",
+                vec![
+                    Operator::Def {
+                        name: Identifier::new("defined"),
+                        is_directory: true,
+                        link: None,
+                        children: vec![Operator::Item {
+                            binding: Binding::Static("file"),
+                            is_directory: false,
+                            link: None,
+                            children: vec![Operator::Source(Expression::new(vec![
+                                Token::Variable(Identifier::new("emptyfile"))
+                            ]))],
+                        }],
+                    },
+                    Operator::Item {
+                        binding: Binding::Static("usage"),
+                        is_directory: true,
+                        link: None,
+                        children: vec![Operator::Use {
+                            name: Identifier::new("defined")
+                        }]
+                    }
+                ]
+            ))
+        );
+
+        // Check the schema this builds
+        let no_vars = || HashMap::default();
+        let no_defs = || HashMap::default();
+        let no_meta = || Meta::default();
+        assert_eq!(
+            schema(ops.unwrap().1, ItemType::Directory).map_err(|e| format!("{}", e)),
+            Ok((
+                None,
+                Subschema::Original(Schema::Directory({
+                    let mut defs = HashMap::new();
+                    defs.insert(
+                        Identifier::new("defined"),
+                        Schema::Directory({
+                            DirectorySchema::new(
+                                no_vars(),
+                                no_defs(),
+                                no_meta(),
+                                vec![SchemaEntry {
+                                    criteria: Match::fixed("file"),
+                                    schema: Subschema::Original(Schema::File(FileSchema::new(
+                                        no_meta(),
+                                        Expression::new(vec![Token::Variable(Identifier::new(
+                                            "emptyfile",
+                                        ))]),
+                                    ))),
+                                }],
+                            )
+                        }),
+                    );
+                    let entries = vec![SchemaEntry {
+                        criteria: Match::fixed("usage"),
+                        schema: Subschema::Referenced(Identifier::new("defined")),
+                    }];
+                    DirectorySchema::new(no_vars(), defs, no_meta(), entries)
+                }),)
             ))
         );
     }

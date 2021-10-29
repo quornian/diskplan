@@ -61,8 +61,9 @@ fn main() -> Result<()> {
             context.bind(key, expr);
         }
     }
+    let context = context;
 
-    println!("{:#?}", schema);
+    // println!("{:#?}", schema);
 
     //print_tree(&schema);
 
@@ -72,13 +73,13 @@ fn main() -> Result<()> {
 
     for action in actions {
         println!("Performing Action: {:?}", action);
-        match action {
-            Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
-            Action::CreateFile { path, source, meta } => {
-                install::install_file(&path, &source, &meta)?
-            }
-            Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
-        }
+        // match action {
+        //     Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
+        //     Action::CreateFile { path, source, meta } => {
+        //         install::install_file(&path, &source, &meta)?
+        //     }
+        //     Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
+        // }
     }
     Ok(())
 }

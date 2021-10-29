@@ -114,22 +114,25 @@ impl Permissions {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct MetaBuilder {
     meta: Meta,
 }
 
 impl MetaBuilder {
-    pub fn owner<S: AsRef<str>>(&mut self, s: S) {
+    pub fn owner<S: AsRef<str>>(&mut self, s: S) -> &mut Self {
         self.meta.owner = Some(s.as_ref().to_owned());
+        self
     }
-    pub fn group<S: AsRef<str>>(&mut self, s: S) {
+    pub fn group<S: AsRef<str>>(&mut self, s: S) -> &mut Self {
         self.meta.group = Some(s.as_ref().to_owned());
+        self
     }
-    pub fn mode(&mut self, mode: u16) {
+    pub fn mode(&mut self, mode: u16) -> &mut Self {
         self.meta.permissions = Some(Permissions(mode));
+        self
     }
-    pub fn build(self) -> Meta {
-        self.meta
+    pub fn build(&self) -> Meta {
+        self.meta.clone()
     }
 }

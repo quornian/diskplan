@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::schema::{
-    criteria::{Match, MatchCriteria},
+    criteria::{Match, Match},
     expr::{self, Expression, Identifier, Token},
     meta::{Meta, RawItemMeta, RawPerms},
     DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError,
@@ -124,7 +124,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                         None => return Err(SchemaError::NonVariableWithPattern(path.to_owned())),
                     }
                 };
-                let criteria = MatchCriteria::new(order, mode);
+                let criteria = Match::new(order, mode);
                 let schema = schema_from_path(&dir_entry.path())?;
                 entries.push((criteria, schema));
             }

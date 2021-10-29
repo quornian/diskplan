@@ -9,10 +9,10 @@ use regex::Regex;
 use crate::{
     context::Context,
     schema::{
-        criteria::{Match, MatchCriteria},
+        criteria::Match,
         expr::{EvaluationError, Expression, Identifier, Token},
         meta::Meta,
-        DirectorySchema, FileSchema, LinkSchema, Schema,
+        DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, Subschema,
     },
 };
 
@@ -72,7 +72,6 @@ fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), Applic
         Schema::File(file_schema) => apply_file(file_schema, context, actions)?,
         Schema::Symlink(link_schema) => apply_link(link_schema, context, actions)?,
         Schema::Directory(dir_schema) => apply_directory(dir_schema, context, actions)?,
-        Schema::Use(name) => apply_def_use(name, context, actions)?,
     }
     Ok(())
 }
@@ -157,7 +156,7 @@ fn apply_directory(
 }
 
 fn handle_entries(
-    entries: &Vec<(MatchCriteria, Schema)>,
+    entries: &Vec<SchemaEntry>,
     context: &Context,
     actions: &mut Vec<Action>,
 ) -> Result<(), ApplicationError> {
@@ -177,19 +176,25 @@ fn handle_entries(
     //  - Loop over schema entries, which are sorted by their criteria orders
     //  - Match
 
-    for (criteria, schema) in entries {
-        match criteria.mode() {
+    for entry in entries {
+        match &entry.criteria {
             Match::Fixed(name) => {
                 let was_handled = entries_handled.insert(name.into(), true);
                 match was_handled {
-                    None => {
-                        // New
+                    None | Some(false) => {
+                        // New | Update
                         let child_path = context.target.join(name);
-                        apply_tree(&context.child(child_path, schema), actions)?;
-                    }
-                    Some(false) => {
-                        // Update
-                        let child_path = context.target.join(name);
+                        let schema = match entry.schema {
+                            Subschema::Original(ref schema) => schema,
+                            Subschema::Referenced(ref use_def) => {
+                                context.follow_schema(use_def).ok_or_else(|| {
+                                    ApplicationError::DefNotFound(
+                                        child_path.to_owned(),
+                                        use_def.value().to_owned(),
+                                    )
+                                })?
+                            }
+                        };
                         apply_tree(&context.child(child_path, schema), actions)?;
                     }
                     Some(true) => {
@@ -201,7 +206,11 @@ fn handle_entries(
                     }
                 }
             }
-            Match::Variable { pattern, binding } => {
+            Match::Variable {
+                order: _order,
+                pattern,
+                binding,
+            } => {
                 // Turn pattern into a regular expression
                 let pattern = match pattern {
                     None => None,
@@ -238,6 +247,17 @@ fn handle_entries(
                         None | Some(false) => {
                             // New | Update
                             let child_path = context.target.join(name);
+                            let schema = match entry.schema {
+                                Subschema::Original(ref schema) => schema,
+                                Subschema::Referenced(ref use_def) => {
+                                    context.follow_schema(use_def).ok_or_else(|| {
+                                        ApplicationError::DefNotFound(
+                                            child_path.to_owned(),
+                                            use_def.value().to_owned(),
+                                        )
+                                    })?
+                                }
+                            };
                             apply_tree(&context.child(child_path, schema), actions)?;
                         }
                         Some(true) => (), // Earlier rule handled
@@ -259,6 +279,17 @@ fn handle_entries(
                                     // Update
                                 }
                                 let child_path = context.target.join(name);
+                                let schema = match entry.schema {
+                                    Subschema::Original(ref schema) => schema,
+                                    Subschema::Referenced(ref use_def) => {
+                                        context.follow_schema(use_def).ok_or_else(|| {
+                                            ApplicationError::DefNotFound(
+                                                child_path.to_owned(),
+                                                use_def.value().to_owned(),
+                                            )
+                                        })?
+                                    }
+                                };
                                 let mut child_context = context.child(child_path, schema);
                                 // No need to parse, we know this is a Text token
                                 let expr = Expression::new(vec![Token::text(name)]);
@@ -282,4 +313,36 @@ fn full_regex(pattern: &str) -> Result<Regex, regex::Error> {
 
 fn normalize(path: &Path) -> PathBuf {
     path.components().collect()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::schema::meta::MetaBuilder;
+
+    use super::*;
+
+    #[test]
+    fn test_use() {
+        let schema = Schema::Directory({
+            let vars = HashMap::default();
+            let mut defs = HashMap::default();
+            defs.insert(
+                Identifier::new("thing"),
+                Schema::File(FileSchema::new(
+                    MetaBuilder::default().mode(0o777).build(),
+                    Expression::new(vec![Token::text("/dev/null")]),
+                )),
+            );
+            let meta = Meta::default();
+            DirectorySchema::new(
+                vars,
+                defs,
+                meta,
+                vec![SchemaEntry {
+                    criteria: Match::fixed("place"),
+                    schema: Subschema::Referenced(Identifier::new("thing")),
+                }],
+            )
+        });
+    }
 }
