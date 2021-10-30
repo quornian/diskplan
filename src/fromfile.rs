@@ -74,7 +74,7 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
         });
     }
     match subschema {
-        Subschema::Referenced(_) => Err(SchemaError::SyntaxError {
+        Subschema::Referenced { .. } => Err(SchemaError::SyntaxError {
             path: path.to_owned(),
             details: format!("Top level #use is not allowed"),
         }),
@@ -168,43 +168,39 @@ fn schema(
         }
     }
 
+    let schema = match &item_type {
+        ItemType::Directory => Schema::Directory(DirectorySchema::new(
+            props.vars,
+            props.defs,
+            props.meta.build(),
+            props.entries,
+        )),
+        ItemType::File => {
+            if let Some(source) = props.source {
+                Schema::File(FileSchema::new(props.meta.build(), source))
+            } else {
+                return Err(SchemaError::GeneralError("File has no #source"));
+            }
+        }
+        ItemType::Symlink(target) => Schema::Symlink(LinkSchema::new(
+            target.clone(),
+            // TODO: File-like symlinks
+            Schema::Directory(DirectorySchema::new(
+                props.vars,
+                props.defs,
+                props.meta.build(),
+                props.entries,
+            )),
+        )),
+    };
     Ok((
         props.match_regex,
         match props.use_def {
-            Some(use_def) => {
-                // TODO: Override referenced schema with local values
-                assert!(props.vars.is_empty());
-                assert!(props.defs.is_empty());
-                assert!(props.entries.is_empty());
-                assert!(props.source.is_none());
-                assert_eq!(props.meta, MetaBuilder::default());
-                Subschema::Referenced(use_def)
-            }
-            None => Subschema::Original(match &item_type {
-                ItemType::Directory => Schema::Directory(DirectorySchema::new(
-                    props.vars,
-                    props.defs,
-                    props.meta.build(),
-                    props.entries,
-                )),
-                ItemType::File => {
-                    if let Some(source) = props.source {
-                        Schema::File(FileSchema::new(props.meta.build(), source))
-                    } else {
-                        return Err(SchemaError::GeneralError("File has no #source"));
-                    }
-                }
-                ItemType::Symlink(target) => Schema::Symlink(LinkSchema::new(
-                    target.clone(),
-                    // TODO: File-like symlinks
-                    Schema::Directory(DirectorySchema::new(
-                        props.vars,
-                        props.defs,
-                        props.meta.build(),
-                        props.entries,
-                    )),
-                )),
-            }),
+            Some(use_def) => Subschema::Referenced {
+                definition: use_def,
+                overrides: schema,
+            },
+            None => Subschema::Original(schema),
         },
     ))
 }
@@ -761,7 +757,15 @@ mod test {
                     );
                     let entries = vec![SchemaEntry {
                         criteria: Match::fixed("usage"),
-                        schema: Subschema::Referenced(Identifier::new("defined")),
+                        schema: Subschema::Referenced {
+                            definition: Identifier::new("defined"),
+                            overrides: Schema::Directory(DirectorySchema::new(
+                                no_vars(),
+                                no_defs(),
+                                no_meta(),
+                                vec![],
+                            )),
+                        },
                     }];
                     DirectorySchema::new(no_vars(), defs, no_meta(), entries)
                 }),)

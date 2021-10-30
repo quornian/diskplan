@@ -2,7 +2,7 @@ use super::expr::{Expression, Identifier};
 
 /// Criteria for matching against names in a directory
 ///
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Match {
     /// Match the exact name of the item, not bound
     Fixed(String),

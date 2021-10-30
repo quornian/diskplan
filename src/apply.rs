@@ -12,7 +12,8 @@ use crate::{
         criteria::Match,
         expr::{EvaluationError, Expression, Identifier, Token},
         meta::Meta,
-        DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, Subschema,
+        DirectorySchema, FileSchema, LinkSchema, Merge, Schema, SchemaEntry, SchemaError,
+        Subschema,
     },
 };
 
@@ -55,6 +56,9 @@ pub enum ApplicationError {
 
     #[error("Link has non-absolute target path\n  Link: {0}\n  Expr: {1}\n  Path: {2}")]
     LinkTargetNotAbsolute(PathBuf, String, String),
+
+    #[error("Schema error applying {1}")]
+    SchemaError(PathBuf, #[source] SchemaError),
 }
 
 pub fn gather_actions(context: &Context) -> Result<Vec<Action>, ApplicationError> {
@@ -184,15 +188,26 @@ fn handle_entries(
                     None | Some(false) => {
                         // New | Update
                         let child_path = context.target.join(name);
-                        let schema = match entry.schema {
-                            Subschema::Original(ref schema) => schema,
-                            Subschema::Referenced(ref use_def) => {
-                                context.follow_schema(use_def).ok_or_else(|| {
-                                    ApplicationError::DefNotFound(
-                                        child_path.to_owned(),
-                                        use_def.value().to_owned(),
-                                    )
-                                })?
+                        let merged;
+                        let schema = match &entry.schema {
+                            Subschema::Original(schema) => schema,
+                            Subschema::Referenced {
+                                definition: use_def,
+                                overrides,
+                            } => {
+                                merged = context
+                                    .follow_schema(&use_def)
+                                    .ok_or_else(|| {
+                                        ApplicationError::DefNotFound(
+                                            child_path.to_owned(),
+                                            use_def.value().to_owned(),
+                                        )
+                                    })?
+                                    .merge(&overrides)
+                                    .map_err(|e| {
+                                        ApplicationError::SchemaError(child_path.to_owned(), e)
+                                    })?;
+                                &merged
                             }
                         };
                         apply_tree(&context.child(child_path, schema), actions)?;
@@ -247,15 +262,26 @@ fn handle_entries(
                         None | Some(false) => {
                             // New | Update
                             let child_path = context.target.join(name);
-                            let schema = match entry.schema {
+                            let merged;
+                            let schema = match &entry.schema {
                                 Subschema::Original(ref schema) => schema,
-                                Subschema::Referenced(ref use_def) => {
-                                    context.follow_schema(use_def).ok_or_else(|| {
-                                        ApplicationError::DefNotFound(
-                                            child_path.to_owned(),
-                                            use_def.value().to_owned(),
-                                        )
-                                    })?
+                                Subschema::Referenced {
+                                    definition: use_def,
+                                    overrides,
+                                } => {
+                                    merged = context
+                                        .follow_schema(&use_def)
+                                        .ok_or_else(|| {
+                                            ApplicationError::DefNotFound(
+                                                child_path.to_owned(),
+                                                use_def.value().to_owned(),
+                                            )
+                                        })?
+                                        .merge(&overrides)
+                                        .map_err(|e| {
+                                            ApplicationError::SchemaError(child_path.to_owned(), e)
+                                        })?;
+                                    &merged
                                 }
                             };
                             apply_tree(&context.child(child_path, schema), actions)?;
@@ -279,15 +305,29 @@ fn handle_entries(
                                     // Update
                                 }
                                 let child_path = context.target.join(name);
-                                let schema = match entry.schema {
-                                    Subschema::Original(ref schema) => schema,
-                                    Subschema::Referenced(ref use_def) => {
-                                        context.follow_schema(use_def).ok_or_else(|| {
-                                            ApplicationError::DefNotFound(
-                                                child_path.to_owned(),
-                                                use_def.value().to_owned(),
-                                            )
-                                        })?
+                                let merged;
+                                let schema = &match &entry.schema {
+                                    Subschema::Original(schema) => schema,
+                                    Subschema::Referenced {
+                                        definition: use_def,
+                                        overrides,
+                                    } => {
+                                        merged = context
+                                            .follow_schema(&use_def)
+                                            .ok_or_else(|| {
+                                                ApplicationError::DefNotFound(
+                                                    child_path.to_owned(),
+                                                    use_def.value().to_owned(),
+                                                )
+                                            })?
+                                            .merge(&overrides)
+                                            .map_err(|e| {
+                                                ApplicationError::SchemaError(
+                                                    child_path.to_owned(),
+                                                    e,
+                                                )
+                                            })?;
+                                        &merged
                                     }
                                 };
                                 let mut child_context = context.child(child_path, schema);
@@ -340,7 +380,10 @@ mod test {
                 meta,
                 vec![SchemaEntry {
                     criteria: Match::fixed("place"),
-                    schema: Subschema::Referenced(Identifier::new("thing")),
+                    schema: Subschema::Referenced {
+                        definition: Identifier::new("thing"),
+                        overrides: Schema::Directory(DirectorySchema::default()),
+                    },
                 }],
             )
         });

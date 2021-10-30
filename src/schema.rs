@@ -5,28 +5,58 @@ use std::path::PathBuf;
 
 use self::criteria::Match;
 use self::expr::Identifier;
+use self::meta::MetaBuilder;
 
 pub mod builder;
 pub mod criteria;
 pub mod expr;
 pub mod meta;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Schema {
     Directory(DirectorySchema),
     File(FileSchema),
     Symlink(LinkSchema),
 }
 
-#[derive(Debug, PartialEq)]
+pub trait Merge
+where
+    Self: Sized,
+{
+    fn merge(&self, other: &Self) -> Result<Self, SchemaError>;
+}
+
+impl Merge for Schema {
+    fn merge(&self, other: &Schema) -> Result<Schema, SchemaError> {
+        match (self, other) {
+            (Schema::Directory(schema_a), Schema::Directory(schema_b)) => {
+                Ok(Schema::Directory(schema_a.merge(schema_b)?))
+            }
+            (Schema::File(schema_a), Schema::File(schema_b)) => {
+                Ok(Schema::File(schema_a.merge(schema_b)?))
+            }
+            (Schema::Symlink(schema_a), Schema::Symlink(schema_b)) => {
+                Ok(Schema::Symlink(schema_a.merge(schema_b)?))
+            }
+            (Schema::Directory(_), _) | (Schema::File(_), _) | (Schema::Symlink(_), _) => Err(
+                SchemaError::MergeError(format!("Cannot merge, mismatched types")),
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SchemaEntry {
     pub criteria: Match,
     pub schema: Subschema,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Subschema {
-    Referenced(Identifier),
+    Referenced {
+        definition: Identifier,
+        overrides: Schema,
+    },
     Original(Schema),
 }
 
@@ -37,7 +67,7 @@ impl PartialOrd for SchemaEntry {
 }
 
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct DirectorySchema {
     /// Text replacement variables
     vars: HashMap<Identifier, Expression>,
@@ -80,18 +110,34 @@ impl DirectorySchema {
     pub fn entries(&self) -> &Vec<SchemaEntry> {
         &self.entries
     }
+}
 
-    pub fn is_no_op(&self) -> bool {
-        self.entries.is_empty() && self.meta.is_no_op()
+impl Merge for DirectorySchema {
+    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+        let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
+        vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
+        vars.extend(other.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let mut defs = HashMap::with_capacity(self.defs.len() + other.defs.len());
+        defs.extend(self.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
+        defs.extend(other.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let meta = MetaBuilder::default()
+            .merge(&self.meta)
+            .merge(&other.meta)
+            .build();
+        let mut entries = Vec::with_capacity(self.entries.len() + other.entries.len());
+        entries.extend(self.entries.iter().cloned());
+        entries.extend(other.entries.iter().cloned());
+        Ok(DirectorySchema::new(vars, defs, meta, entries))
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileSchema {
     /// Properties of this directory
     meta: Meta,
 
     /// Path to the resource to be copied as file content
+    // TODO: Make source enum: Enforce(...), Default(...) latter only creates if missing
     source: Expression,
 }
 
@@ -107,7 +153,28 @@ impl FileSchema {
     }
 }
 
-#[derive(Debug, PartialEq)]
+impl Merge for FileSchema {
+    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+        let meta = MetaBuilder::default()
+            .merge(&self.meta)
+            .merge(&other.meta)
+            .build();
+        let source = match (self.source.tokens().len(), other.source.tokens().len()) {
+            (_, 0) => self.source.clone(),
+            (0, _) => other.source.clone(),
+            (_, _) => {
+                return Err(SchemaError::MergeError(format!(
+                    "Cannot merge file with two sources: {} and {}",
+                    self.source().to_string(),
+                    other.source().to_string()
+                )))
+            }
+        };
+        Ok(FileSchema::new(meta, source))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LinkSchema {
     /// Symlink target
     target: Expression,
@@ -128,6 +195,24 @@ impl LinkSchema {
     }
     pub fn far_schema(&self) -> &Schema {
         &self.far_schema
+    }
+}
+
+impl Merge for LinkSchema {
+    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+        let far_schema = self.far_schema.merge(&other.far_schema)?;
+        let target = match (self.target.tokens().len(), other.target.tokens().len()) {
+            (_, 0) => self.target.clone(),
+            (0, _) => other.target.clone(),
+            (_, _) => {
+                return Err(SchemaError::MergeError(format!(
+                    "Cannot merge link with two targets: {} and {}",
+                    self.target().to_string(),
+                    other.target().to_string()
+                )))
+            }
+        };
+        Ok(LinkSchema::new(target, far_schema))
     }
 }
 
@@ -167,6 +252,9 @@ pub enum SchemaError {
     GeneralError(&'static str),
     #[error("Error in block: {0}")]
     NestedError(String, #[source] Option<Box<SchemaError>>),
+
+    #[error("Merge error: {0}")]
+    MergeError(String),
 }
 
 pub fn print_tree(schema: &Schema) {
@@ -206,12 +294,18 @@ pub fn print_tree(schema: &Schema) {
                 indent = indent
             );
             match &entry.schema {
-                Subschema::Referenced(use_def) => println!(
-                    "{pad:indent$}USE {}",
-                    use_def.value(),
-                    pad = "",
-                    indent = indent
-                ),
+                Subschema::Referenced {
+                    definition: def,
+                    overrides,
+                } => {
+                    println!(
+                        "{pad:indent$}USE {}",
+                        def.value(),
+                        pad = "",
+                        indent = indent
+                    );
+                    print_schema(&overrides, indent + 4);
+                }
                 Subschema::Original(schema) => print_schema(&schema, indent + 4),
             }
         }

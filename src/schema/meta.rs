@@ -132,6 +132,18 @@ impl MetaBuilder {
         self.meta.permissions = Some(Permissions(mode));
         self
     }
+    pub fn merge(&mut self, other: &Meta) -> &mut Self {
+        if let Some(owner) = other.owner() {
+            self.owner(owner);
+        }
+        if let Some(group) = other.group() {
+            self.group(group);
+        }
+        if let Some(permissions) = other.permissions() {
+            self.mode(permissions.mode());
+        }
+        self
+    }
     pub fn build(&self) -> Meta {
         self.meta.clone()
     }
