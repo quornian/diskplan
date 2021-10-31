@@ -7,7 +7,6 @@ use self::criteria::Match;
 use self::expr::Identifier;
 use self::meta::MetaBuilder;
 
-pub mod builder;
 pub mod criteria;
 pub mod expr;
 pub mod meta;

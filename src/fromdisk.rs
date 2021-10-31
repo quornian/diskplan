@@ -8,10 +8,10 @@ use std::{
 };
 
 use crate::schema::{
-    criteria::{Match, Match},
+    criteria::Match,
     expr::{self, Expression, Identifier, Token},
     meta::{Meta, RawItemMeta, RawPerms},
-    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaError,
+    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, SchemaError, Subschema,
 };
 
 pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
@@ -28,26 +28,11 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
     }
     let file_indicator = path.join("_.is.file");
     let link_indicator = path.join("_.is.link");
-    let use_indicator = path.join("_.is.use");
-    let parse_linked_use = |ind| {
-        let value = parse_linked_string(ind)?;
-        value
-            .strip_prefix("@")
-            .map(|s| s.to_owned())
-            .ok_or_else(|| SchemaError::PropertyParseFailure(ind.into(), value))
-    };
-    let schema = match (
-        file_indicator.present(),
-        link_indicator.present(),
-        use_indicator.present(),
-    ) {
-        (true, true, _) | (true, _, true) | (_, true, true) => {
-            return Err(SchemaError::MultipleTypeAnnotation(path.to_owned()))
-        }
-        (true, _, _) => Schema::File(file_schema_from_path(path, file_indicator)?),
-        (_, true, _) => Schema::Symlink(link_schema_from_path(path, link_indicator)?),
-        (_, _, true) => Schema::Use(Identifier::new(&parse_linked_use(&use_indicator)?)),
-        (_, _, _) => Schema::Directory(directory_schema_from_path(path)?),
+    let schema = match (file_indicator.present(), link_indicator.present()) {
+        (true, true) => return Err(SchemaError::MultipleTypeAnnotation(path.to_owned())),
+        (true, _) => Schema::File(file_schema_from_path(path, file_indicator)?),
+        (_, true) => Schema::Symlink(link_schema_from_path(path, link_indicator)?),
+        (_, _) => Schema::Directory(directory_schema_from_path(path)?),
     };
 
     fn directory_schema_from_path(path: &Path) -> Result<DirectorySchema, SchemaError> {
@@ -98,15 +83,26 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
             } else {
                 let order_indicator = dir_entry.path().join("_.order");
                 let pattern_indicator = dir_entry.path().join("_.match");
+                let usage_indicator = dir_entry.path().join("_.is.use");
 
                 let order = {
                     if order_indicator.present() {
                         parse_linked(&order_indicator)?
                     } else {
-                        0i16
+                        0
                     }
                 };
-                let map_regex_err = |e| SchemaError::RegexParseFailure(path.to_owned(), e);
+                let usage: Option<String> =
+                    {
+                        if usage_indicator.present() {
+                            let value: String = parse_linked(&usage_indicator)?;
+                            Some(value.strip_prefix("@").map(|s| s.to_owned()).ok_or_else(
+                                || SchemaError::PropertyParseFailure(usage_indicator.into(), value),
+                            )?)
+                        } else {
+                            None
+                        }
+                    };
                 let binding = name.strip_prefix("@");
                 let pattern = match pattern_indicator.present() {
                     false => None,
@@ -114,9 +110,10 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                         &pattern_indicator,
                     )?)])),
                 };
-                let mode = {
+                let criteria = {
                     match binding {
                         Some(binding) => Match::Variable {
+                            order,
                             binding: Identifier::new(binding),
                             pattern,
                         },
@@ -124,9 +121,15 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
                         None => return Err(SchemaError::NonVariableWithPattern(path.to_owned())),
                     }
                 };
-                let criteria = Match::new(order, mode);
                 let schema = schema_from_path(&dir_entry.path())?;
-                entries.push((criteria, schema));
+                let schema = match usage {
+                    None => Subschema::Original(schema),
+                    Some(def) => Subschema::Referenced {
+                        definition: Identifier::new(&def),
+                        overrides: schema,
+                    },
+                };
+                entries.push(SchemaEntry { criteria, schema });
             }
         }
         Ok(DirectorySchema::new(vars, defs, meta, entries))
