@@ -27,16 +27,12 @@ impl PartialOrd for Match {
         use std::cmp::Ordering::{Greater, Less};
         use Match::{Fixed, Variable};
         match (self, other) {
-            (Fixed(a), Fixed(b)) => None,
+            (Fixed(a), Fixed(b)) if a == b => None,
+            (Fixed(a), Fixed(b)) if a != b => Some(a.cmp(b)),
             (Fixed(_), _) => Some(Less),
             (_, Fixed(_)) => Some(Greater),
-            (Variable { order: a, .. }, Variable { order: b, .. }) => {
-                if a == b {
-                    None
-                } else {
-                    Some(a.cmp(b))
-                }
-            }
+            (Variable { order: a, .. }, Variable { order: b, .. }) if a == b => None,
+            (Variable { order: a, .. }, Variable { order: b, .. }) => Some(a.cmp(b)),
         }
     }
 }

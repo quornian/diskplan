@@ -10,7 +10,7 @@ use crate::{
     context::Context,
     schema::{
         criteria::Match,
-        expr::{EvaluationError, Expression, Identifier, Token},
+        expr::{EvaluationError, Expression, Token},
         meta::Meta,
         DirectorySchema, FileSchema, LinkSchema, Merge, Schema, SchemaEntry, SchemaError,
         Subschema,
@@ -78,18 +78,6 @@ fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), Applic
         Schema::Directory(dir_schema) => apply_directory(dir_schema, context, actions)?,
     }
     Ok(())
-}
-
-fn apply_def_use(
-    name: &Identifier,
-    context: &Context,
-    actions: &mut Vec<Action>,
-) -> Result<(), ApplicationError> {
-    eprintln!("Looking up definition {}", name.value());
-    let child = context.follow(&name).ok_or_else(|| {
-        ApplicationError::DefNotFound(context.target.clone(), name.value().clone())
-    })?;
-    apply_tree(&child, actions)
 }
 
 fn apply_file(
@@ -353,39 +341,4 @@ fn full_regex(pattern: &str) -> Result<Regex, regex::Error> {
 
 fn normalize(path: &Path) -> PathBuf {
     path.components().collect()
-}
-
-#[cfg(test)]
-mod test {
-    use crate::schema::meta::MetaBuilder;
-
-    use super::*;
-
-    #[test]
-    fn test_use() {
-        let schema = Schema::Directory({
-            let vars = HashMap::default();
-            let mut defs = HashMap::default();
-            defs.insert(
-                Identifier::new("thing"),
-                Schema::File(FileSchema::new(
-                    MetaBuilder::default().mode(0o777).build(),
-                    Expression::new(vec![Token::text("/dev/null")]),
-                )),
-            );
-            let meta = Meta::default();
-            DirectorySchema::new(
-                vars,
-                defs,
-                meta,
-                vec![SchemaEntry {
-                    criteria: Match::fixed("place"),
-                    schema: Subschema::Referenced {
-                        definition: Identifier::new("thing"),
-                        overrides: Schema::Directory(DirectorySchema::default()),
-                    },
-                }],
-            )
-        });
-    }
 }

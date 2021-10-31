@@ -40,10 +40,17 @@ fn main() -> Result<()> {
                      This option may be used more than once.",
                 ),
         )
+        .arg(
+            Arg::with_name("apply")
+                .long("--apply")
+                .help("Apply the changes")
+                .takes_value(false),
+        )
         .get_matches();
 
     let schema = matches.value_of("schema").unwrap();
     let target = matches.value_of("target").unwrap();
+    let apply = matches.is_present("apply");
 
     let schema = diskplan::fromfile::schema_from_path(Path::new(schema))?;
     let mut context = diskplan::context::Context::new(&schema, Path::new(target), Path::new("."));
@@ -72,14 +79,18 @@ fn main() -> Result<()> {
     //println!("after");
 
     for action in actions {
-        println!("Performing Action: {:?}", action);
-        // match action {
-        //     Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
-        //     Action::CreateFile { path, source, meta } => {
-        //         install::install_file(&path, &source, &meta)?
-        //     }
-        //     Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
-        // }
+        if apply {
+            println!("Performing action: {:?}", action);
+            match action {
+                Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
+                Action::CreateFile { path, source, meta } => {
+                    install::install_file(&path, &source, &meta)?
+                }
+                Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
+            }
+        } else {
+            println!("Would performing action: {:?}", action);
+        }
     }
     Ok(())
 }

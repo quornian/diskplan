@@ -23,7 +23,7 @@ use nom::{
 use crate::schema::{
     criteria::Match,
     expr::{Expression, Identifier, Token},
-    meta::{Meta, MetaBuilder},
+    meta::MetaBuilder,
     DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, SchemaError, Subschema,
 };
 
