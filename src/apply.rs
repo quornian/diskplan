@@ -342,3 +342,62 @@ fn full_regex(pattern: &str) -> Result<Regex, regex::Error> {
 fn normalize(path: &Path) -> PathBuf {
     path.components().collect()
 }
+
+#[cfg(test)]
+mod test {
+    use crate::schema::{expr::Identifier, meta::MetaBuilder};
+
+    use super::*;
+
+    #[test]
+    fn test_use() {
+        let schema = Schema::Directory({
+            let vars = HashMap::default();
+            let mut defs = HashMap::default();
+            defs.insert(
+                Identifier::new("thing"),
+                Schema::Directory(DirectorySchema::new(
+                    HashMap::new(),
+                    HashMap::new(),
+                    MetaBuilder::default().mode(0o777).build(),
+                    vec![],
+                )),
+            );
+            let meta = MetaBuilder::default().owner("user1").build();
+            DirectorySchema::new(
+                vars,
+                defs,
+                meta,
+                vec![SchemaEntry {
+                    criteria: Match::fixed("place"),
+                    schema: Subschema::Referenced {
+                        definition: Identifier::new("thing"),
+                        overrides: Schema::Directory(DirectorySchema::new(
+                            HashMap::new(),
+                            HashMap::new(),
+                            MetaBuilder::default().owner("user2").build(),
+                            vec![],
+                        )),
+                    },
+                }],
+            )
+        });
+
+        let context = Context::new(&schema, &Path::new("/tmp/root"), &Path::new("."));
+        let mut actions = Vec::new();
+        apply_tree(&context, &mut actions).unwrap();
+        assert_eq!(
+            actions,
+            vec![
+                Action::CreateDirectory {
+                    meta: MetaBuilder::default().owner("user1").build(),
+                    path: PathBuf::from("/tmp/root")
+                },
+                Action::CreateDirectory {
+                    meta: MetaBuilder::default().owner("user2").mode(0o777).build(),
+                    path: PathBuf::from("/tmp/root/place")
+                }
+            ]
+        );
+    }
+}

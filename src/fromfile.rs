@@ -300,28 +300,6 @@ struct Properties {
     use_def: Option<Identifier>,
 }
 
-// fn props_to_schema()
-
-// fn nope() {
-//     loop {
-//         // Read and parse a line
-//         let pre_read = remaining;
-
-//         remaining = left;
-
-//         if let Some(Line(line_indent, op)) = line {
-//             if line_indent < block_indent {
-//                 remaining = pre_read; // Roll back
-//                 break;
-//             }
-//             println!("{:?}", op);
-//         }
-//         if remaining.len() == 0 {
-//             break;
-//         }
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq)]
 enum Binding<'a> {
     Static(&'a str),

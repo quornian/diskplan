@@ -4,6 +4,8 @@ use anyhow::Result;
 use clap::{App, Arg};
 use diskplan::{
     apply::{gather_actions, Action},
+    context::Context,
+    fromfile::schema_from_path,
     install,
     schema::expr::{Expression, Identifier, Token},
 };
@@ -13,7 +15,7 @@ fn main() -> Result<()> {
     let matches = App::new("diskplan")
         .version("1.0")
         .about("Describe and apply filesystem structure")
-        .set_term_width(76)
+        .set_term_width(72)
         .arg(
             Arg::with_name("schema")
                 .help("The path of the schema to apply")
@@ -52,8 +54,8 @@ fn main() -> Result<()> {
     let target = matches.value_of("target").unwrap();
     let apply = matches.is_present("apply");
 
-    let schema = diskplan::fromfile::schema_from_path(Path::new(schema))?;
-    let mut context = diskplan::context::Context::new(&schema, Path::new(target), Path::new("."));
+    let schema = schema_from_path(Path::new(schema))?;
+    let mut context = Context::new(&schema, Path::new(target), Path::new("."));
 
     if let Some(keyvalues) = matches.values_of("let") {
         let keys = keyvalues.clone().into_iter().step_by(2);
