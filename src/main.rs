@@ -5,9 +5,9 @@ use clap::{App, Arg};
 use diskplan::{
     apply::{gather_actions, Action},
     context::Context,
-    fromfile::schema_from_path,
     install,
     schema::expr::{Expression, Identifier, Token},
+    schema::text::schema_from_path,
 };
 
 fn main() -> Result<()> {

@@ -16,7 +16,5 @@
 
 pub mod apply;
 pub mod context;
-pub mod fromdisk;
-pub mod fromfile;
 pub mod install;
 pub mod schema;

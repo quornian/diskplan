@@ -10,6 +10,7 @@ use self::meta::MetaBuilder;
 pub mod criteria;
 pub mod expr;
 pub mod meta;
+pub mod text;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema {
