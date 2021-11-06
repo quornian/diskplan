@@ -1,19 +1,19 @@
 use std::{
     collections::HashMap,
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 
+use anyhow::{anyhow, Context as _, Result};
 use regex::Regex;
 
 use crate::{
     context::Context,
     schema::{
         criteria::Match,
-        expr::{EvaluationError, Expression, Token},
+        expr::{Expression, Token},
         meta::Meta,
-        DirectorySchema, FileSchema, LinkSchema, Merge, Schema, SchemaEntry, SchemaError,
-        Subschema,
+        DirectorySchema, FileSchema, LinkSchema, Merge, Schema, SchemaEntry, Subschema,
     },
 };
 
@@ -34,63 +34,34 @@ pub enum Action {
     },
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum ApplicationError {
-    #[error("IOError occurred during application of schema on: {0}")]
-    IOError(PathBuf, #[source] io::Error),
-
-    #[error("Command failed to run (exit code {1}) on: {0}\n  {2}")]
-    CommandError(PathBuf, i32, String),
-
-    #[error("Error evaluating expression for: {0}")]
-    EvaluationError(PathBuf, #[source] EvaluationError),
-
-    #[error("Error parsing regular expression for: {0}")]
-    RegexError(PathBuf, #[source] regex::Error),
-
-    #[error("No definition found for {1} under: {0}")]
-    DefNotFound(PathBuf, String),
-
-    #[error("Pattern {0} does not match {1}")]
-    PatternMismatch(String, String),
-
-    #[error("Link has non-absolute target path\n  Link: {0}\n  Expr: {1}\n  Path: {2}")]
-    LinkTargetNotAbsolute(PathBuf, String, String),
-
-    #[error("Schema error applying {1}")]
-    SchemaError(PathBuf, #[source] SchemaError),
-}
-
-pub fn gather_actions(context: &Context) -> Result<Vec<Action>, ApplicationError> {
+pub fn gather_actions(context: &Context) -> Result<Vec<Action>> {
     let mut actions = Vec::new();
     apply_tree(context, &mut actions).map(|()| actions)
 }
 
-fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<(), ApplicationError> {
+fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<()> {
     eprintln!(
         "Applying to {}: {}",
         &context.root.to_str().unwrap(),
         &context.target.to_str().unwrap()
     );
     match context.schema {
-        Schema::File(file_schema) => apply_file(file_schema, context, actions)?,
-        Schema::Symlink(link_schema) => apply_link(link_schema, context, actions)?,
-        Schema::Directory(dir_schema) => apply_directory(dir_schema, context, actions)?,
+        Schema::File(file_schema) => apply_file(file_schema, context, actions),
+        Schema::Symlink(link_schema) => apply_link(link_schema, context, actions),
+        Schema::Directory(dir_schema) => apply_directory(dir_schema, context, actions),
     }
-    Ok(())
+    .with_context(|| format!("Failed to apply tree {:?}", context.target))
 }
 
 fn apply_file(
     file_schema: &FileSchema,
     context: &Context,
     actions: &mut Vec<Action>,
-) -> Result<(), ApplicationError> {
+) -> Result<()> {
     // Ensure the file exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
     // install::install_file(&context.target, file_schema.source(), file_schema.meta());
-    let source = context
-        .evaluate(file_schema.source())
-        .map_err(|e| ApplicationError::EvaluationError(context.target.to_owned(), e))?;
+    let source = context.evaluate(file_schema.source())?;
 
     actions.push(Action::CreateFile {
         path: normalize(&context.root.join(&context.target)),
@@ -104,18 +75,17 @@ fn apply_link(
     link_schema: &LinkSchema,
     context: &Context,
     actions: &mut Vec<Action>,
-) -> Result<(), ApplicationError> {
+) -> Result<()> {
     // Ensure the link exists and its evaluated target path is absolute
-    let link_target = context
-        .evaluate(link_schema.target())
-        .map_err(|e| ApplicationError::EvaluationError(context.target.clone(), e))?;
+    let link_target = context.evaluate(link_schema.target())?;
     let link_target_path = Path::new(&link_target);
 
     if !link_target_path.is_absolute() {
-        return Err(ApplicationError::LinkTargetNotAbsolute(
-            context.target.clone(),
-            link_schema.target().to_string(),
+        return Err(anyhow!(
+            "Link target is not absolute: {} ({})\n{:?}",
+            link_schema.target(),
             link_target,
+            link_schema.far_schema(),
         ));
     }
 
@@ -125,17 +95,19 @@ fn apply_link(
         path: normalize(&context.root.join(&context.target)),
         target: normalize(link_target_path),
     });
-    // TODO: Check root/target is okay like this
-    let far_context = Context::new(link_schema.far_schema(), link_target_path, Path::new("."));
-
-    apply_tree(&far_context, actions)
+    if let Some(far_schema) = link_schema.far_schema() {
+        // TODO: Check root/target is okay like this
+        let far_context = Context::new(&far_schema, link_target_path, Path::new("."));
+        apply_tree(&far_context, actions)?;
+    }
+    Ok(())
 }
 
 fn apply_directory(
     directory_schema: &DirectorySchema,
     context: &Context,
     actions: &mut Vec<Action>,
-) -> Result<(), ApplicationError> {
+) -> Result<()> {
     // Ensure the directory exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
     // install::install_directory(&context.target, directory_schema.meta())?;
@@ -151,16 +123,13 @@ fn handle_entries(
     entries: &Vec<SchemaEntry>,
     context: &Context,
     actions: &mut Vec<Action>,
-) -> Result<(), ApplicationError> {
-    let map_io_err = |e| ApplicationError::IOError(context.target.clone(), e);
-
+) -> Result<()> {
     // Handle entries within this directory
     let mut entries_handled = (|| {
-        let listing: Result<HashMap<_, bool>, _> = fs::read_dir(&context.target)
-            .map_err(map_io_err)?
+        let listing: Result<HashMap<_, bool>, _> = fs::read_dir(&context.target)?
             .map(|x| x.map(|ent| (ent.file_name(), false)))
             .collect();
-        listing.map_err(map_io_err)
+        listing
     })()
     .unwrap_or_default();
 
@@ -185,16 +154,8 @@ fn handle_entries(
                             } => {
                                 merged = context
                                     .follow_schema(&use_def)
-                                    .ok_or_else(|| {
-                                        ApplicationError::DefNotFound(
-                                            child_path.to_owned(),
-                                            use_def.value().to_owned(),
-                                        )
-                                    })?
-                                    .merge(&overrides)
-                                    .map_err(|e| {
-                                        ApplicationError::SchemaError(child_path.to_owned(), e)
-                                    })?;
+                                    .ok_or_else(|| anyhow!("No matching #def for {}", use_def))?
+                                    .merge(&overrides)?;
                                 &merged
                             }
                         };
@@ -217,29 +178,17 @@ fn handle_entries(
                 // Turn pattern into a regular expression
                 let pattern = match pattern {
                     None => None,
-                    Some(pattern) => Some(
-                        context
-                            .evaluate(&pattern)
-                            .map_err(|e| {
-                                ApplicationError::EvaluationError(context.target.clone(), e)
-                            })
-                            .and_then(|pattern| {
-                                full_regex(&pattern).map_err(|e| {
-                                    ApplicationError::RegexError(context.target.clone(), e)
-                                })
-                            })?,
-                    ),
+                    Some(pattern) => Some(full_regex(&context.evaluate(&pattern)?)?),
                 };
                 // If we have this binding in our variables already, resolve it and use the fixed result
                 // issuing an error if the pattern doesn't match (no need to re-bind)
                 let expr = context.lookup(&binding);
                 if let Some(expr) = expr {
-                    let name: String = context
-                        .evaluate(&expr)
-                        .map_err(|e| ApplicationError::EvaluationError(PathBuf::from("?"), e))?; //FIXME
+                    let name: String = context.evaluate(&expr)?;
                     if let Some(pattern) = pattern {
                         if !pattern.is_match(&name) {
-                            return Err(ApplicationError::PatternMismatch(
+                            return Err(anyhow!(
+                                "Pattern mismatch: {} against {}",
                                 pattern.to_string(),
                                 name,
                             ));
@@ -259,16 +208,8 @@ fn handle_entries(
                                 } => {
                                     merged = context
                                         .follow_schema(&use_def)
-                                        .ok_or_else(|| {
-                                            ApplicationError::DefNotFound(
-                                                child_path.to_owned(),
-                                                use_def.value().to_owned(),
-                                            )
-                                        })?
-                                        .merge(&overrides)
-                                        .map_err(|e| {
-                                            ApplicationError::SchemaError(child_path.to_owned(), e)
-                                        })?;
+                                        .ok_or_else(|| anyhow!("No matching #def for {}", use_def))?
+                                        .merge(&overrides)?;
                                     &merged
                                 }
                             };
@@ -303,18 +244,9 @@ fn handle_entries(
                                         merged = context
                                             .follow_schema(&use_def)
                                             .ok_or_else(|| {
-                                                ApplicationError::DefNotFound(
-                                                    child_path.to_owned(),
-                                                    use_def.value().to_owned(),
-                                                )
+                                                anyhow!("No matching #def for {}", use_def)
                                             })?
-                                            .merge(&overrides)
-                                            .map_err(|e| {
-                                                ApplicationError::SchemaError(
-                                                    child_path.to_owned(),
-                                                    e,
-                                                )
-                                            })?;
+                                            .merge(&overrides)?;
                                         &merged
                                     }
                                 };

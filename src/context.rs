@@ -3,8 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::{anyhow, Context as _, Result};
 use crate::schema::{
-    expr::{EvaluationError, Expression, Identifier, Token},
+    expr::{Expression, Identifier, Token},
     Schema,
 };
 
@@ -83,7 +84,7 @@ impl<'a> Context<'a> {
         self.bound_vars.insert(var, value);
     }
 
-    pub fn evaluate(&self, expr: &Expression) -> Result<String, EvaluationError> {
+    pub fn evaluate(&self, expr: &Expression) -> Result<String> {
         let mut buffer = String::new();
         for token in expr.tokens() {
             match token {
@@ -94,26 +95,26 @@ impl<'a> Context<'a> {
                         "PARENT" => String::from(
                             self.target
                                 .parent()
-                                .ok_or_else(|| EvaluationError::BuiltinError(var.value().clone()))?
+                                .ok_or_else(|| anyhow!("Path has no parent"))?
                                 .to_string_lossy(),
                         ),
                         "NAME" => String::from(
                             self.target
                                 .file_name()
-                                .ok_or_else(|| EvaluationError::BuiltinError(var.value().clone()))?
+                                .ok_or_else(|| anyhow!("Path has no valid name"))?
                                 .to_string_lossy(),
                         ),
                         _ => {
                             let value = self.lookup(var).ok_or_else(|| {
-                                EvaluationError::NoSuchVariable(var.value().clone())
+                                anyhow!("No such variable: {}", var.value())
                             })?;
 
-                            self.evaluate(&value).map_err(|e| {
-                                EvaluationError::Recursion(
-                                    expr.to_string(),
-                                    var.value().clone(),
-                                    value.to_string(),
-                                    Box::new(e),
+                            self.evaluate(&value).with_context(|| {
+                                format!(
+                                    "Failed to evaluate value of {} in {} (from {})",
+                                    var.value(),
+                                    value,
+                                    expr,
                                 )
                             })?
                         }
@@ -151,7 +152,7 @@ mod tests {
                 criteria: Match::fixed("link"),
                 schema: Subschema::Original(Schema::Symlink(LinkSchema::new(
                     Expression::new(vec![Token::variable("@absvar"), Token::text("/sub")]),
-                    Schema::Directory(DirectorySchema::default()),
+                    Some(Box::new(Schema::Directory(DirectorySchema::default()))),
                 ))),
             }];
             DirectorySchema::new(vars, defs, meta, entries)

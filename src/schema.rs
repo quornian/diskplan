@@ -1,7 +1,7 @@
+use anyhow::{anyhow, Result};
 use expr::Expression;
-use meta::{Meta, MetaError};
+use meta::Meta;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use self::criteria::Match;
 use self::expr::Identifier;
@@ -23,11 +23,21 @@ pub trait Merge
 where
     Self: Sized,
 {
-    fn merge(&self, other: &Self) -> Result<Self, SchemaError>;
+    fn merge(&self, other: &Self) -> Result<Self>;
+}
+
+impl Merge for Option<Box<Schema>> {
+    fn merge(&self, other: &Option<Box<Schema>>) -> Result<Option<Box<Schema>>> {
+        match (self, other) {
+            (_, None) => Ok(self.clone()),
+            (None, _) => Ok(other.clone()),
+            (Some(a), Some(b)) => a.merge(b).map(Box::new).map(Some),
+        }
+    }
 }
 
 impl Merge for Schema {
-    fn merge(&self, other: &Schema) -> Result<Schema, SchemaError> {
+    fn merge(&self, other: &Schema) -> Result<Schema> {
         match (self, other) {
             (Schema::Directory(schema_a), Schema::Directory(schema_b)) => {
                 Ok(Schema::Directory(schema_a.merge(schema_b)?))
@@ -38,9 +48,9 @@ impl Merge for Schema {
             (Schema::Symlink(schema_a), Schema::Symlink(schema_b)) => {
                 Ok(Schema::Symlink(schema_a.merge(schema_b)?))
             }
-            (Schema::Directory(_), _) | (Schema::File(_), _) | (Schema::Symlink(_), _) => Err(
-                SchemaError::MergeError(format!("Cannot merge, mismatched types")),
-            ),
+            (Schema::Directory(_), _) | (Schema::File(_), _) | (Schema::Symlink(_), _) => {
+                Err(anyhow!("Cannot merge, mismatched types"))
+            }
         }
     }
 }
@@ -113,7 +123,7 @@ impl DirectorySchema {
 }
 
 impl Merge for DirectorySchema {
-    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+    fn merge(&self, other: &Self) -> Result<Self> {
         let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
         vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
         vars.extend(other.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -154,7 +164,7 @@ impl FileSchema {
 }
 
 impl Merge for FileSchema {
-    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+    fn merge(&self, other: &Self) -> Result<Self> {
         let meta = MetaBuilder::default()
             .merge(&self.meta)
             .merge(&other.meta)
@@ -163,11 +173,11 @@ impl Merge for FileSchema {
             (_, 0) => self.source.clone(),
             (0, _) => other.source.clone(),
             (_, _) => {
-                return Err(SchemaError::MergeError(format!(
+                return Err(anyhow!(
                     "Cannot merge file with two sources: {} and {}",
                     self.source().to_string(),
                     other.source().to_string()
-                )))
+                ))
             }
         };
         Ok(FileSchema::new(meta, source))
@@ -180,81 +190,40 @@ pub struct LinkSchema {
     target: Expression,
 
     /// What to ensure, if anything, should be found at the other end
-    far_schema: Box<Schema>,
+    far_schema: Option<Box<Schema>>,
 }
 
 impl LinkSchema {
-    pub fn new(target: Expression, far_schema: Schema) -> LinkSchema {
+    pub fn new(target: Expression, far_schema: Option<Box<Schema>>) -> LinkSchema {
         LinkSchema {
             target,
-            far_schema: Box::new(far_schema),
+            far_schema: far_schema,
         }
     }
     pub fn target(&self) -> &Expression {
         &self.target
     }
-    pub fn far_schema(&self) -> &Schema {
-        &self.far_schema
+    pub fn far_schema(&self) -> Option<&Schema> {
+        self.far_schema.as_deref()
     }
 }
 
 impl Merge for LinkSchema {
-    fn merge(&self, other: &Self) -> Result<Self, SchemaError> {
+    fn merge(&self, other: &Self) -> Result<Self> {
         let far_schema = self.far_schema.merge(&other.far_schema)?;
         let target = match (self.target.tokens().len(), other.target.tokens().len()) {
             (_, 0) => self.target.clone(),
             (0, _) => other.target.clone(),
             (_, _) => {
-                return Err(SchemaError::MergeError(format!(
+                return Err(anyhow!(
                     "Cannot merge link with two targets: {} and {}",
                     self.target().to_string(),
                     other.target().to_string()
-                )))
+                ))
             }
         };
         Ok(LinkSchema::new(target, far_schema))
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum SchemaError {
-    // SCHEMA --------------------------------
-    #[error("Schema entry is not variable (e.g. @varname) but has pattern: {0}")]
-    NonVariableWithPattern(PathBuf),
-
-    #[error("Only directories are allowed in the schema; encountered: {0}\nConsider replacing with a directory containing _.is.file or _.is_link")]
-    NonDirectorySchemaEntry(PathBuf),
-
-    #[error("Error parsing metadata from: {0}")]
-    MetaError(PathBuf, #[source] MetaError),
-
-    // FROM DISK -----------------------------
-    #[error("Multiple type annotations found under: {0}")]
-    MultipleTypeAnnotation(PathBuf),
-
-    #[error("IO error reading info from: {0}")]
-    IOError(PathBuf, #[source] std::io::Error),
-
-    #[error("Unable to parse property value from: {0} ({1})")]
-    PropertyParseFailure(PathBuf, String),
-
-    #[error("Unable to parse regular expression value from: {0} ({1})")]
-    RegexParseFailure(PathBuf, #[source] regex::Error),
-
-    #[error("An unexpected item was encountered: {0}")]
-    UnexpectedItemError(PathBuf),
-
-    #[error("Syntax error in file {path}: {details}")]
-    SyntaxError { path: PathBuf, details: String },
-
-    // TODO: Make more specific ones
-    #[error("General error: {0}")]
-    GeneralError(&'static str),
-    #[error("Error in block: {0}")]
-    NestedError(String, #[source] Option<Box<SchemaError>>),
-
-    #[error("Merge error: {0}")]
-    MergeError(String),
 }
 
 pub fn print_tree(schema: &Schema) {
@@ -326,7 +295,9 @@ pub fn print_tree(schema: &Schema) {
             pad = "",
             indent = indent
         );
-        print_schema(link_schema.far_schema(), indent + 4);
+        if let Some(far_schema) = link_schema.far_schema() {
+            print_schema(far_schema, indent + 4);
+        }
     }
     fn print_meta(meta: &Meta, indent: usize) {
         print!("{pad:indent$}meta ", pad = "", indent = indent);

@@ -1,13 +1,6 @@
-use std::{
-    collections::HashMap,
-    fmt::Write,
-    fs::File,
-    io::{self, Read},
-    iter::repeat,
-    path::Path,
-};
+use std::{collections::HashMap, fmt::Write, iter::repeat};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use nom::{
     branch::alt,
@@ -24,22 +17,14 @@ use crate::schema::{
     criteria::Match,
     expr::{Expression, Identifier, Token},
     meta::MetaBuilder,
-    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, SchemaError, Subschema,
+    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, Subschema,
 };
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
-pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
-    let content = (|| -> Result<String, io::Error> {
-        let mut file = File::open(path)?;
-        let mut content = String::with_capacity(file.metadata()?.len() as usize);
-        file.read_to_string(&mut content)?;
-        Ok(content)
-    })()
-    .map_err(|e| SchemaError::IOError(path.to_owned(), e))?;
-
+pub fn parse_schema(text: String) -> Result<Schema> {
     // Parse and process entire schema and handle any errors that arise
-    let (_, ops) = all_consuming(many0(operator(0)))(&content).map_err(|e| {
+    let (_, ops) = all_consuming(many0(operator(0)))(&text).map_err(|e| {
         let e = match e {
             nom::Err::Error(e) | nom::Err::Failure(e) => e,
             nom::Err::Incomplete(_) => unreachable!(),
@@ -47,11 +32,11 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
         // Create a nice syntax error message
         let mut details = String::new();
         for (r, e) in e.errors.iter().rev() {
-            let err_pos = r.as_ptr() as usize - content.as_ptr() as usize;
-            let line_number = content[..err_pos].chars().filter(|&c| c == '\n').count() + 1;
-            let line_start = content[..err_pos].rfind("\n").map(|n| n + 1).unwrap_or(0);
+            let err_pos = r.as_ptr() as usize - text.as_ptr() as usize;
+            let line_number = text[..err_pos].chars().filter(|&c| c == '\n').count() + 1;
+            let line_start = text[..err_pos].rfind("\n").map(|n| n + 1).unwrap_or(0);
             let column = err_pos - line_start;
-            let line = content[line_start..].split("\n").next().unwrap().to_owned();
+            let line = text[line_start..].split("\n").next().unwrap().to_owned();
             let marker: String = repeat(' ').take(column).chain("^~~~".chars()).collect();
             write!(
                 details,
@@ -61,31 +46,19 @@ pub fn schema_from_path(path: &Path) -> Result<Schema, SchemaError> {
             .unwrap();
             write!(details, "{:?}", e).unwrap();
         }
-        SchemaError::SyntaxError {
-            path: path.to_owned(),
-            details: details,
-        }
+        anyhow!("Syntax error: {}", details)
     })?;
     let (match_regex, subschema) = schema(ops, ItemType::Directory)?;
     if let Some(_) = match_regex {
-        return Err(SchemaError::SyntaxError {
-            path: path.to_owned(),
-            details: format!("Top level #match is not allowed"),
-        });
+        return Err(anyhow!("Top level #match is not allowed"));
     }
     match subschema {
-        Subschema::Referenced { .. } => Err(SchemaError::SyntaxError {
-            path: path.to_owned(),
-            details: format!("Top level #use is not allowed"),
-        }),
+        Subschema::Referenced { .. } => Err(anyhow!("Top level #use is not allowed")),
         Subschema::Original(schema) => Ok(schema),
     }
 }
 
-fn schema(
-    ops: Vec<Operator>,
-    item_type: ItemType,
-) -> Result<(Option<Expression>, Subschema), SchemaError> {
+fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>, Subschema)> {
     let mut props = Properties::default();
     for op in ops {
         match op {
@@ -106,7 +79,7 @@ fn schema(
             Operator::Source(source) => {
                 match item_type {
                     ItemType::File => (),
-                    _ => return Err(SchemaError::GeneralError("Only files can have a #source")),
+                    _ => return Err(anyhow!("Only files can have a #source")),
                 }
                 props.source = Some(source)
             }
@@ -120,16 +93,15 @@ fn schema(
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err(SchemaError::GeneralError("Files cannot have child items"));
+                    return Err(anyhow!("Files cannot have child items"));
                 }
                 let sub_item_type = match (link, is_directory) {
-                    (Some(target), _) => ItemType::Symlink(target),
+                    (Some(target), is_directory) => ItemType::Symlink{target, is_directory},
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, schema) = schema(children, sub_item_type).map_err(|e| {
-                    SchemaError::NestedError(format!("{:?}", binding), Some(Box::new(e)))
-                })?;
+                let (pattern, schema) = schema(children, sub_item_type)
+                    .map_err(|e| anyhow!("{:?}\n\nFrom: {}", binding, e))?;
                 let criteria = match binding {
                     Binding::Static(s) => Match::fixed(s),
                     Binding::Dynamic(binding) => Match::Variable {
@@ -147,22 +119,22 @@ fn schema(
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err(SchemaError::GeneralError("Files cannot have child items"));
+                    return Err(anyhow!("Files cannot have child items"));
                 }
                 let sub_item_type = match (link, is_directory) {
-                    (Some(target), _) => ItemType::Symlink(target),
+                    (Some(target), is_directory) => ItemType::Symlink{target,is_directory},
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
                 let (pattern, schema) = schema(children, sub_item_type)?;
                 if pattern.is_some() {
-                    return Err(SchemaError::GeneralError("#def has own #match"));
+                    return Err(anyhow!("#def has own #match"));
                 }
                 if let Subschema::Original(schema) = schema {
                     props.defs.insert(name, schema);
                 } else {
                     // TODO: This may be okay
-                    return Err(SchemaError::GeneralError("#def has own #use"));
+                    return Err(anyhow!("#def has own #use"));
                 }
             }
         }
@@ -179,19 +151,38 @@ fn schema(
             if let Some(source) = props.source {
                 Schema::File(FileSchema::new(props.meta.build(), source))
             } else {
-                return Err(SchemaError::GeneralError("File has no #source"));
+                return Err(anyhow!("File has no #source"));
             }
         }
-        ItemType::Symlink(target) => Schema::Symlink(LinkSchema::new(
-            target.clone(),
-            // TODO: File-like symlinks
-            Schema::Directory(DirectorySchema::new(
-                props.vars,
-                props.defs,
-                props.meta.build(),
-                props.entries,
-            )),
-        )),
+        ItemType::Symlink {
+            target,
+            is_directory,
+        } => Schema::Symlink({
+            let schema = if props.vars.is_empty()
+                && props.defs.is_empty()
+                && props.meta.is_empty()
+                && props.entries.is_empty()
+            {
+                None
+            } else if *is_directory {
+                Some(Box::new(Schema::Directory(DirectorySchema::new(
+                    props.vars,
+                    props.defs,
+                    props.meta.build(),
+                    props.entries,
+                ))))
+            } else {
+                Some(Box::new(if let Some(source) = props.source {
+                    Schema::File(FileSchema::new(props.meta.build(), source))
+                } else {
+                    return Err(anyhow!("File has no #source"));
+                }))
+            };
+            LinkSchema::new(
+                target.clone(),
+                schema,
+            )
+        }),
     };
     Ok((
         props.match_regex,
@@ -282,7 +273,10 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, Operator> {
 enum ItemType {
     Directory,
     File,
-    Symlink(Expression),
+    Symlink {
+        target: Expression,
+        is_directory: bool,
+    },
 }
 
 #[derive(Default)]

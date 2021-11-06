@@ -65,30 +65,8 @@ impl From<&Identifier> for String {
     }
 }
 
-// impl Display for Identifier {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}", self.0)
-//     }
-// }
-
-#[derive(thiserror::Error, Debug, PartialEq)]
-pub enum EvaluationError {
-    #[error("No such variable: {0}")]
-    NoSuchVariable(String),
-
-    //FIXME
-    #[error("Built-in variable failed to evaluate: {0:?}")]
-    BuiltinError(String),
-
-    // #[error("Error parsing expression from: {0}")]
-    // ExpressionError(String, #[source] ExprError),
-    //
-    // #[error("Invalid name (no tokens): {0}")]
-    // NameHasNoTokens(String),
-    //
-    // #[error("Invalid name (multiple tokens): {0} ({1} unexpected)")]
-    // NameHasMultipleTokens(String, String),
-    //
-    #[error("Error evaluating {0:?}, replacing @{1} with {2:?}")]
-    Recursion(String, String, String, #[source] Box<EvaluationError>),
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }

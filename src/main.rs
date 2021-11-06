@@ -1,14 +1,13 @@
-use std::path::Path;
-
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::{App, Arg};
 use diskplan::{
     apply::{gather_actions, Action},
     context::Context,
     install,
     schema::expr::{Expression, Identifier, Token},
-    schema::text::schema_from_path,
+    schema::{text::parse_schema, Schema},
 };
+use std::{fs::File, io::Read, path::Path};
 
 fn main() -> Result<()> {
     // Parse command line arguments
@@ -54,7 +53,14 @@ fn main() -> Result<()> {
     let target = matches.value_of("target").unwrap();
     let apply = matches.is_present("apply");
 
-    let schema = schema_from_path(Path::new(schema))?;
+    let schema = (|| -> Result<Schema> {
+        let mut file = File::open(schema)?;
+        let mut content = String::with_capacity(file.metadata()?.len() as usize);
+        file.read_to_string(&mut content)?;
+        parse_schema(content)
+    })()
+    .with_context(|| format!("Failed to load schema from: {}", schema))?;
+
     let mut context = Context::new(&schema, Path::new(target), Path::new("."));
 
     if let Some(keyvalues) = matches.values_of("let") {
@@ -91,7 +97,7 @@ fn main() -> Result<()> {
                 Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
             }
         } else {
-            println!("Would performing action: {:?}", action);
+            println!("Would perform action: {:?}", action);
         }
     }
     Ok(())

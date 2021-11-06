@@ -45,7 +45,7 @@ impl Meta {
     pub fn permissions(&self) -> Option<Permissions> {
         self.permissions
     }
-    pub fn is_no_op(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         match self {
             Meta {
                 owner: None,
@@ -146,5 +146,15 @@ impl MetaBuilder {
     }
     pub fn build(&self) -> Meta {
         self.meta.clone()
+    }
+    pub fn is_empty(&self) -> bool {
+        match self.meta {
+            Meta {
+                owner: None,
+                group: None,
+                permissions: None,
+            } => true,
+            _ => false,
+        }
     }
 }
