@@ -3,11 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context as _, Result};
 use crate::schema::{
     expr::{Expression, Identifier, Token},
     Schema,
 };
+use anyhow::{anyhow, Context as _, Result};
 
 // A note on lifetimes:
 //  - The Context refers to a Schema, so the Schema must outlive the Context
@@ -105,9 +105,9 @@ impl<'a> Context<'a> {
                                 .to_string_lossy(),
                         ),
                         _ => {
-                            let value = self.lookup(var).ok_or_else(|| {
-                                anyhow!("No such variable: {}", var.value())
-                            })?;
+                            let value = self
+                                .lookup(var)
+                                .ok_or_else(|| anyhow!("No such variable: {}", var.value()))?;
 
                             self.evaluate(&value).with_context(|| {
                                 format!(
@@ -167,6 +167,6 @@ mod tests {
         );
 
         let expr = Expression::new(vec![Token::variable("absvar")]);
-        assert_eq!(context.evaluate(&expr), Ok("/tmp/abs".to_owned()));
+        assert_eq!(context.evaluate(&expr).unwrap(), "/tmp/abs");
     }
 }

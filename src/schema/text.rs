@@ -10,7 +10,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
-    combinator::{all_consuming, eof, map, opt, recognize},
+    combinator::{all_consuming, consumed, eof, map, opt, recognize},
     error::{context, VerboseError},
     multi::{count, many0, many1},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -26,7 +26,7 @@ use crate::schema::{
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
-pub fn parse_schema(text: String) -> Result<Schema> {
+pub fn parse_schema(text: &str) -> Result<Schema> {
     // Parse and process entire schema and handle any errors that arise
     let (_, ops) = all_consuming(many0(operator(0)))(&text).map_err(|e| {
         let e = match e {
@@ -52,7 +52,14 @@ pub fn parse_schema(text: String) -> Result<Schema> {
         }
         anyhow!("Syntax error: {}", details)
     })?;
-    let (match_regex, subschema) = schema(ops, ItemType::Directory)?;
+    let (match_regex, subschema) =
+        schema(text, text, ops, ItemType::Directory).map_err(|(pos, err)| {
+            anyhow!(
+                "Error in block starting on line {}...\n{}",
+                find_line_number(pos, text),
+                err
+            )
+        })?;
     if let Some(_) = match_regex {
         return Err(anyhow!("Top level #match is not allowed"));
     }
@@ -62,9 +69,19 @@ pub fn parse_schema(text: String) -> Result<Schema> {
     }
 }
 
-fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>, Subschema)> {
+fn find_line_number(pos: &str, whole: &str) -> usize {
+    let pos = pos.as_ptr() as usize - whole.as_ptr() as usize;
+    whole[..pos].chars().filter(|&c| c == '\n').count() + 1
+}
+
+fn schema<'a>(
+    whole: &'a str,
+    part: &'a str,
+    ops: Vec<(&'a str, Operator<'a>)>,
+    item_type: ItemType,
+) -> std::result::Result<(Option<Expression>, Subschema), (&'a str, String)> {
     let mut props = Properties::default();
-    for op in ops {
+    for (pos, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
             Operator::Match(expr) => props.match_regex = Some(expr),
@@ -83,7 +100,7 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
             Operator::Source(source) => {
                 match item_type {
                     ItemType::File => (),
-                    _ => return Err(anyhow!("Only files can have a #source")),
+                    _ => return Err((pos, format!("Only files can have a #source"))),
                 }
                 props.source = Some(source)
             }
@@ -97,7 +114,7 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err(anyhow!("Files cannot have child items"));
+                    return Err((pos, format!("Files cannot have child items")));
                 }
                 let sub_item_type = match (link, is_directory) {
                     (Some(target), is_directory) => ItemType::Symlink {
@@ -107,8 +124,18 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, schema) = schema(children, sub_item_type)
-                    .map_err(|e| anyhow!("Error within \"{}\"\n{}", binding, e))?;
+                let (pattern, schema) =
+                    schema(whole, pos, children, sub_item_type).map_err(|(err_pos, err)| {
+                        (
+                            pos,
+                            format!(
+                                "Error within \"{}\" on line {}\n{}",
+                                binding,
+                                find_line_number(err_pos, whole),
+                                err
+                            ),
+                        )
+                    })?;
                 let criteria = match binding {
                     Binding::Static(s) => Match::fixed(s),
                     Binding::Dynamic(binding) => Match::Variable {
@@ -126,7 +153,7 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err(anyhow!("Files cannot have child items"));
+                    return Err((pos, format!("Files cannot have child items")));
                 }
                 let sub_item_type = match (link, is_directory) {
                     (Some(target), is_directory) => ItemType::Symlink {
@@ -136,15 +163,15 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, schema) = schema(children, sub_item_type)?;
+                let (pattern, schema) = schema(whole, pos, children, sub_item_type)?;
                 if pattern.is_some() {
-                    return Err(anyhow!("#def has own #match"));
+                    return Err((pos, format!("#def has own #match")));
                 }
                 if let Subschema::Original(schema) = schema {
                     props.defs.insert(name, schema);
                 } else {
                     // TODO: This may be okay
-                    return Err(anyhow!("#def has own #use"));
+                    return Err((pos, format!("#def has own #use")));
                 }
             }
         }
@@ -161,8 +188,9 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
             if let Some(source) = props.source {
                 Schema::File(FileSchema::new(props.meta.build(), source))
             } else {
-                return Err(anyhow!(
-                    "File has no #source. Should this have been a directory?"
+                return Err((
+                    part,
+                    format!("File has no #source. Should this have been a directory?"),
                 ));
             }
         }
@@ -187,8 +215,9 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                 Some(Box::new(if let Some(source) = props.source {
                     Schema::File(FileSchema::new(props.meta.build(), source))
                 } else {
-                    return Err(anyhow!(
-                        "File has no #source. Should this have been a directory?"
+                    return Err((
+                        part,
+                        format!("File has no #source. Should this have been a directory?"),
                     ));
                 }))
             };
@@ -211,7 +240,7 @@ fn indentation(level: usize) -> impl Fn(&str) -> Res<&str, &str> {
     move |s: &str| recognize(count(tag("    "), level))(s)
 }
 
-fn operator(level: usize) -> impl Fn(&str) -> Res<&str, Operator> {
+fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
     // This is really just to make the op definitions tidier
     fn op<'a, O, P>(
         level: usize,
@@ -238,7 +267,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, Operator> {
         let group_op = op(level, "#group", username);
         let source_op = op(level, "#source", expression);
 
-        alt((
+        consumed(alt((
             terminated(
                 alt((
                     map(let_op, |(name, expr)| Operator::Let { name, expr }),
@@ -277,7 +306,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, Operator> {
                     children,
                 },
             ),
-        ))(s)
+        )))(s)
     }
 }
 
@@ -326,7 +355,7 @@ enum Operator<'a> {
         binding: Binding<'a>,
         is_directory: bool,
         link: Option<Expression>,
-        children: Vec<Operator<'a>>,
+        children: Vec<(&'a str, Operator<'a>)>,
     },
     Let {
         name: Identifier,
@@ -336,7 +365,7 @@ enum Operator<'a> {
         name: Identifier,
         is_directory: bool,
         link: Option<Expression>,
-        children: Vec<Operator<'a>>,
+        children: Vec<(&'a str, Operator<'a>)>,
     },
     Use {
         name: Identifier,
@@ -446,34 +475,46 @@ mod test {
 
     #[test]
     fn test_let() {
+        let s = "#let something = expr";
         assert_eq!(
-            operator(0)("#let something = expr"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Let {
-                    name: Identifier::new("something"),
-                    expr: Expression::new(vec![Token::text("expr")])
-                }
+                (
+                    s,
+                    Operator::Let {
+                        name: Identifier::new("something"),
+                        expr: Expression::new(vec![Token::text("expr")])
+                    }
+                )
             ))
         );
+        let s = "#let with_underscores = expr";
         assert_eq!(
-            operator(0)("#let with_underscores = expr"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Let {
-                    name: Identifier::new("with_underscores"),
-                    expr: Expression::new(vec![Token::text("expr")])
-                }
+                (
+                    s,
+                    Operator::Let {
+                        name: Identifier::new("with_underscores"),
+                        expr: Expression::new(vec![Token::text("expr")])
+                    }
+                )
             ))
         );
+        let s = "#let _with_underscores_ = expr";
         assert_eq!(
-            operator(0)("#let _with_underscores_ = expr"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Let {
-                    name: Identifier::new("_with_underscores_"),
-                    expr: Expression::new(vec![Token::text("expr")])
-                }
+                (
+                    s,
+                    Operator::Let {
+                        name: Identifier::new("_with_underscores_"),
+                        expr: Expression::new(vec![Token::text("expr")])
+                    }
+                )
             ))
         );
     }
@@ -504,60 +545,76 @@ mod test {
         assert_eq!(o2, vec![]);
         assert_eq!(s2, "");
 
+        let s = "#def something_";
         assert_eq!(
-            operator(0)("#def something_"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Def {
-                    name: Identifier::new("something_"),
-                    is_directory: false,
-                    link: None,
-                    children: vec![],
-                }
+                (
+                    s,
+                    Operator::Def {
+                        name: Identifier::new("something_"),
+                        is_directory: false,
+                        link: None,
+                        children: vec![],
+                    }
+                )
             ))
         );
+        let s = "#def something/-";
         assert_eq!(
-            operator(0)("#def something/-"),
+            operator(0)(s),
             Ok((
                 "-",
-                Operator::Def {
-                    name: Identifier::new("something"),
-                    is_directory: true,
-                    link: None,
-                    children: vec![],
-                }
+                (
+                    s.strip_suffix("-").unwrap(),
+                    Operator::Def {
+                        name: Identifier::new("something"),
+                        is_directory: true,
+                        link: None,
+                        children: vec![],
+                    }
+                )
             ))
         );
+        let s = "#def something -> /somewhere/else";
         assert_eq!(
-            operator(0)("#def something -> /somewhere/else"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Def {
-                    name: Identifier::new("something"),
-                    is_directory: false,
-                    link: Some(Expression::new(vec![Token::text("/somewhere/else")])),
-                    children: vec![],
-                }
+                (
+                    s,
+                    Operator::Def {
+                        name: Identifier::new("something"),
+                        is_directory: false,
+                        link: Some(Expression::new(vec![Token::text("/somewhere/else")])),
+                        children: vec![],
+                    }
+                )
             ))
         );
     }
 
     #[test]
     fn test_def_op_with_children() {
+        let s = "#def something -> /some$where/else";
         assert_eq!(
-            operator(0)("#def something -> /some$where/else"),
+            operator(0)(s),
             Ok((
                 "",
-                Operator::Def {
-                    name: Identifier::new("something"),
-                    is_directory: false,
-                    link: Some(Expression::new(vec![
-                        Token::text("/some"),
-                        Token::Variable(Identifier::new("where")),
-                        Token::text("/else")
-                    ])),
-                    children: vec![],
-                }
+                (
+                    s,
+                    Operator::Def {
+                        name: Identifier::new("something"),
+                        is_directory: false,
+                        link: Some(Expression::new(vec![
+                            Token::text("/some"),
+                            Token::Variable(Identifier::new("where")),
+                            Token::text("/else")
+                        ])),
+                        children: vec![],
+                    }
+                )
             ))
         );
     }
@@ -587,7 +644,8 @@ mod test {
 
     #[test]
     fn test_single_line_mode_op() {
-        assert_eq!(operator(0)("#mode 777"), Ok(("", Operator::Mode(0o777))));
+        let s = "#mode 777";
+        assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
     }
 
     #[test]
@@ -598,9 +656,15 @@ mod test {
         let t = "#owner usr-1\n\
                  #group grpX";
         let u = "#group grpX";
-        assert_eq!(operator(0)(s), Ok((t, Operator::Mode(0o777))));
-        assert_eq!(operator(0)(t), Ok((u, Operator::Owner("usr-1"))));
-        assert_eq!(operator(0)(u), Ok(("", Operator::Group("grpX"))));
+        assert_eq!(operator(0)(s), Ok((t, (&s[0..10], Operator::Mode(0o777)))));
+        assert_eq!(
+            operator(0)(t),
+            Ok((u, (&s[10..23], Operator::Owner("usr-1"))))
+        );
+        assert_eq!(
+            operator(0)(u),
+            Ok(("", (&s[23..], Operator::Group("grpX"))))
+        );
     }
 
     #[test]
@@ -610,7 +674,10 @@ mod test {
             operator(0)(s),
             Ok((
                 "",
-                Operator::Match(Expression::new(vec![Token::text("[A-Z][A-Za-z]+")]))
+                (
+                    s,
+                    Operator::Match(Expression::new(vec![Token::text("[A-Z][A-Za-z]+")]))
+                )
             ))
         )
     }
@@ -622,7 +689,10 @@ mod test {
             operator(0)(s),
             Ok((
                 "",
-                Operator::Source(Expression::new(vec![Token::text("/a/file/path")]))
+                (
+                    s,
+                    Operator::Source(Expression::new(vec![Token::text("/a/file/path")]))
+                )
             ))
         )
     }
@@ -634,12 +704,15 @@ mod test {
             operator(0)(s),
             Ok((
                 "",
-                Operator::Def {
-                    name: Identifier::new("defined"),
-                    is_directory: true,
-                    link: None,
-                    children: vec![]
-                }
+                (
+                    s,
+                    Operator::Def {
+                        name: Identifier::new("defined"),
+                        is_directory: true,
+                        link: None,
+                        children: vec![]
+                    }
+                )
             ))
         );
     }
@@ -653,25 +726,34 @@ mod test {
             operator(0)(s),
             Ok((
                 "",
-                Operator::Def {
-                    name: Identifier::new("defined"),
-                    is_directory: true,
-                    link: None,
-                    children: vec![
-                        Operator::Item {
-                            binding: Binding::Static("file"),
-                            is_directory: false,
-                            link: None,
-                            children: vec![],
-                        },
-                        Operator::Item {
-                            binding: Binding::Static("dir"),
-                            is_directory: true,
-                            link: None,
-                            children: vec![],
-                        }
-                    ]
-                }
+                (
+                    s,
+                    Operator::Def {
+                        name: Identifier::new("defined"),
+                        is_directory: true,
+                        link: None,
+                        children: vec![
+                            (
+                                &s[14..23],
+                                Operator::Item {
+                                    binding: Binding::Static("file"),
+                                    is_directory: false,
+                                    link: None,
+                                    children: vec![],
+                                }
+                            ),
+                            (
+                                &s[23..],
+                                Operator::Item {
+                                    binding: Binding::Static("dir"),
+                                    is_directory: true,
+                                    link: None,
+                                    children: vec![],
+                                }
+                            )
+                        ]
+                    }
+                )
             ))
         );
     }
@@ -685,6 +767,12 @@ mod test {
             "usage/\n",
             "    #use defined\n"
         );
+        // Some important positions
+        let def_pos = 0;
+        let file_pos = s.find("    file").unwrap();
+        let source_pos = s.find("        #source").unwrap();
+        let usage_pos = s.find("usage").unwrap();
+        let use_pos = s.find("    #use").unwrap();
 
         // Test raw operators parsed from the "file"
         let ops = many0(operator(0))(s);
@@ -693,27 +781,42 @@ mod test {
             Ok((
                 "",
                 vec![
-                    Operator::Def {
-                        name: Identifier::new("defined"),
-                        is_directory: true,
-                        link: None,
-                        children: vec![Operator::Item {
-                            binding: Binding::Static("file"),
-                            is_directory: false,
+                    (
+                        &s[def_pos..usage_pos],
+                        Operator::Def {
+                            name: Identifier::new("defined"),
+                            is_directory: true,
                             link: None,
-                            children: vec![Operator::Source(Expression::new(vec![
-                                Token::Variable(Identifier::new("emptyfile"))
-                            ]))],
-                        }],
-                    },
-                    Operator::Item {
-                        binding: Binding::Static("usage"),
-                        is_directory: true,
-                        link: None,
-                        children: vec![Operator::Use {
-                            name: Identifier::new("defined")
-                        }]
-                    }
+                            children: vec![(
+                                &s[file_pos..usage_pos],
+                                Operator::Item {
+                                    binding: Binding::Static("file"),
+                                    is_directory: false,
+                                    link: None,
+                                    children: vec![(
+                                        &s[source_pos..usage_pos],
+                                        Operator::Source(Expression::new(vec![Token::Variable(
+                                            Identifier::new("emptyfile")
+                                        )]))
+                                    )],
+                                }
+                            )],
+                        }
+                    ),
+                    (
+                        &s[usage_pos..],
+                        Operator::Item {
+                            binding: Binding::Static("usage"),
+                            is_directory: true,
+                            link: None,
+                            children: vec![(
+                                &s[use_pos..],
+                                Operator::Use {
+                                    name: Identifier::new("defined")
+                                }
+                            )]
+                        }
+                    )
                 ]
             ))
         );
@@ -723,7 +826,7 @@ mod test {
         let no_defs = || HashMap::default();
         let no_meta = || Meta::default();
         assert_eq!(
-            schema(ops.unwrap().1, ItemType::Directory).map_err(|e| format!("{}", e)),
+            schema(s, s, ops.unwrap().1, ItemType::Directory).map_err(|e| format!("{}", e.1)),
             Ok((
                 None,
                 Subschema::Original(Schema::Directory({

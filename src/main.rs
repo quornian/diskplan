@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         let mut file = File::open(schema)?;
         let mut content = String::with_capacity(file.metadata()?.len() as usize);
         file.read_to_string(&mut content)?;
-        parse_schema(content)
+        parse_schema(&content)
     })()
     .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
