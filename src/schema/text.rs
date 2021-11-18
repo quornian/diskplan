@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Write, iter::repeat};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Write},
+    iter::repeat,
+};
 
 use anyhow::{anyhow, Result};
 
@@ -96,12 +100,15 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                     return Err(anyhow!("Files cannot have child items"));
                 }
                 let sub_item_type = match (link, is_directory) {
-                    (Some(target), is_directory) => ItemType::Symlink{target, is_directory},
+                    (Some(target), is_directory) => ItemType::Symlink {
+                        target,
+                        is_directory,
+                    },
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
                 let (pattern, schema) = schema(children, sub_item_type)
-                    .map_err(|e| anyhow!("{:?}\n\nFrom: {}", binding, e))?;
+                    .map_err(|e| anyhow!("Error within \"{}\"\n{}", binding, e))?;
                 let criteria = match binding {
                     Binding::Static(s) => Match::fixed(s),
                     Binding::Dynamic(binding) => Match::Variable {
@@ -122,7 +129,10 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                     return Err(anyhow!("Files cannot have child items"));
                 }
                 let sub_item_type = match (link, is_directory) {
-                    (Some(target), is_directory) => ItemType::Symlink{target,is_directory},
+                    (Some(target), is_directory) => ItemType::Symlink {
+                        target,
+                        is_directory,
+                    },
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
@@ -151,7 +161,9 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
             if let Some(source) = props.source {
                 Schema::File(FileSchema::new(props.meta.build(), source))
             } else {
-                return Err(anyhow!("File has no #source"));
+                return Err(anyhow!(
+                    "File has no #source. Should this have been a directory?"
+                ));
             }
         }
         ItemType::Symlink {
@@ -175,13 +187,12 @@ fn schema(ops: Vec<Operator>, item_type: ItemType) -> Result<(Option<Expression>
                 Some(Box::new(if let Some(source) = props.source {
                     Schema::File(FileSchema::new(props.meta.build(), source))
                 } else {
-                    return Err(anyhow!("File has no #source"));
+                    return Err(anyhow!(
+                        "File has no #source. Should this have been a directory?"
+                    ));
                 }))
             };
-            LinkSchema::new(
-                target.clone(),
-                schema,
-            )
+            LinkSchema::new(target.clone(), schema)
         }),
     };
     Ok((
@@ -298,6 +309,15 @@ struct Properties {
 enum Binding<'a> {
     Static(&'a str),
     Dynamic(Identifier),
+}
+
+impl Display for Binding<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Binding::Static(s) => write!(f, "{}", s),
+            Binding::Dynamic(id) => write!(f, "${}", id.value()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
