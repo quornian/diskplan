@@ -474,6 +474,32 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_invalid_space() {
+        assert!(parse_schema("okay_entry/").is_ok());
+        assert!(parse_schema("invalid entry/").is_err());
+    }
+    #[test]
+    fn test_invalid_child() {
+        assert!(parse_schema(concat!(
+            "okay_entry\n", //
+            "    #source /tmp\n",
+        ))
+        .is_ok());
+        assert!(parse_schema(concat!(
+            "okay_entry/\n", //
+            "    child\n",
+            "        #source /tmp\n",
+        ))
+        .is_ok());
+        assert!(parse_schema(concat!(
+            "okay_entry\n", //
+            "    child\n",
+            "        #source /tmp\n",
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn test_let() {
         let s = "#let something = expr";
         assert_eq!(
