@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
@@ -11,9 +10,6 @@ pub enum MetaError {
 
     #[error("Error parsing integer")]
     ParseIntError(#[from] std::num::ParseIntError),
-
-    #[error("Error parsing JSON")]
-    SerdeJsonError(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -23,7 +19,7 @@ pub struct Meta {
     permissions: Option<Permissions>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default)]
 pub struct RawItemMeta {
     pub owner: Option<String>,
     pub group: Option<String>,
@@ -31,11 +27,6 @@ pub struct RawItemMeta {
 }
 
 impl Meta {
-    pub fn from_str(config: &str) -> Result<Meta, MetaError> {
-        let schema: RawItemMeta = serde_json::from_str(config)?;
-        let schema: Meta = schema.try_into()?;
-        Ok(schema)
-    }
     pub fn owner(&self) -> &Option<String> {
         &self.owner
     }
@@ -74,7 +65,7 @@ impl TryFrom<RawItemMeta> for Meta {
 #[derive(Clone, Copy, PartialEq)]
 pub struct Permissions(u16);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct RawPerms(pub String);
 
 impl TryFrom<RawPerms> for Permissions {
