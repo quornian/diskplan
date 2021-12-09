@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 use clap::{App, Arg};
 use diskplan::{
     apply::{gather_actions, Action},
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         let mut file = File::open(schema)?;
         let mut content = String::with_capacity(file.metadata()?.len() as usize);
         file.read_to_string(&mut content)?;
-        parse_schema(&content)
+        parse_schema(&content).map_err(|e| anyhow!("{}", e))
     })()
     .with_context(|| format!("Failed to load schema from: {}", schema))?;
 

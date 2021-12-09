@@ -1,17 +1,11 @@
-use std::{
-    collections::HashMap,
-    fmt::{Display, Write},
-    iter::repeat,
-};
-
-use anyhow::{anyhow, Result};
+use std::{collections::HashMap, fmt::Display};
 
 use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
     combinator::{all_consuming, consumed, eof, map, opt, recognize},
-    error::{context, VerboseError},
+    error::{context, VerboseError, VerboseErrorKind},
     multi::{count, many0, many1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
@@ -26,45 +20,93 @@ use crate::schema::{
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
-pub fn parse_schema(text: &str) -> Result<Schema> {
+#[derive(Debug, PartialEq)]
+pub struct ParseError<'a> {
+    error: String,
+    text: &'a str,
+    span: &'a str,
+    next: Option<Box<ParseError<'a>>>,
+}
+
+impl Display for ParseError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let lineno = find_line_number(self.span, self.text);
+        let line = self.text.lines().nth(lineno - 1).unwrap_or("<EOF>");
+        let column = self.span.as_ptr() as usize - line.as_ptr() as usize;
+        write!(f, "Error: {}\n", self.error)?;
+        write!(f, "     |\n")?;
+        write!(f, "{:4} | {}\n", lineno, line)?;
+        if column == 0 {
+            write!(f, "     |\n")?;
+        } else {
+            write!(f, "     | {0:1$}^\n", "", column)?;
+        }
+        if let Some(next) = &self.next {
+            write!(f, "{}", next)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ParseError<'_> {}
+
+impl<'a> ParseError<'a> {
+    pub fn new(
+        error: String,
+        text: &'a str,
+        span: &'a str,
+        next: Option<Box<ParseError<'a>>>,
+    ) -> ParseError<'a> {
+        ParseError {
+            error,
+            text,
+            span,
+            next,
+        }
+    }
+}
+
+pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
     // Parse and process entire schema and handle any errors that arise
     let (_, ops) = all_consuming(many0(operator(0)))(&text).map_err(|e| {
         let e = match e {
             nom::Err::Error(e) | nom::Err::Failure(e) => e,
             nom::Err::Incomplete(_) => unreachable!(),
         };
-        // Create a nice syntax error message
-        let mut details = String::new();
+        let mut error = None;
         for (r, e) in e.errors.iter().rev() {
-            let err_pos = r.as_ptr() as usize - text.as_ptr() as usize;
-            let line_number = text[..err_pos].chars().filter(|&c| c == '\n').count() + 1;
-            let line_start = text[..err_pos].rfind("\n").map(|n| n + 1).unwrap_or(0);
-            let column = err_pos - line_start;
-            let line = text[line_start..].split("\n").next().unwrap().to_owned();
-            let marker: String = repeat(' ').take(column).chain("^~~~".chars()).collect();
-            write!(
-                details,
-                "\n     |\n{:4} | {}\n     : {}",
-                line_number, line, marker
-            )
-            .unwrap();
-            write!(details, "{:?}", e).unwrap();
+            error = Some(ParseError::new(
+                match e {
+                    VerboseErrorKind::Nom(p) => format!("Invalid token while looking for: {:?}", p),
+                    _ => format!("Error parsing {:?}", e),
+                },
+                text,
+                r,
+                error.map(Box::new),
+            ));
         }
-        anyhow!("Syntax error: {}", details)
+        error.unwrap()
     })?;
-    let (match_regex, subschema) =
-        schema(text, text, ops, ItemType::Directory).map_err(|(pos, err)| {
-            anyhow!(
-                "Error in block starting on line {}...\n{}",
-                find_line_number(pos, text),
-                err
-            )
-        })?;
+    let (match_regex, subschema) = schema(text, text, ops, ItemType::Directory)?;
     if let Some(_) = match_regex {
-        return Err(anyhow!("Top level #match is not allowed"));
+        return Err(ParseError::new(
+            "Top level #match is not allowed".into(),
+            text,
+            text.find("\n#match")
+                .map(|pos| &text[pos + 1..pos + 7])
+                .unwrap_or(text),
+            None,
+        ));
     }
     match subschema {
-        Subschema::Referenced { .. } => Err(anyhow!("Top level #use is not allowed")),
+        Subschema::Referenced { .. } => Err(ParseError::new(
+            "Top level #use is not allowed".into(),
+            text,
+            text.find("\n#use")
+                .map(|pos| &text[pos + 1..pos + 7])
+                .unwrap_or(text),
+            None,
+        )),
         Subschema::Original(schema) => Ok(schema),
     }
 }
@@ -79,9 +121,9 @@ fn schema<'a>(
     part: &'a str,
     ops: Vec<(&'a str, Operator<'a>)>,
     item_type: ItemType,
-) -> std::result::Result<(Option<Expression>, Subschema), (&'a str, String)> {
+) -> std::result::Result<(Option<Expression>, Subschema), ParseError<'a>> {
     let mut props = Properties::default();
-    for (pos, op) in ops {
+    for (span, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
             Operator::Match(expr) => props.match_regex = Some(expr),
@@ -100,7 +142,14 @@ fn schema<'a>(
             Operator::Source(source) => {
                 match item_type {
                     ItemType::File => (),
-                    _ => return Err((pos, format!("Only files can have a #source"))),
+                    _ => {
+                        return Err(ParseError::new(
+                            "Only files can have a #source".into(),
+                            whole,
+                            span,
+                            None,
+                        ))
+                    }
                 }
                 props.source = Some(source)
             }
@@ -114,7 +163,12 @@ fn schema<'a>(
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err((pos, format!("Files cannot have child items")));
+                    return Err(ParseError::new(
+                        "Files cannot have child items".into(),
+                        whole,
+                        span,
+                        None,
+                    ));
                 }
                 let sub_item_type = match (link, is_directory) {
                     (Some(target), is_directory) => ItemType::Symlink {
@@ -125,15 +179,12 @@ fn schema<'a>(
                     (_, true) => ItemType::Directory,
                 };
                 let (pattern, schema) =
-                    schema(whole, pos, children, sub_item_type).map_err(|(err_pos, err)| {
-                        (
-                            pos,
-                            format!(
-                                "Error within \"{}\" on line {}\n{}",
-                                binding,
-                                find_line_number(err_pos, whole),
-                                err
-                            ),
+                    schema(whole, span, children, sub_item_type).map_err(|e| {
+                        ParseError::new(
+                            format!("Problem within \"{}\"", binding),
+                            whole,
+                            span,
+                            Some(Box::new(e)),
                         )
                     })?;
                 let criteria = match binding {
@@ -153,7 +204,12 @@ fn schema<'a>(
                 children,
             } => {
                 if let ItemType::File = item_type {
-                    return Err((pos, format!("Files cannot have child items")));
+                    return Err(ParseError::new(
+                        format!("Files cannot have child items"),
+                        whole,
+                        span,
+                        None,
+                    ));
                 }
                 let sub_item_type = match (link, is_directory) {
                     (Some(target), is_directory) => ItemType::Symlink {
@@ -163,15 +219,34 @@ fn schema<'a>(
                     (_, false) => ItemType::File,
                     (_, true) => ItemType::Directory,
                 };
-                let (pattern, schema) = schema(whole, pos, children, sub_item_type)?;
+                let (pattern, schema) =
+                    schema(whole, span, children, sub_item_type).map_err(|e| {
+                        ParseError::new(
+                            format!("Error within definition \"{}\"", name),
+                            whole,
+                            span,
+                            Some(Box::new(e)),
+                        )
+                    })?;
+
                 if pattern.is_some() {
-                    return Err((pos, format!("#def has own #match")));
+                    return Err(ParseError::new(
+                        format!("#def has own #match"),
+                        whole,
+                        span,
+                        None,
+                    ));
                 }
                 if let Subschema::Original(schema) = schema {
                     props.defs.insert(name, schema);
                 } else {
                     // TODO: This may be okay
-                    return Err((pos, format!("#def has own #use")));
+                    return Err(ParseError::new(
+                        format!("#def has own #use"),
+                        whole,
+                        span,
+                        None,
+                    ));
                 }
             }
         }
@@ -188,9 +263,11 @@ fn schema<'a>(
             if let Some(source) = props.source {
                 Schema::File(FileSchema::new(props.meta.build(), source))
             } else {
-                return Err((
-                    part,
+                return Err(ParseError::new(
                     format!("File has no #source. Should this have been a directory?"),
+                    whole,
+                    part,
+                    None,
                 ));
             }
         }
@@ -215,9 +292,11 @@ fn schema<'a>(
                 Some(Box::new(if let Some(source) = props.source {
                     Schema::File(FileSchema::new(props.meta.build(), source))
                 } else {
-                    return Err((
-                        part,
+                    return Err(ParseError::new(
                         format!("File has no #source. Should this have been a directory?"),
+                        whole,
+                        part,
+                        None,
                     ));
                 }))
             };
@@ -378,13 +457,16 @@ enum Operator<'a> {
 }
 
 /// Match and consume line endings and any following blank lines, or EOF
-fn end_of_lines(s: &str) -> Res<&str, &str> {
+fn end_of_lines(s: &str) -> Res<&str, ()> {
     // TODO: This allows trailing whitespace, disallow that?
     //value((), many0(preceded(space0, alt((line_ending, eof)))))(s)
-    alt((
-        recognize(many0(preceded(space0, line_ending))),
-        preceded(space0, eof),
-    ))(s)
+    map(
+        alt((
+            recognize(many0(preceded(space0, line_ending))),
+            preceded(space0, eof),
+        )),
+        |_| (),
+    )(s)
 }
 
 fn binding(s: &str) -> Res<&str, Binding<'_>> {
@@ -648,24 +730,24 @@ mod test {
     #[test]
     fn test_unterminated_line() {
         let s = "";
-        assert_eq!(end_of_lines(s), Ok(("", s)));
+        assert_eq!(end_of_lines(s), Ok(("", ())));
     }
     #[test]
     fn test_blank_line() {
         let s = "\n";
-        assert_eq!(end_of_lines(s), Ok(("", s)));
+        assert_eq!(end_of_lines(s), Ok(("", ())));
     }
 
     #[test]
     fn test_blankish_line() {
         let s = "    \n";
-        assert_eq!(end_of_lines(s), Ok(("", s)));
+        assert_eq!(end_of_lines(s), Ok(("", ())));
     }
 
     #[test]
     fn test_blankish_lines() {
         let s = "    \n\n    \n\n";
-        assert_eq!(end_of_lines(s), Ok(("", s)));
+        assert_eq!(end_of_lines(s), Ok(("", ())));
     }
 
     #[test]
@@ -852,7 +934,7 @@ mod test {
         let no_defs = || HashMap::default();
         let no_meta = || Meta::default();
         assert_eq!(
-            schema(s, s, ops.unwrap().1, ItemType::Directory).map_err(|e| format!("{}", e.1)),
+            schema(s, s, ops.unwrap().1, ItemType::Directory),
             Ok((
                 None,
                 Subschema::Original(Schema::Directory({
