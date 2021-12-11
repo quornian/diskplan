@@ -9,3 +9,6 @@ anyhow = "1.0"
 thiserror = "1.0"
 regex = "1"
 nom = "7"
+
+[dev-dependencies]
+indoc = "1.0"
