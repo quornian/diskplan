@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
 };
@@ -119,30 +120,54 @@ fn apply_directory(
     handle_entries(directory_schema.entries(), context, actions)
 }
 
+struct DirectoryMap {
+    listing: BTreeMap<OsString, bool>,
+}
+
+impl DirectoryMap {
+    pub fn from_directory(path: PathBuf) -> Result<DirectoryMap> {
+        let listing: Result<BTreeMap<_, _>, _> = match fs::read_dir(&path) {
+            Ok(read_dir) => read_dir
+                .map(|dir_ent_res| dir_ent_res.map(|dir_ent| (dir_ent.file_name(), false)))
+                .collect(),
+            // If we fail to read the directory we assume it doesn't exist yet
+            Err(_) => Ok(BTreeMap::default()),
+        };
+        Ok(DirectoryMap { listing: listing? })
+    }
+
+    /// Returns an error if already handled
+    pub fn about_to_handle(&mut self, key: OsString) -> Result<(), ()> {
+        match self.listing.insert(key, true) {
+            None | Some(false) => Ok(()),
+            Some(true) => Err(()),
+        }
+    }
+
+    pub fn unhandled(&mut self) -> impl Iterator<Item = (&OsString, &mut bool)> + '_ {
+        self.listing.iter_mut().filter(|(_, &mut handled)| !handled)
+    }
+}
+
 fn handle_entries(
     entries: &Vec<SchemaEntry>,
     context: &Context,
     actions: &mut Vec<Action>,
 ) -> Result<()> {
     // Handle entries within this directory
-    let mut entries_handled = (|| {
-        let listing: Result<HashMap<_, bool>, _> = fs::read_dir(&context.target)?
-            .map(|x| x.map(|ent| (ent.file_name(), false)))
-            .collect();
-        listing
-    })()
-    .unwrap_or_default();
+    let mut map = DirectoryMap::from_directory(context.root.join(&context.target))?;
 
     // Algorithm overview:
-    //  - Loop over schema entries, which are sorted by their criteria orders
-    //  - Match
+    //  - Loop over schema entries at this level (sorted fixed first)
+    //  - For a fixed name, apply to directory entry of this name, mark as handled
+    //  - For variable names, loop over directory and apply to all matching entries that were
+    //    not already handled, mark as handled
 
     for entry in entries {
         match &entry.criteria {
             Match::Fixed(name) => {
-                let was_handled = entries_handled.insert(name.into(), true);
-                match was_handled {
-                    None | Some(false) => {
+                match map.about_to_handle(name.into()) {
+                    Ok(()) => {
                         // New | Update
                         let child_path = context.target.join(name);
                         let merged;
@@ -161,7 +186,7 @@ fn handle_entries(
                         };
                         apply_tree(&context.child(child_path, schema), actions)?;
                     }
-                    Some(true) => {
+                    Err(()) => {
                         // Earlier rule handled this, but this is a Fixed match. Seems suspicious...
                         let child_path = context.target.join(name);
                         eprintln!(
@@ -194,9 +219,8 @@ fn handle_entries(
                             ));
                         }
                     }
-                    let was_handled = entries_handled.insert(name.clone().into(), true);
-                    match was_handled {
-                        None | Some(false) => {
+                    match map.about_to_handle(name.clone().into()) {
+                        Ok(()) => {
                             // New | Update
                             let child_path = context.target.join(name);
                             let merged;
@@ -215,24 +239,20 @@ fn handle_entries(
                             };
                             apply_tree(&context.child(child_path, schema), actions)?;
                         }
-                        Some(true) => (), // Earlier rule handled
+                        Err(()) => (), // Earlier rule handled
                     }
                 }
-                // Otherwise match the pattern against all entries, mark matches as handled,
+                // Otherwise match the pattern against all unhandled entries, mark matches as handled,
                 // and bind their names to the variable for the child schemas
                 else {
-                    for (name, handled) in &entries_handled {
+                    for (name, handled_ref) in map.unhandled() {
                         if let Some(name) = name.to_str() {
                             let matched = match pattern {
                                 None => true,
                                 Some(ref pattern) => pattern.is_match(name),
                             };
                             if matched {
-                                if !handled {
-                                    // New
-                                } else {
-                                    // Update
-                                }
+                                *handled_ref = true;
                                 let child_path = context.target.join(name);
                                 let merged;
                                 let schema = &match &entry.schema {
@@ -277,6 +297,8 @@ fn normalize(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use crate::schema::{expr::Identifier, meta::MetaBuilder};
 
     use super::*;

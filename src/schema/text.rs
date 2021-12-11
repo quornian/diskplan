@@ -164,7 +164,7 @@ fn schema<'a>(
             } => {
                 if let ItemType::File = item_type {
                     return Err(ParseError::new(
-                        "Files cannot have child items".into(),
+                        "Files cannot have child items. If this was meant to be a directory, add a /".into(),
                         whole,
                         span,
                         None,
@@ -260,16 +260,20 @@ fn schema<'a>(
             props.entries,
         )),
         ItemType::File => {
-            if let Some(source) = props.source {
-                Schema::File(FileSchema::new(props.meta.build(), source))
+            // Files must have a #source unless they are #use-ing a definition from elsewhere
+            let source = if let Some(source) = props.source {
+                source
+            } else if props.use_def.is_some() {
+                Expression::new(vec![])
             } else {
                 return Err(ParseError::new(
-                    format!("File has no #source. Should this have been a directory?"),
+                    format!("File has no #source (or #use). Should this have been a directory?"),
                     whole,
                     part,
                     None,
                 ));
-            }
+            };
+            Schema::File(FileSchema::new(props.meta.build(), source))
         }
         ItemType::Symlink {
             target,
@@ -510,7 +514,7 @@ fn octal(s: &str) -> Res<&str, u16> {
 }
 
 fn username(s: &str) -> Res<&str, &str> {
-    recognize(many1(alt((alphanumeric1, tag("-")))))(s)
+    recognize(many1(alt((alphanumeric1, tag("-"), tag("_")))))(s)
 }
 
 fn identifier(s: &str) -> Res<&str, Identifier> {
