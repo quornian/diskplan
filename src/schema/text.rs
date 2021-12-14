@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use nom::{
     branch::alt,
@@ -14,8 +14,7 @@ use nom::{
 use crate::schema::{
     criteria::Match,
     expr::{Expression, Identifier, Token},
-    meta::MetaBuilder,
-    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, Subschema,
+    Schema, Subschema,
 };
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
@@ -77,40 +76,31 @@ fn schema<'a>(
     ops: Vec<(&'a str, Operator<'a>)>,
     item_type: ItemType,
 ) -> std::result::Result<(Option<Expression>, Subschema), ParseError<'a>> {
-    let mut props = Properties::default();
+    let mut props = Properties::new(&item_type);
     for (span, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
-            Operator::Match(expr) => props.match_regex = Some(expr),
+            Operator::Match(expr) => props.match_expr(expr),
 
             // Operators that apply to this item
-            Operator::Use { name } => props.use_def = Some(name),
-            Operator::Mode(mode) => {
-                props.meta.mode(mode);
-            }
-            Operator::Owner(owner) => {
-                props.meta.owner(owner);
-            }
-            Operator::Group(group) => {
-                props.meta.group(group);
-            }
-            Operator::Source(source) => {
-                match item_type {
-                    ItemType::File => (),
-                    _ => {
-                        return Err(ParseError::new(
-                            "Only files can have a #source".into(),
-                            whole,
-                            span,
-                            None,
-                        ))
-                    }
+            Operator::Use { name } => props.use_definition(name),
+            Operator::Mode(mode) => props.mode(mode),
+            Operator::Owner(owner) => props.owner(owner),
+            Operator::Group(group) => props.group(group),
+            Operator::Source(source) => match item_type {
+                ItemType::File => props.source(source),
+                _ => {
+                    return Err(ParseError::new(
+                        "Only files can have a #source".into(),
+                        whole,
+                        span,
+                        None,
+                    ));
                 }
-                props.source = Some(source)
-            }
+            },
 
             // Operators that apply to child items
-            Operator::Let { name, expr } => drop(props.vars.insert(name, expr)),
+            Operator::Let { name, expr } => props.let_var(name, expr),
             Operator::Item {
                 binding,
                 is_directory,
@@ -150,7 +140,7 @@ fn schema<'a>(
                         binding,
                     },
                 };
-                props.entries.push(SchemaEntry { criteria, schema });
+                props.add_entry(criteria, schema)
             }
             Operator::Def {
                 name,
@@ -193,7 +183,7 @@ fn schema<'a>(
                     ));
                 }
                 if let Subschema::Original(schema) = schema {
-                    props.defs.insert(name, schema);
+                    props.define(name, schema)
                 } else {
                     // TODO: This may be okay
                     return Err(ParseError::new(
@@ -204,74 +194,11 @@ fn schema<'a>(
                     ));
                 }
             }
-        }
+        }.map_err(|s| ParseError::new(s, whole, span, None))?
     }
-
-    let schema = match &item_type {
-        ItemType::Directory => Schema::Directory(DirectorySchema::new(
-            props.vars,
-            props.defs,
-            props.meta.build(),
-            props.entries,
-        )),
-        ItemType::File => {
-            // Files must have a #source unless they are #use-ing a definition from elsewhere
-            let source = if let Some(source) = props.source {
-                source
-            } else if props.use_def.is_some() {
-                Expression::new(vec![])
-            } else {
-                return Err(ParseError::new(
-                    format!("File has no #source (or #use). Should this have been a directory?"),
-                    whole,
-                    part,
-                    None,
-                ));
-            };
-            Schema::File(FileSchema::new(props.meta.build(), source))
-        }
-        ItemType::Symlink {
-            target,
-            is_directory,
-        } => Schema::Symlink({
-            let schema = if props.vars.is_empty()
-                && props.defs.is_empty()
-                && props.meta.is_empty()
-                && props.entries.is_empty()
-            {
-                None
-            } else if *is_directory {
-                Some(Box::new(Schema::Directory(DirectorySchema::new(
-                    props.vars,
-                    props.defs,
-                    props.meta.build(),
-                    props.entries,
-                ))))
-            } else {
-                Some(Box::new(if let Some(source) = props.source {
-                    Schema::File(FileSchema::new(props.meta.build(), source))
-                } else {
-                    return Err(ParseError::new(
-                        format!("File has no #source. Should this have been a directory?"),
-                        whole,
-                        part,
-                        None,
-                    ));
-                }))
-            };
-            LinkSchema::new(target.clone(), schema)
-        }),
-    };
-    Ok((
-        props.match_regex,
-        match props.use_def {
-            Some(use_def) => Subschema::Referenced {
-                definition: use_def,
-                overrides: schema,
-            },
-            None => Subschema::Original(schema),
-        },
-    ))
+    props
+        .to_mapped_subschema()
+        .map_err(|s| ParseError::new(s, whole, part, None))
 }
 
 fn indentation(level: usize) -> impl Fn(&str) -> Res<&str, &str> {

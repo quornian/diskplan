@@ -1,8 +1,24 @@
-use std::vec;
+use std::{collections::HashMap, vec};
 
-use crate::schema::meta::Meta;
+use indoc::indoc;
+use nom::{
+    branch::alt,
+    character::complete::line_ending,
+    combinator::eof,
+    multi::many0,
+    sequence::{preceded, terminated},
+};
 
-use super::*;
+use crate::schema::{
+    criteria::Match,
+    expr::{Expression, Identifier, Token},
+    meta::Meta,
+    text::{
+        def_header, end_of_lines, indentation, operator, parse_schema, schema, Binding, ItemType,
+        Operator,
+    },
+    DirectorySchema, FileSchema, Schema, SchemaEntry, Subschema,
+};
 
 #[test]
 fn test_invalid_space() {
@@ -11,21 +27,27 @@ fn test_invalid_space() {
 }
 #[test]
 fn test_invalid_child() {
-    assert!(parse_schema(concat!(
-        "okay_entry\n", //
-        "    #source /tmp\n",
+    assert!(parse_schema(indoc!(
+        "
+        okay_entry
+            #source /tmp
+        "
     ))
     .is_ok());
-    assert!(parse_schema(concat!(
-        "okay_entry/\n", //
-        "    child\n",
-        "        #source /tmp\n",
+    assert!(parse_schema(indoc!(
+        "
+        okay_entry/
+            child
+                #source /tmp
+        "
     ))
     .is_ok());
-    assert!(parse_schema(concat!(
-        "okay_entry\n", //
-        "    child\n",
-        "        #source /tmp\n",
+    assert!(parse_schema(indoc!(
+        "
+        okay_entry
+            child
+                #source /tmp
+        "
     ))
     .is_err());
 }
@@ -207,12 +229,24 @@ fn test_single_line_mode_trailing() {
 
 #[test]
 fn test_multiline_meta_ops() {
-    let s = "#mode 777\n\
-                 #owner usr-1\n\
-                 #group grpX";
-    let t = "#owner usr-1\n\
-                 #group grpX";
-    let u = "#group grpX";
+    let s = indoc!(
+        "
+        #mode 777
+        #owner usr-1
+        #group grpX
+        "
+    );
+    let t = indoc!(
+        "
+        #owner usr-1
+        #group grpX
+        "
+    );
+    let u = indoc!(
+        "
+        #group grpX
+        "
+    );
     assert_eq!(operator(0)(s), Ok((t, (&s[0..10], Operator::Mode(0o777)))));
     assert_eq!(
         operator(0)(t),
@@ -317,12 +351,14 @@ fn test_def_with_block() {
 
 #[test]
 fn test_usage() {
-    let s = concat!(
-        "#def defined/\n",
-        "    file\n",
-        "        #source $emptyfile\n",
-        "usage/\n",
-        "    #use defined\n"
+    let s = indoc!(
+        "
+        #def defined/
+            file
+                #source $emptyfile
+        usage/
+            #use defined
+        "
     );
     // Some important positions
     let def_pos = 0;
