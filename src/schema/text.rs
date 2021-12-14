@@ -20,51 +20,11 @@ use crate::schema::{
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
-#[derive(Debug, PartialEq)]
-pub struct ParseError<'a> {
-    error: String,
-    text: &'a str,
-    span: &'a str,
-    next: Option<Box<ParseError<'a>>>,
-}
+mod properties;
+use properties::Properties;
 
-impl Display for ParseError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let lineno = find_line_number(self.span, self.text);
-        let line = self.text.lines().nth(lineno - 1).unwrap_or("<EOF>");
-        let column = self.span.as_ptr() as usize - line.as_ptr() as usize;
-        write!(f, "Error: {}\n", self.error)?;
-        write!(f, "     |\n")?;
-        write!(f, "{:4} | {}\n", lineno, line)?;
-        if column == 0 {
-            write!(f, "     |\n")?;
-        } else {
-            write!(f, "     | {0:1$}^\n", "", column)?;
-        }
-        if let Some(next) = &self.next {
-            write!(f, "{}", next)?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for ParseError<'_> {}
-
-impl<'a> ParseError<'a> {
-    pub fn new(
-        error: String,
-        text: &'a str,
-        span: &'a str,
-        next: Option<Box<ParseError<'a>>>,
-    ) -> ParseError<'a> {
-        ParseError {
-            error,
-            text,
-            span,
-            next,
-        }
-    }
-}
+mod error;
+pub use error::ParseError;
 
 pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
     // Parse and process entire schema and handle any errors that arise
@@ -109,11 +69,6 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
         )),
         Subschema::Original(schema) => Ok(schema),
     }
-}
-
-fn find_line_number(pos: &str, whole: &str) -> usize {
-    let pos = pos.as_ptr() as usize - whole.as_ptr() as usize;
-    whole[..pos].chars().filter(|&c| c == '\n').count() + 1
 }
 
 fn schema<'a>(
@@ -400,21 +355,6 @@ enum ItemType {
         target: Expression,
         is_directory: bool,
     },
-}
-
-#[derive(Default)]
-struct Properties {
-    match_regex: Option<Expression>,
-    vars: HashMap<Identifier, Expression>,
-    defs: HashMap<Identifier, Schema>,
-    meta: MetaBuilder,
-    // Directory only
-    entries: Vec<SchemaEntry>,
-    // File only
-    source: Option<Expression>,
-
-    // Set if this schema inherits a definition from elsewhere
-    use_def: Option<Identifier>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
