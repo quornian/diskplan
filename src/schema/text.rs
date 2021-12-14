@@ -466,7 +466,7 @@ fn end_of_lines(s: &str) -> Res<&str, ()> {
     //value((), many0(preceded(space0, alt((line_ending, eof)))))(s)
     map(
         alt((
-            recognize(many0(preceded(space0, line_ending))),
+            recognize(many1(preceded(space0, line_ending))),
             preceded(space0, eof),
         )),
         |_| (),

@@ -119,21 +119,11 @@ fn test_def_op_no_children() {
         ))
     );
     let s = "#def something/-";
-    assert_eq!(
-        operator(0)(s),
-        Ok((
-            "-",
-            (
-                s.strip_suffix("-").unwrap(),
-                Operator::Def {
-                    name: Identifier::new("something"),
-                    is_directory: true,
-                    link: None,
-                    children: vec![],
-                }
-            )
-        ))
-    );
+    assert!(operator(0)(s).is_err());
+    let s = "#def something/->";
+    assert!(operator(0)(s).is_err());
+    let s = "#def something/->x";
+    assert!(operator(0)(s).is_ok());
     let s = "#def something -> /somewhere/else";
     assert_eq!(
         operator(0)(s),
@@ -203,6 +193,16 @@ fn test_blankish_lines() {
 fn test_single_line_mode_op() {
     let s = "#mode 777";
     assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
+}
+
+#[test]
+fn test_single_line_mode_trailing() {
+    assert!(operator(0)("#mode 777#owner x").is_err());
+    assert!(operator(0)("#mode 777-").is_err());
+    let s = "#mode 777 ";
+    assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
+    assert!(operator(0)("#mode 777 #owner x").is_err());
+    assert!(operator(0)("#mode 777\n#owner x").is_ok());
 }
 
 #[test]

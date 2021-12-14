@@ -4,7 +4,7 @@ use indoc::indoc;
 #[test]
 fn test_top_level_mode() {
     parse_schema(indoc! {"
-        #mode 0o755
+        #mode 755
     "})
     .unwrap();
 }
