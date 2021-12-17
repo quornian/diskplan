@@ -4,10 +4,10 @@ use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
-    combinator::{all_consuming, consumed, eof, map, opt, recognize},
+    combinator::{all_consuming, consumed, eof, map, opt, recognize, value},
     error::{context, VerboseError, VerboseErrorKind},
     multi::{count, many0, many1},
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, tuple},
     IResult, Parser,
 };
 
@@ -207,33 +207,27 @@ fn indentation(level: usize) -> impl Fn(&str) -> Res<&str, &str> {
 
 fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
     // This is really just to make the op definitions tidier
-    fn op<'a, O, P>(
-        level: usize,
-        op: &'static str,
-        second: P,
-    ) -> impl FnMut(&'a str) -> Res<&'a str, O>
+    fn op<'a, O, P>(op: &'static str, second: P) -> impl FnMut(&'a str) -> Res<&'a str, O>
     where
         P: Parser<&'a str, O, VerboseError<&'a str>>,
     {
-        context(
-            "op",
-            preceded(tuple((indentation(level), tag(op), space1)), second),
-        )
+        context("op", preceded(tuple((tag(op), space1)), second))
     }
 
     move |s: &str| {
         let sep = |ch, second| preceded(delimited(space0, char(ch), space0), second);
 
-        let let_op = tuple((op(level, "#let", identifier), sep('=', expression)));
-        let use_op = op(level, "#use", identifier);
-        let match_op = op(level, "#match", expression);
-        let mode_op = op(level, "#mode", octal);
-        let owner_op = op(level, "#owner", username);
-        let group_op = op(level, "#group", username);
-        let source_op = op(level, "#source", expression);
+        let let_op = tuple((op("let", identifier), sep('=', expression)));
+        let use_op = op("use", identifier);
+        let match_op = op("match", expression);
+        let mode_op = op("mode", octal);
+        let owner_op = op("owner", username);
+        let group_op = op("group", username);
+        let source_op = op("source", expression);
 
         consumed(alt((
-            terminated(
+            delimited(
+                tuple((indentation(level), char('#'))),
                 alt((
                     map(let_op, |(name, expr)| Operator::Let { name, expr }),
                     map(use_op, |name| Operator::Use { name }),
@@ -249,7 +243,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
                 // $binding/ -> link
                 //     children...
                 tuple((
-                    terminated(preceded(indentation(level), item_header), end_of_lines),
+                    delimited(indentation(level), item_header, end_of_lines),
                     many0(operator(level + 1)),
                 )),
                 |((binding, is_directory, link), children)| Operator::Item {
@@ -261,7 +255,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
             ),
             map(
                 tuple((
-                    terminated(preceded(indentation(level), def_header), end_of_lines),
+                    delimited(indentation(level), def_header, end_of_lines),
                     many0(operator(level + 1)),
                 )),
                 |((name, is_directory, link), children)| Operator::Def {
@@ -328,16 +322,14 @@ enum Operator<'a> {
 }
 
 /// Match and consume line endings and any following blank lines, or EOF
-fn end_of_lines(s: &str) -> Res<&str, ()> {
-    // TODO: This allows trailing whitespace, disallow that?
-    //value((), many0(preceded(space0, alt((line_ending, eof)))))(s)
-    map(
-        alt((
-            recognize(many1(preceded(space0, line_ending))),
-            preceded(space0, eof),
-        )),
-        |_| (),
-    )(s)
+fn end_of_lines(s: &str) -> Res<&str, &str> {
+    fn blank_line(s: &str) -> Res<&str, ()> {
+        value(
+            (),
+            alt((tuple((space0, line_ending)), tuple((space1, eof)))),
+        )(s)
+    }
+    recognize(tuple((alt((line_ending, eof)), many0(blank_line))))(s)
 }
 
 fn binding(s: &str) -> Res<&str, Binding<'_>> {

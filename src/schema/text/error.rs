@@ -10,7 +10,7 @@ pub struct ParseError<'a> {
 
 impl Display for ParseError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let lineno = find_line_number(self.span, self.text);
+        let lineno = self.line_number();
         let line = self.text.lines().nth(lineno - 1).unwrap_or("<EOF>");
         let column = self.span.as_ptr() as usize - line.as_ptr() as usize;
         write!(f, "Error: {}\n", self.error)?;
@@ -44,9 +44,36 @@ impl<'a> ParseError<'a> {
             next,
         }
     }
+
+    pub fn line_number(&self) -> usize {
+        let pos = self.span.as_ptr() as usize - self.text.as_ptr() as usize;
+        self.text[..pos].chars().filter(|&c| c == '\n').count() + 1
+    }
 }
 
-fn find_line_number(pos: &str, whole: &str) -> usize {
-    let pos = pos.as_ptr() as usize - whole.as_ptr() as usize;
-    whole[..pos].chars().filter(|&c| c == '\n').count() + 1
+impl<'a, 'b> IntoIterator for &'b ParseError<'a> {
+    type IntoIter = ParseErrorIter<'a, 'b>;
+    type Item = &'b ParseError<'a>;
+
+    fn into_iter(self)->Self::IntoIter {
+        ParseErrorIter {
+            err: Some(self)
+        }
+    }
+}
+
+pub struct ParseErrorIter<'a, 'b> {
+    err: Option<&'b ParseError<'a>>,
+}
+
+impl<'a, 'b> Iterator for ParseErrorIter<'a, 'b> {
+    type Item = &'b ParseError<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur = self.err;
+        if let Some(err) = cur {
+            self.err = err.next.as_deref();
+        }
+        cur
+    }
 }

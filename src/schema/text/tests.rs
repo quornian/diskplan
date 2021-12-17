@@ -3,8 +3,8 @@ use std::{collections::HashMap, vec};
 use indoc::indoc;
 use nom::{
     branch::alt,
-    character::complete::line_ending,
-    combinator::eof,
+    character::complete::{alphanumeric1, line_ending},
+    combinator::{eof, recognize},
     multi::many0,
     sequence::{preceded, terminated},
 };
@@ -25,23 +25,65 @@ fn test_invalid_space() {
     assert!(parse_schema("okay_entry/").is_ok());
     assert!(parse_schema("invalid entry/").is_err());
 }
+
+#[test]
+fn test_line_endings() {
+    let text = "line1\n\nline3\n";
+    let (rem, ws) = preceded(alphanumeric1, end_of_lines)(text).unwrap();
+    assert_eq!(ws, "\n\n");
+    let (rem, ws) = preceded(alphanumeric1, end_of_lines)(rem).unwrap();
+    assert_eq!(ws, "\n");
+    assert_eq!(rem, "");
+}
+
+/// Operators should span a number of whole lines:
+/// the actual operator, any children, and any subsequent blank lines
+#[test]
+fn test_operator_span() {
+    // Each line is 10 characters including \n to make the indexing easier
+    let text = "\
+          a23456789\
+        \nb23456789\
+        \n         \
+        \nc23456789\
+        \n";
+    let (rem, op) = recognize(operator(0))(text).unwrap();
+    assert_eq!(op, &text[0..10]); // 1st line only
+    assert_eq!(rem, &text[10..]);
+    let (rem, op) = recognize(operator(0))(rem).unwrap();
+    assert_eq!(op, &text[10..30]); // 2nd line and 3rd (blank) line
+    assert_eq!(rem, &text[30..]);
+    let (rem, op) = recognize(operator(0))(rem).unwrap();
+    assert_eq!(op, &text[30..40]); // Last line
+    assert_eq!(rem, "");
+
+    let text = "\
+          a2345678/\
+        \n    b6789\
+        \nc23456789\
+        \n";
+    let (rem, op) = recognize(operator(0))(text).unwrap();
+    assert_eq!(op, &text[0..20]); // 1st and 2nd lines
+    assert_eq!(rem, &text[20..]);
+}
+
 #[test]
 fn test_invalid_child() {
-    assert!(parse_schema(indoc!(
+    parse_schema(indoc!(
         "
         okay_entry
             #source /tmp
         "
     ))
-    .is_ok());
-    assert!(parse_schema(indoc!(
+    .unwrap();
+    parse_schema(indoc!(
         "
         okay_entry/
             child
                 #source /tmp
         "
     ))
-    .is_ok());
+    .unwrap();
     assert!(parse_schema(indoc!(
         "
         okay_entry
@@ -188,27 +230,20 @@ fn test_def_op_with_children() {
     );
 }
 
+/// Line ending may be a newline or the EOF
 #[test]
-fn test_unterminated_line() {
-    let s = "";
-    assert_eq!(end_of_lines(s), Ok(("", ())));
-}
-#[test]
-fn test_blank_line() {
-    let s = "\n";
-    assert_eq!(end_of_lines(s), Ok(("", ())));
+fn test_line_ending() {
+    assert_eq!(end_of_lines(""), Ok(("", "")));
+    assert_eq!(end_of_lines("\n"), Ok(("", "\n")));
 }
 
+/// Trailing whitespace is only allowed on otherwise blank lines
 #[test]
-fn test_blankish_line() {
-    let s = "    \n";
-    assert_eq!(end_of_lines(s), Ok(("", ())));
-}
-
-#[test]
-fn test_blankish_lines() {
+fn test_no_trailing_whitespace() {
+    let s = "\n    \n\n    \n\n";
+    assert!(matches!(end_of_lines(s), Ok(_)));
     let s = "    \n\n    \n\n";
-    assert_eq!(end_of_lines(s), Ok(("", ())));
+    assert!(matches!(end_of_lines(s), Err(_)));
 }
 
 #[test]
@@ -221,10 +256,19 @@ fn test_single_line_mode_op() {
 fn test_single_line_mode_trailing() {
     assert!(operator(0)("#mode 777#owner x").is_err());
     assert!(operator(0)("#mode 777-").is_err());
-    let s = "#mode 777 ";
-    assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
+    assert!(operator(0)("#mode 777").is_ok());
+    assert!(operator(0)("#mode 777 ").is_err());
     assert!(operator(0)("#mode 777 #owner x").is_err());
     assert!(operator(0)("#mode 777\n#owner x").is_ok());
+}
+
+#[test]
+fn test_trailing_whitespace() {
+    parse_schema("").unwrap();
+    assert!(parse_schema("dir/    \n").is_err());
+    parse_schema("dir/\n").unwrap();
+    parse_schema("dir/\n    \n").unwrap();
+    parse_schema("dir/\n    ").unwrap();
 }
 
 #[test]
@@ -310,9 +354,13 @@ fn test_def_with_newline() {
 
 #[test]
 fn test_def_with_block() {
-    let s = "#def defined/\
-               \n    file\
-               \n    dir/";
+    let s = indoc!(
+        "
+        #def defined/
+            file
+            dir/
+        "
+    );
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -459,4 +507,28 @@ fn test_usage() {
             }),)
         ))
     );
+}
+
+#[test]
+fn test_duplicate() {
+    let schema = indoc!(
+        "
+        directory/
+            #owner admin
+
+            subdirectory/
+                #owner admin
+                #mode 777
+                #owner admin
+        "
+    );
+    let pos = schema.rfind("#owner").unwrap();
+    parse_schema(&schema[..pos]).unwrap();
+
+    let err = match parse_schema(schema) {
+        Err(e) => e,
+        ok => panic!("Unexpected: {:?}", ok),
+    };
+    let e = err.into_iter().last().unwrap();
+    assert_eq!(e.line_number(), 7);
 }
