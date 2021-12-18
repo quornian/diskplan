@@ -35,6 +35,27 @@ fn test_line_endings() {
     assert_eq!(ws, "\n");
     assert_eq!(rem, "");
 }
+#[test]
+fn test_extraneous_whitespace() {
+    // Baseline
+    let text = "dir/";
+    let schema = parse_schema(text).unwrap();
+    assert!(
+        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+    );
+    // Trailing whitespace
+    let text = "dir/\n\n";
+    let schema = parse_schema(text).unwrap();
+    assert!(
+        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+    );
+    // Preceding whitespace
+    let text = "\n\ndir/";
+    let schema = parse_schema(text).unwrap();
+    assert!(
+        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+    );
+}
 
 /// Operators should span a number of whole lines:
 /// the actual operator, any children, and any subsequent blank lines

@@ -27,25 +27,28 @@ pub use error::ParseError;
 
 pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
     // Parse and process entire schema and handle any errors that arise
-    let (_, ops) = all_consuming(many0(operator(0)))(&text).map_err(|e| {
-        let e = match e {
-            nom::Err::Error(e) | nom::Err::Failure(e) => e,
-            nom::Err::Incomplete(_) => unreachable!(),
-        };
-        let mut error = None;
-        for (r, e) in e.errors.iter().rev() {
-            error = Some(ParseError::new(
-                match e {
-                    VerboseErrorKind::Nom(p) => format!("Invalid token while looking for: {:?}", p),
-                    _ => format!("Error parsing {:?}", e),
-                },
-                text,
-                r,
-                error.map(Box::new),
-            ));
-        }
-        error.unwrap()
-    })?;
+    let (_, ops) =
+        all_consuming(preceded(many0(blank_line), many0(operator(0))))(&text).map_err(|e| {
+            let e = match e {
+                nom::Err::Error(e) | nom::Err::Failure(e) => e,
+                nom::Err::Incomplete(_) => unreachable!(),
+            };
+            let mut error = None;
+            for (r, e) in e.errors.iter().rev() {
+                error = Some(ParseError::new(
+                    match e {
+                        VerboseErrorKind::Nom(p) => {
+                            format!("Invalid token while looking for: {:?}", p)
+                        }
+                        _ => format!("Error parsing {:?}", e),
+                    },
+                    text,
+                    r,
+                    error.map(Box::new),
+                ));
+            }
+            error.unwrap()
+        })?;
     let (match_regex, subschema) = schema(text, text, ops, ItemType::Directory)?;
     if let Some(_) = match_regex {
         return Err(ParseError::new(
@@ -321,14 +324,12 @@ enum Operator<'a> {
     Source(Expression),
 }
 
+fn blank_line(s: &str) -> Res<&str, &str> {
+    recognize(alt((tuple((space0, line_ending)), tuple((space1, eof)))))(s)
+}
+
 /// Match and consume line endings and any following blank lines, or EOF
 fn end_of_lines(s: &str) -> Res<&str, &str> {
-    fn blank_line(s: &str) -> Res<&str, ()> {
-        value(
-            (),
-            alt((tuple((space0, line_ending)), tuple((space1, eof)))),
-        )(s)
-    }
     recognize(tuple((alt((line_ending, eof)), many0(blank_line))))(s)
 }
 
