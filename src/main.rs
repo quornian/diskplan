@@ -4,8 +4,7 @@ use diskplan::{
     apply::{gather_actions, Action},
     context::Context,
     install,
-    schema::expr::{Expression, Identifier, Token},
-    schema::{text::parse_schema, Schema},
+    schema::{parse_schema, Expression, Identifier, Schema, Token},
 };
 use std::{fs::File, io::Read, path::Path};
 

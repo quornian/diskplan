@@ -1,4 +1,4 @@
-use diskplan::schema::text::parse_schema;
+use diskplan::schema::parse_schema;
 use indoc::indoc;
 
 #[test]

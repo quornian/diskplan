@@ -1,16 +1,17 @@
 use anyhow::{anyhow, Result};
-use expr::Expression;
-use meta::Meta;
 use std::collections::HashMap;
 
-use self::criteria::Match;
-use self::expr::Identifier;
-use self::meta::MetaBuilder;
+mod criteria;
+pub use criteria::Match;
 
-pub mod criteria;
-pub mod expr;
-pub mod meta;
-pub mod text;
+mod expr;
+pub use expr::{Expression, Identifier, Token};
+
+mod meta;
+pub use meta::{Meta, MetaBuilder};
+
+mod text;
+pub use text::{parse_schema, ParseError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema {

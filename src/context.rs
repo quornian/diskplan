@@ -3,10 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::schema::{
-    expr::{Expression, Identifier, Token},
-    Schema,
-};
+use crate::schema::{Expression, Identifier, Schema, Token};
 use anyhow::{anyhow, Context as _, Result};
 
 // A note on lifetimes:
@@ -130,8 +127,7 @@ impl<'a> Context<'a> {
 #[cfg(test)]
 mod tests {
     use crate::schema::{
-        criteria::Match, expr::Identifier, meta::Meta, DirectorySchema, LinkSchema, SchemaEntry,
-        Subschema,
+        DirectorySchema, Identifier, LinkSchema, Match, Meta, SchemaEntry, Subschema,
     };
 
     use super::*;

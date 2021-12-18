@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use diskplan::{self, context::Context, schema::meta::MetaBuilder};
+use diskplan::{self, context::Context, schema::MetaBuilder};
 use indoc::indoc;
 
 #[test]
 fn simple_schema_actions() {
-    let schema = diskplan::schema::text::parse_schema(indoc!(
+    let schema = diskplan::schema::parse_schema(indoc!(
         "
         example_directory/
         example_file
@@ -46,7 +46,7 @@ fn simple_schema_actions() {
 
 #[test]
 fn simple_definition_schema_actions() {
-    let schema = diskplan::schema::text::parse_schema(indoc!(
+    let schema = diskplan::schema::parse_schema(indoc!(
         "
         #def defined_directory/
             #owner user-a
@@ -90,7 +90,7 @@ fn simple_definition_schema_actions() {
 
 #[test]
 fn variable_in_definition_schema_actions() {
-    let schema = diskplan::schema::text::parse_schema(indoc!(
+    let schema = diskplan::schema::parse_schema(indoc!(
         "
         #def dynamic_file
             #source ${level}.ext

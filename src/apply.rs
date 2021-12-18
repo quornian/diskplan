@@ -11,10 +11,8 @@ use regex::Regex;
 use crate::{
     context::Context,
     schema::{
-        criteria::Match,
-        expr::{Expression, Token},
-        meta::Meta,
-        DirectorySchema, FileSchema, LinkSchema, Merge, Schema, SchemaEntry, Subschema,
+        DirectorySchema, Expression, FileSchema, LinkSchema, Match, Merge, Meta, Schema,
+        SchemaEntry, Subschema, Token,
     },
 };
 
@@ -299,7 +297,7 @@ fn normalize(path: &Path) -> PathBuf {
 mod test {
     use std::collections::HashMap;
 
-    use crate::schema::{expr::Identifier, meta::MetaBuilder};
+    use crate::schema::{Identifier, MetaBuilder};
 
     use super::*;
 
