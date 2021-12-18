@@ -502,7 +502,7 @@ fn test_usage() {
                             no_meta(),
                             vec![SchemaEntry {
                                 criteria: Match::fixed("file"),
-                                schema: Subschema::Original(Schema::File(FileSchema::new(
+                                subschema: Subschema::Original(Schema::File(FileSchema::new(
                                     no_meta(),
                                     Expression::new(vec![Token::Variable(Identifier::new(
                                         "emptyfile",
@@ -514,7 +514,7 @@ fn test_usage() {
                 );
                 let entries = vec![SchemaEntry {
                     criteria: Match::fixed("usage"),
-                    schema: Subschema::Referenced {
+                    subschema: Subschema::Referenced {
                         definition: Identifier::new("defined"),
                         overrides: Schema::Directory(DirectorySchema::new(
                             no_vars(),

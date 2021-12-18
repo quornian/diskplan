@@ -59,7 +59,7 @@ impl Merge for Schema {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaEntry {
     pub criteria: Match,
-    pub schema: Subschema,
+    pub subschema: Subschema,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -263,7 +263,7 @@ pub fn print_tree(schema: &Schema) {
                 pad = "",
                 indent = indent
             );
-            match &entry.schema {
+            match &entry.subschema {
                 Subschema::Referenced {
                     definition: def,
                     overrides,

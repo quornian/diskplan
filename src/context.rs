@@ -146,7 +146,7 @@ mod tests {
             let meta = Meta::default();
             let entries = vec![SchemaEntry {
                 criteria: Match::fixed("link"),
-                schema: Subschema::Original(Schema::Symlink(LinkSchema::new(
+                subschema: Subschema::Original(Schema::Symlink(LinkSchema::new(
                     Expression::new(vec![Token::variable("@absvar"), Token::text("/sub")]),
                     Some(Box::new(Schema::Directory(DirectorySchema::default()))),
                 ))),

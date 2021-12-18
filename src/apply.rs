@@ -169,7 +169,7 @@ fn handle_entries(
                         // New | Update
                         let child_path = context.target.join(name);
                         let merged;
-                        let schema = match &entry.schema {
+                        let schema = match &entry.subschema {
                             Subschema::Original(schema) => schema,
                             Subschema::Referenced {
                                 definition: use_def,
@@ -222,7 +222,7 @@ fn handle_entries(
                             // New | Update
                             let child_path = context.target.join(name);
                             let merged;
-                            let schema = match &entry.schema {
+                            let schema = match &entry.subschema {
                                 Subschema::Original(ref schema) => schema,
                                 Subschema::Referenced {
                                     definition: use_def,
@@ -253,7 +253,7 @@ fn handle_entries(
                                 *handled_ref = true;
                                 let child_path = context.target.join(name);
                                 let merged;
-                                let schema = &match &entry.schema {
+                                let schema = &match &entry.subschema {
                                     Subschema::Original(schema) => schema,
                                     Subschema::Referenced {
                                         definition: use_def,
@@ -322,7 +322,7 @@ mod test {
                 meta,
                 vec![SchemaEntry {
                     criteria: Match::fixed("place"),
-                    schema: Subschema::Referenced {
+                    subschema: Subschema::Referenced {
                         definition: Identifier::new("thing"),
                         overrides: Schema::Directory(DirectorySchema::new(
                             HashMap::new(),

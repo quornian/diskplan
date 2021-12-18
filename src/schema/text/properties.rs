@@ -98,8 +98,11 @@ impl<'a, 'i> Properties<'a, 'i> {
         }
         Ok(())
     }
-    pub fn add_entry(&mut self, criteria: Match, schema: Subschema) -> Result<(), String> {
-        self.inner.entries.push(SchemaEntry { criteria, schema });
+    pub fn add_entry(&mut self, criteria: Match, subschema: Subschema) -> Result<(), String> {
+        self.inner.entries.push(SchemaEntry {
+            criteria,
+            subschema,
+        });
         Ok(())
     }
 
