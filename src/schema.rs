@@ -311,8 +311,8 @@ pub fn print_tree(schema: &Schema) {
             None => print!("(keep)"),
         }
         print!(" mode=");
-        match meta.permissions() {
-            Some(perms) => print!("{:o}", perms.mode()),
+        match meta.mode() {
+            Some(mode) => print!("{:o}", mode),
             None => print!("(keep)"),
         }
         println!();

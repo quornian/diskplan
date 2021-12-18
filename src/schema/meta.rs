@@ -1,107 +1,31 @@
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt::Debug,
-};
-
-#[derive(thiserror::Error, Debug)]
-pub enum MetaError {
-    #[error("Permissions string is malformed; expected, e.g. \"0o755\"; got: \"{0}\"")]
-    PermissionFormatError(String),
-
-    #[error("Error parsing integer")]
-    ParseIntError(#[from] std::num::ParseIntError),
-}
+use std::fmt::Debug;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Meta {
     owner: Option<String>,
     group: Option<String>,
-    permissions: Option<Permissions>,
-}
-
-#[derive(Debug, Default)]
-pub struct RawItemMeta {
-    pub owner: Option<String>,
-    pub group: Option<String>,
-    pub permissions: Option<RawPerms>,
+    mode: Option<u16>,
 }
 
 impl Meta {
-    pub fn owner(&self) -> &Option<String> {
-        &self.owner
+    pub fn owner(&self) -> Option<&str> {
+        self.owner.as_deref()
     }
-    pub fn group(&self) -> &Option<String> {
-        &self.group
+    pub fn group(&self) -> Option<&str> {
+        self.group.as_deref()
     }
-    pub fn permissions(&self) -> Option<Permissions> {
-        self.permissions
+    pub fn mode(&self) -> Option<u16> {
+        self.mode
     }
     pub fn is_empty(&self) -> bool {
         match self {
             Meta {
                 owner: None,
                 group: None,
-                permissions: None,
+                mode: None,
             } => true,
             _ => false,
         }
-    }
-}
-
-impl TryFrom<RawItemMeta> for Meta {
-    type Error = MetaError;
-    fn try_from(raw: RawItemMeta) -> Result<Self, MetaError> {
-        Ok(Meta {
-            owner: raw.owner,
-            group: raw.group,
-            permissions: match raw.permissions {
-                Some(p) => Some(p.try_into()?),
-                None => None,
-            },
-        })
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct Permissions(u16);
-
-#[derive(Debug)]
-pub struct RawPerms(pub String);
-
-impl TryFrom<RawPerms> for Permissions {
-    type Error = MetaError;
-
-    fn try_from(raw: RawPerms) -> Result<Self, MetaError> {
-        let value = match &raw.0.get(0..2) {
-            Some("0o") => match u16::from_str_radix(&raw.0[2..], 8) {
-                Ok(n) => n,
-                Err(_) => return Err(MetaError::PermissionFormatError(raw.0)),
-            },
-            _ => return Err(MetaError::PermissionFormatError(raw.0)),
-        };
-        if value & 0o777 == value {
-            Ok(Permissions(value))
-        } else {
-            Err(MetaError::PermissionFormatError(raw.0))
-        }
-    }
-}
-
-impl From<Permissions> for u16 {
-    fn from(perms: Permissions) -> Self {
-        perms.0
-    }
-}
-
-impl Debug for Permissions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Permissions(0o{:03o})", self.0)
-    }
-}
-
-impl Permissions {
-    pub fn mode(&self) -> u16 {
-        self.0
     }
 }
 
@@ -120,7 +44,7 @@ impl MetaBuilder {
         self
     }
     pub fn mode(&mut self, mode: u16) -> &mut Self {
-        self.meta.permissions = Some(Permissions(mode));
+        self.meta.mode = Some(mode);
         self
     }
     pub fn merge(&mut self, other: &Meta) -> &mut Self {
@@ -130,8 +54,8 @@ impl MetaBuilder {
         if let Some(group) = other.group() {
             self.group(group);
         }
-        if let Some(permissions) = other.permissions() {
-            self.mode(permissions.mode());
+        if let Some(mode) = other.mode() {
+            self.mode(mode);
         }
         self
     }
@@ -139,13 +63,6 @@ impl MetaBuilder {
         self.meta.clone()
     }
     pub fn is_empty(&self) -> bool {
-        match self.meta {
-            Meta {
-                owner: None,
-                group: None,
-                permissions: None,
-            } => true,
-            _ => false,
-        }
+        self.meta.is_empty()
     }
 }

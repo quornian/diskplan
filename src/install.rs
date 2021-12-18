@@ -39,7 +39,7 @@ fn add_meta_args(command: &mut Command, meta: &Meta, default_mode: u16) {
     if let Some(group) = meta.group() {
         command.args(["--group", group]);
     }
-    let mode = meta.permissions().map(|p| p.mode()).unwrap_or(default_mode);
+    let mode = meta.mode().unwrap_or(default_mode);
     command.args(["--mode", &format!("{:o}", mode)]);
 }
 
