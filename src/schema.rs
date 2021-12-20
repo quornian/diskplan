@@ -1,3 +1,135 @@
+//! Provides [Schema] and the means to constuct a schema from text form ([parse_schema]).
+//!
+//! The language of the text form uses significant whitespace (four spaces) for each level. It
+//! distinguishes between files and directories by the lack or presence of a `/`, and whether
+//! it's a symlink by the lack or presence of `->` (followed by its target path expression).
+//!
+//! | Syntax                | Description
+//! |-----------------------|---------------------------
+//! | _str_                 | A file
+//! | _str_`/`              | A directory
+//! | _str_ `->` _expr_     | A symlink to a file
+//! | _str_/ `->` _expr_    | A symlink to a directory
+//!
+//! Properties of a node in the schema can be set using one of the following tags:
+//!
+//! | Tag                       | Types     | Description
+//! |---------------------------|-----------|---------------------------
+//! |`#owner` _str_             | All       | Sets the owner of this file/directory/symlink target
+//! |`#group` _str_             | All       | Sets the group of this file, directory or symlink target
+//! |`#mode` _octal_            | All       | Sets the permissions of this file/directory/symlink target
+//! |`#source` _expr_           | File      | Copy content into this file from the path given by _expr_
+//! |`#let` _ident_ `=` _expr_  | Directory | Set a variable at this level to be used by deeper levels
+//! |`#def` _ident_             | Directory | Define a sub-schema that can be reused by `#use`
+//! |`#use` _ident_             | Directory | Reuse a sub-schema defined by `#def`
+//!
+//!
+//! # Simple Schema
+//!
+//! The top level of a schema describes a directory, whose [metadata][Meta] may be set by `#owner`, `#group` and `#mode` tags:
+//! ```
+//! use diskplan::schema::*;
+//! use indoc::indoc;
+//!
+//! let text = indoc!(
+//! "
+//!     #owner person
+//!     #group user
+//!     #mode 777
+//! "
+//! );
+//!
+//! let schema = parse_schema(text)?;
+//!
+//! let directory: DirectorySchema = match schema {
+//!     Schema::Directory(directory) => directory,
+//!     _ => panic!("Expected Schema::Directory")
+//! };
+//!
+//! assert_eq!(directory.meta().owner(), Some("person"));
+//! assert_eq!(directory.meta().group(), Some("user"));
+//! assert_eq!(directory.meta().mode(), Some(0o777));
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! A [DirectorySchema] may contain sub-directories, files...
+//! ```
+//! # use indoc::indoc;
+//! # use diskplan::schema::*;
+//! #
+//! // ...
+//! # let text = indoc!(
+//! "
+//!     subdirectory/
+//!         #owner admin
+//!         #mode 700
+//!
+//!     file_name
+//!         #source content/example_file
+//! "
+//! # );
+//! // ...
+//! # match parse_schema(text)? {
+//! #     Schema::Directory(directory) => {
+//! assert_eq!(directory.entries().count(), 2);
+//! #     }
+//! #     _ => panic!("Expected directory schema")
+//! # }
+//! #
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! ...and symlinks to directories and files (with its sub-schema applied to the target):
+//!
+//! ```
+//! # use indoc::indoc;
+//! # use diskplan::schema::*;
+//! #
+//! // ...
+//! # let text = indoc!(
+//! "
+//!     example_link/ -> /another/disk/example_target/
+//!         #owner admin
+//!         #mode 700
+//!
+//!         file_to_create_at_target_end
+//!             #source content/example_file
+//! "
+//! # );
+//! // ...
+//! # match parse_schema(text)? {
+//! #     Schema::Directory(directory) => {
+//! #
+//! let link_entry: &SchemaEntry = directory.entries().next().unwrap();
+//! assert!(matches!(
+//!     link_entry.criteria,
+//!     Match::Fixed(ref name) if name == &String::from("example_link")
+//! ));
+//! assert!(matches!(
+//!     link_entry.subschema,
+//!     Subschema::Original(Schema::Symlink(LinkSchema { .. }))
+//! ));
+//! #
+//! #     }
+//! #     _ => panic!("Expected directory schema")
+//! # }
+//! #
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! ## Pattern Matching
+//!
+//! **TODO**: Document `#match` and `$variable` named entries
+//!
+//! ## Variable Substitution
+//!
+//! **TODO**: Document `#let` and the use of variables in expressions
+//!
+//! ## Schema Reuse
+//!
+//! **TODO**: Document `#def` and `#use`
+//!
+
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
@@ -13,6 +145,7 @@ pub use meta::{Meta, MetaBuilder};
 mod text;
 pub use text::{parse_schema, ParseError};
 
+/// A node in an abstract directory hierarchy representing a file, directory or symlink
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema {
     Directory(DirectorySchema),
@@ -118,8 +251,8 @@ impl DirectorySchema {
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
-    pub fn entries(&self) -> &Vec<SchemaEntry> {
-        &self.entries
+    pub fn entries(&self) -> impl Iterator<Item = &SchemaEntry> {
+        self.entries.iter()
     }
 }
 

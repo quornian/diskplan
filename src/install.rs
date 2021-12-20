@@ -1,3 +1,5 @@
+//! Functions for applying physical changes to disk
+//!
 use std::{fs::read_link, os::unix::fs::symlink, path::Path, process::Command};
 
 use anyhow::{anyhow, Context as _, Result};

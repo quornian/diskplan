@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
-    combinator::{all_consuming, consumed, eof, map, opt, recognize, value},
+    combinator::{all_consuming, consumed, eof, map, opt, recognize},
     error::{context, VerboseError, VerboseErrorKind},
     multi::{count, many0, many1},
     sequence::{delimited, pair, preceded, tuple},

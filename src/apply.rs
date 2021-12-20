@@ -1,3 +1,5 @@
+//! Provides [`Action`] to describe ordered, actionable events to realize a [`schema`][crate::schema] on disk
+//!
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -16,6 +18,7 @@ use crate::{
     },
 };
 
+/// The process to perform to apply a schema node to the target location on the filesystem
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     CreateDirectory {
@@ -147,8 +150,8 @@ impl DirectoryMap {
     }
 }
 
-fn handle_entries(
-    entries: &Vec<SchemaEntry>,
+fn handle_entries<'i, I: Iterator<Item = &'i SchemaEntry>>(
+    entries: I,
     context: &Context,
     actions: &mut Vec<Action>,
 ) -> Result<()> {

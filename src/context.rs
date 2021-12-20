@@ -1,3 +1,5 @@
+//! Provides [`Context`] for pairing schemas with physical filesystem nodes on disk
+//!
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -12,6 +14,7 @@ use anyhow::{anyhow, Context as _, Result};
 //    (its values are evaluated and thus owned by the Stack itself)
 //  - The Stack has an optional parent Stack which must outlive it
 
+/// A location on the filesystem paired with the schema tree node being applied
 pub struct Context<'a> {
     pub schema: &'a Schema,
     pub root: &'a Path,
