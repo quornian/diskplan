@@ -1,11 +1,6 @@
 use anyhow::{anyhow, Context as _, Result};
 use clap::{App, Arg};
-use diskplan::{
-    apply::{gather_actions, Action},
-    context::Context,
-    install,
-    schema::{parse_schema, Identifier},
-};
+use diskplan::schema::{parse_schema, Identifier};
 use std::{fs::File, io::Read, path::Path};
 
 fn main() -> Result<()> {
@@ -64,43 +59,43 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("{}", e))
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
-    let mut context = Context::new(&schema, Path::new(target), Path::new("."));
+    // let mut context = Context::new(&schema, Path::new(target), Path::new("."));
 
-    if let Some(keyvalues) = matches.values_of("let") {
-        let keys = keyvalues.clone().into_iter().step_by(2);
-        let values = keyvalues.into_iter().skip(1).step_by(2);
-        for (key, value) in keys.zip(values) {
-            println!("{} = {}", key, value);
-            //FIXME: Parse this! and Identifier
-            assert!(!key.contains("$"));
-            assert!(!value.contains("$"));
-            let key = Identifier::new(key);
-            context.bind(key, value.into());
-        }
-    }
-    let context = context;
+    // if let Some(keyvalues) = matches.values_of("let") {
+    //     let keys = keyvalues.clone().into_iter().step_by(2);
+    //     let values = keyvalues.into_iter().skip(1).step_by(2);
+    //     for (key, value) in keys.zip(values) {
+    //         println!("{} = {}", key, value);
+    //         //FIXME: Parse this! and Identifier
+    //         assert!(!key.contains("$"));
+    //         assert!(!value.contains("$"));
+    //         let key = Identifier::new(key);
+    //         context.bind(key, value.into());
+    //     }
+    // }
+    // let context = context;
 
-    // println!("{:#?}", schema);
+    // // println!("{:#?}", schema);
 
-    //print_tree(&schema);
+    // //print_tree(&schema);
 
-    //println!("before");
-    let actions = gather_actions(&context)?;
-    //println!("after");
+    // //println!("before");
+    // let actions = gather_actions(&context)?;
+    // //println!("after");
 
-    for action in actions {
-        if apply {
-            println!("Performing action: {:?}", action);
-            match action {
-                Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
-                Action::CreateFile { path, source, meta } => {
-                    install::install_file(&path, &source, &meta)?
-                }
-                Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
-            }
-        } else {
-            println!("Would perform action: {:?}", action);
-        }
-    }
+    // for action in actions {
+    //     if apply {
+    //         println!("Performing action: {:?}", action);
+    //         match action {
+    //             Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
+    //             Action::CreateFile { path, source, meta } => {
+    //                 install::install_file(&path, &source, &meta)?
+    //             }
+    //             Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
+    //         }
+    //     } else {
+    //         println!("Would perform action: {:?}", action);
+    //     }
+    // }
     Ok(())
 }
