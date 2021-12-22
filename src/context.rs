@@ -1,12 +1,13 @@
 //! Provides [`Context`] for pairing schemas with physical filesystem nodes on disk
 //!
 use std::{
+    borrow::Cow,
     collections::HashMap,
     path::{Path, PathBuf},
 };
 
 use crate::schema::{Expression, Identifier, Schema, Token};
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Result};
 
 // A note on lifetimes:
 //  - The Context refers to a Schema, so the Schema must outlive the Context
@@ -15,17 +16,17 @@ use anyhow::{anyhow, Context as _, Result};
 //  - The Stack has an optional parent Stack which must outlive it
 
 /// A location on the filesystem paired with the schema tree node being applied
-pub struct Context<'a> {
-    pub schema: &'a Schema,
+pub struct Context<'t: 'a, 'a> {
+    pub schema: &'a Schema<'t>,
     pub root: &'a Path,
     pub target: PathBuf,
 
-    bound_vars: HashMap<Identifier, Expression>,
-    parent: Option<&'a Context<'a>>,
+    bound_vars: HashMap<Identifier<'t>, String>,
+    parent: Option<&'a Context<'t, 'a>>,
 }
 
-impl<'a> Context<'a> {
-    pub fn new(schema: &'a Schema, root: &'a Path, target: &'a Path) -> Context<'a> {
+impl<'t, 'a> Context<'t, 'a> {
+    pub fn new(schema: &'a Schema<'t>, root: &'a Path, target: &'a Path) -> Context<'t, 'a> {
         assert!(target.is_relative());
         Context {
             schema,
@@ -36,7 +37,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn child<'ch>(&'a self, target: PathBuf, schema: &'a Schema) -> Context<'ch>
+    pub fn child<'ch>(&'a self, target: PathBuf, schema: &'a Schema<'t>) -> Context<'t, 'ch>
     where
         'a: 'ch,
     {
@@ -49,20 +50,22 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn lookup(&self, var: &'a Identifier) -> Option<&Expression> {
-        self.bound_vars
-            .get(var)
-            .or_else(|| {
-                if let Schema::Directory(directory_schema) = self.schema {
-                    directory_schema.vars().get(var)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| self.parent.and_then(|parent| parent.lookup(var)))
+    pub fn lookup(&'a self, var: &Identifier<'t>) -> Result<Option<Cow<'a, str>>> {
+        if let Some(bound) = self.bound_vars.get(var) {
+            return Ok(Some(bound.into()));
+        }
+        if let Schema::Directory(directory_schema) = self.schema {
+            if let Some(expr) = directory_schema.vars().get(var) {
+                return self.evaluate(expr).map(Into::into).map(Some);
+            }
+        }
+        if let Some(parent) = self.parent {
+            return parent.lookup(var);
+        }
+        Ok(None)
     }
 
-    pub fn follow<'ch>(&'a self, var: &'a Identifier) -> Option<Context<'ch>>
+    pub fn follow<'ch>(&'a self, var: &Identifier<'t>) -> Option<Context<'t, 'ch>>
     where
         'a: 'ch,
     {
@@ -70,7 +73,7 @@ impl<'a> Context<'a> {
             .and_then(|far_schema| Some(self.child(self.target.clone(), far_schema)))
     }
 
-    pub fn follow_schema(&'a self, var: &Identifier) -> Option<&Schema> {
+    pub fn follow_schema(&self, var: &Identifier<'t>) -> Option<&Schema<'t>> {
         if let Schema::Directory(directory_schema) = self.schema {
             if let Some(child_schema) = directory_schema.defs().get(var) {
                 return Some(child_schema);
@@ -80,46 +83,38 @@ impl<'a> Context<'a> {
     }
 
     // FIXME: Parse and error after parsing refactor
-    pub fn bind(&mut self, var: Identifier, value: Expression) {
+    pub fn bind(&mut self, var: Identifier<'t>, value: String) {
         self.bound_vars.insert(var, value);
     }
 
-    pub fn evaluate(&self, expr: &Expression) -> Result<String> {
+    pub fn evaluate(&self, expr: &Expression<'t>) -> Result<String> {
         let mut buffer = String::new();
         for token in expr.tokens() {
             match token {
                 Token::Text(text) => buffer.push_str(text),
                 Token::Variable(var) => {
-                    let value = match var.value().as_ref() {
-                        "PATH" => String::from(self.target.to_string_lossy()),
-                        "PARENT" => String::from(
+                    match var.value().as_ref() {
+                        "PATH" => buffer.push_str(self.target.to_string_lossy().as_ref()),
+                        "PARENT" => buffer.push_str(
                             self.target
                                 .parent()
                                 .ok_or_else(|| anyhow!("Path has no parent"))?
-                                .to_string_lossy(),
+                                .to_string_lossy()
+                                .as_ref(),
                         ),
-                        "NAME" => String::from(
+                        "NAME" => buffer.push_str(
                             self.target
                                 .file_name()
                                 .ok_or_else(|| anyhow!("Path has no valid name"))?
-                                .to_string_lossy(),
+                                .to_string_lossy()
+                                .as_ref(),
                         ),
-                        _ => {
-                            let value = self
-                                .lookup(var)
-                                .ok_or_else(|| anyhow!("No such variable: {}", var.value()))?;
-
-                            self.evaluate(&value).with_context(|| {
-                                format!(
-                                    "Failed to evaluate value of {} in {} (from {})",
-                                    var.value(),
-                                    value,
-                                    expr,
-                                )
-                            })?
-                        }
+                        _ => buffer.push_str(
+                            self.lookup(var)?
+                                .ok_or_else(|| anyhow!("No such variable: {}", var.value()))?
+                                .as_ref(),
+                        ),
                     };
-                    buffer.push_str(&value);
                 }
             }
         }
@@ -140,7 +135,7 @@ mod tests {
         let schema = Schema::Directory({
             let vars = [(
                 Identifier::new("absvar"),
-                Expression::new(vec![Token::text("/tmp/abs")]),
+                Expression::new(vec![Token::Text("/tmp/abs")]),
             )]
             .iter()
             .cloned()
@@ -148,9 +143,12 @@ mod tests {
             let defs = HashMap::new();
             let meta = Meta::default();
             let entries = vec![SchemaEntry {
-                criteria: Match::fixed("link"),
+                criteria: Match::Fixed("link"),
                 subschema: Subschema::Original(Schema::Symlink(LinkSchema::new(
-                    Expression::new(vec![Token::variable("@absvar"), Token::text("/sub")]),
+                    Expression::new(vec![
+                        Token::Variable(Identifier::new("@absvar")),
+                        Token::Text("/sub"),
+                    ]),
                     Some(Box::new(Schema::Directory(DirectorySchema::default()))),
                 ))),
             }];
@@ -161,11 +159,11 @@ mod tests {
         let context = Context::new(&schema, root, target);
 
         assert_eq!(
-            context.lookup(&Identifier::new("absvar")),
-            Some(&Expression::new(vec![Token::text("/tmp/abs")]))
+            context.lookup(&Identifier::new("absvar")).unwrap(),
+            Some(Cow::from("/tmp/abs"))
         );
 
-        let expr = Expression::new(vec![Token::variable("absvar")]);
+        let expr = Expression::new(vec![Token::Variable(Identifier::new("absvar"))]);
         assert_eq!(context.evaluate(&expr).unwrap(), "/tmp/abs");
     }
 }

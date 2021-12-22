@@ -4,7 +4,7 @@ use diskplan::{
     apply::{gather_actions, Action},
     context::Context,
     install,
-    schema::{parse_schema, Expression, Identifier, Schema, Token},
+    schema::{parse_schema, Identifier},
 };
 use std::{fs::File, io::Read, path::Path};
 
@@ -52,13 +52,17 @@ fn main() -> Result<()> {
     let target = matches.value_of("target").unwrap();
     let apply = matches.is_present("apply");
 
-    let schema = (|| -> Result<Schema> {
+    let content = (|| -> Result<String> {
         let mut file = File::open(schema)?;
         let mut content = String::with_capacity(file.metadata()?.len() as usize);
         file.read_to_string(&mut content)?;
-        parse_schema(&content).map_err(|e| anyhow!("{}", e))
+        Ok(content)
     })()
     .with_context(|| format!("Failed to load schema from: {}", schema))?;
+
+    let schema = parse_schema(&content)
+        .map_err(|e| anyhow!("{}", e))
+        .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
     let mut context = Context::new(&schema, Path::new(target), Path::new("."));
 
@@ -71,8 +75,7 @@ fn main() -> Result<()> {
             assert!(!key.contains("$"));
             assert!(!value.contains("$"));
             let key = Identifier::new(key);
-            let expr = Expression::new(vec![Token::text(value)]);
-            context.bind(key, expr);
+            context.bind(key, value.into());
         }
     }
     let context = context;

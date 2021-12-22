@@ -126,7 +126,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("something"),
-                    expr: Expression::new(vec![Token::text("expr")])
+                    expr: Expression::new(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -140,7 +140,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("with_underscores"),
-                    expr: Expression::new(vec![Token::text("expr")])
+                    expr: Expression::new(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -154,7 +154,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("_with_underscores_"),
-                    expr: Expression::new(vec![Token::text("expr")])
+                    expr: Expression::new(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -219,7 +219,7 @@ fn test_def_op_no_children() {
                 Operator::Def {
                     name: Identifier::new("something"),
                     is_directory: false,
-                    link: Some(Expression::new(vec![Token::text("/somewhere/else")])),
+                    link: Some(Expression::new(vec![Token::Text("/somewhere/else")])),
                     children: vec![],
                 }
             )
@@ -240,9 +240,9 @@ fn test_def_op_with_children() {
                     name: Identifier::new("something"),
                     is_directory: false,
                     link: Some(Expression::new(vec![
-                        Token::text("/some"),
+                        Token::Text("/some"),
                         Token::Variable(Identifier::new("where")),
-                        Token::text("/else")
+                        Token::Text("/else")
                     ])),
                     children: vec![],
                 }
@@ -332,7 +332,7 @@ fn test_match_pattern() {
             "",
             (
                 s,
-                Operator::Match(Expression::new(vec![Token::text("[A-Z][A-Za-z]+")]))
+                Operator::Match(Expression::new(vec![Token::Text("[A-Z][A-Za-z]+")]))
             )
         ))
     )
@@ -347,7 +347,7 @@ fn test_source_pattern() {
             "",
             (
                 s,
-                Operator::Source(Expression::new(vec![Token::text("/a/file/path")]))
+                Operator::Source(Expression::new(vec![Token::Text("/a/file/path")]))
             )
         ))
     )
@@ -501,7 +501,7 @@ fn test_usage() {
                             no_defs(),
                             no_meta(),
                             vec![SchemaEntry {
-                                criteria: Match::fixed("file"),
+                                criteria: Match::Fixed("file"),
                                 subschema: Subschema::Original(Schema::File(FileSchema::new(
                                     no_meta(),
                                     Expression::new(vec![Token::Variable(Identifier::new(
@@ -513,7 +513,7 @@ fn test_usage() {
                     }),
                 );
                 let entries = vec![SchemaEntry {
-                    criteria: Match::fixed("usage"),
+                    criteria: Match::Fixed("usage"),
                     subschema: Subschema::Referenced {
                         definition: Identifier::new("defined"),
                         overrides: Schema::Directory(DirectorySchema::new(

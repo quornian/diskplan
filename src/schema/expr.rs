@@ -1,9 +1,9 @@
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Expression(Vec<Token>);
+pub struct Expression<'t>(Vec<Token<'t>>);
 
-impl Expression {
+impl Expression<'_> {
     pub fn new(tokens: Vec<Token>) -> Expression {
         Expression(tokens)
     }
@@ -13,7 +13,7 @@ impl Expression {
     }
 }
 
-impl Display for Expression {
+impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for token in &self.0 {
             write!(f, "{}", token)?
@@ -23,21 +23,12 @@ impl Display for Expression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
-    Text(String),
-    Variable(Identifier),
+pub enum Token<'t> {
+    Text(&'t str),
+    Variable(Identifier<'t>),
 }
 
-impl Token {
-    pub fn text<S: AsRef<str>>(s: S) -> Self {
-        Self::Text(s.as_ref().to_owned())
-    }
-    pub fn variable<S: AsRef<str>>(s: S) -> Self {
-        Self::Variable(Identifier(s.as_ref().to_owned()))
-    }
-}
-
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Text(s) | Token::Variable(Identifier(s)) => write!(f, "{}", s)?,
@@ -47,25 +38,19 @@ impl Display for Token {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier(String);
+pub struct Identifier<'t>(&'t str);
 
-impl Identifier {
-    pub fn new<S: AsRef<str>>(s: S) -> Self {
-        Identifier(s.as_ref().to_owned())
+impl<'t> Identifier<'t> {
+    pub fn new(s: &'t str) -> Self {
+        Identifier(s)
     }
 
-    pub fn value(&self) -> &String {
-        &self.0
-    }
-}
-
-impl From<&Identifier> for String {
-    fn from(i: &Identifier) -> Self {
-        i.0.clone()
+    pub fn value(&self) -> &'t str {
+        self.0
     }
 }
 
-impl Display for Identifier {
+impl Display for Identifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }

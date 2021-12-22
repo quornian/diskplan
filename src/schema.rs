@@ -147,10 +147,10 @@ pub use text::{parse_schema, ParseError};
 
 /// A node in an abstract directory hierarchy representing a file, directory or symlink
 #[derive(Debug, Clone, PartialEq)]
-pub enum Schema {
-    Directory(DirectorySchema),
-    File(FileSchema),
-    Symlink(LinkSchema),
+pub enum Schema<'t> {
+    Directory(DirectorySchema<'t>),
+    File(FileSchema<'t>),
+    Symlink(LinkSchema<'t>),
 }
 
 pub trait Merge
@@ -160,8 +160,8 @@ where
     fn merge(&self, other: &Self) -> Result<Self>;
 }
 
-impl Merge for Option<Box<Schema>> {
-    fn merge(&self, other: &Option<Box<Schema>>) -> Result<Option<Box<Schema>>> {
+impl<'t> Merge for Option<Box<Schema<'t>>> {
+    fn merge(&self, other: &Option<Box<Schema<'t>>>) -> Result<Option<Box<Schema<'t>>>> {
         match (self, other) {
             (_, None) => Ok(self.clone()),
             (None, _) => Ok(other.clone()),
@@ -170,8 +170,8 @@ impl Merge for Option<Box<Schema>> {
     }
 }
 
-impl Merge for Schema {
-    fn merge(&self, other: &Schema) -> Result<Schema> {
+impl<'t> Merge for Schema<'t> {
+    fn merge(&self, other: &Schema<'t>) -> Result<Schema<'t>> {
         match (self, other) {
             (Schema::Directory(schema_a), Schema::Directory(schema_b)) => {
                 Ok(Schema::Directory(schema_a.merge(schema_b)?))
@@ -190,21 +190,21 @@ impl Merge for Schema {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SchemaEntry {
-    pub criteria: Match,
-    pub subschema: Subschema,
+pub struct SchemaEntry<'t> {
+    pub criteria: Match<'t>,
+    pub subschema: Subschema<'t>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Subschema {
+pub enum Subschema<'t> {
     Referenced {
-        definition: Identifier,
-        overrides: Schema,
+        definition: Identifier<'t>,
+        overrides: Schema<'t>,
     },
-    Original(Schema),
+    Original(Schema<'t>),
 }
 
-impl PartialOrd for SchemaEntry {
+impl PartialOrd for SchemaEntry<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.criteria.partial_cmp(&other.criteria)
     }
@@ -212,27 +212,27 @@ impl PartialOrd for SchemaEntry {
 
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct DirectorySchema {
+pub struct DirectorySchema<'t> {
     /// Text replacement variables
-    vars: HashMap<Identifier, Expression>,
+    vars: HashMap<Identifier<'t>, Expression<'t>>,
 
     /// Definitions of sub-schemas
-    defs: HashMap<Identifier, Schema>,
+    defs: HashMap<Identifier<'t>, Schema<'t>>,
 
     /// Properties of this directory
-    meta: Meta,
+    meta: Meta<'t>,
 
     /// Disk entries to be created within this directory
-    entries: Vec<SchemaEntry>,
+    entries: Vec<SchemaEntry<'t>>,
 }
 
-impl DirectorySchema {
+impl<'t> DirectorySchema<'t> {
     pub fn new(
-        vars: HashMap<Identifier, Expression>,
-        defs: HashMap<Identifier, Schema>,
-        meta: Meta,
-        entries: Vec<SchemaEntry>,
-    ) -> DirectorySchema {
+        vars: HashMap<Identifier<'t>, Expression<'t>>,
+        defs: HashMap<Identifier<'t>, Schema<'t>>,
+        meta: Meta<'t>,
+        entries: Vec<SchemaEntry<'t>>,
+    ) -> Self {
         let mut entries = entries;
         entries.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         DirectorySchema {
@@ -245,10 +245,10 @@ impl DirectorySchema {
     pub fn vars(&self) -> &HashMap<Identifier, Expression> {
         &self.vars
     }
-    pub fn defs(&self) -> &HashMap<Identifier, Schema> {
+    pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, Schema> {
         &self.defs
     }
-    pub fn meta(&self) -> &Meta {
+    pub fn meta(&self) -> &Meta<'t> {
         &self.meta
     }
     pub fn entries(&self) -> impl Iterator<Item = &SchemaEntry> {
@@ -256,7 +256,7 @@ impl DirectorySchema {
     }
 }
 
-impl Merge for DirectorySchema {
+impl Merge for DirectorySchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
         let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
         vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -276,28 +276,28 @@ impl Merge for DirectorySchema {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FileSchema {
+pub struct FileSchema<'t> {
     /// Properties of this directory
-    meta: Meta,
+    meta: Meta<'t>,
 
     /// Path to the resource to be copied as file content
     // TODO: Make source enum: Enforce(...), Default(...) latter only creates if missing
-    source: Expression,
+    source: Expression<'t>,
 }
 
-impl FileSchema {
-    pub fn new(meta: Meta, source: Expression) -> FileSchema {
+impl<'t> FileSchema<'t> {
+    pub fn new(meta: Meta<'t>, source: Expression<'t>) -> FileSchema<'t> {
         FileSchema { meta, source }
     }
-    pub fn meta(&self) -> &Meta {
+    pub fn meta(&self) -> &Meta<'t> {
         &self.meta
     }
-    pub fn source(&self) -> &Expression {
+    pub fn source(&self) -> &Expression<'t> {
         &self.source
     }
 }
 
-impl Merge for FileSchema {
+impl Merge for FileSchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
         let meta = MetaBuilder::default()
             .merge(&self.meta)
@@ -319,30 +319,27 @@ impl Merge for FileSchema {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LinkSchema {
+pub struct LinkSchema<'t> {
     /// Symlink target
-    target: Expression,
+    target: Expression<'t>,
 
     /// What to ensure, if anything, should be found at the other end
-    far_schema: Option<Box<Schema>>,
+    far_schema: Option<Box<Schema<'t>>>,
 }
 
-impl LinkSchema {
-    pub fn new(target: Expression, far_schema: Option<Box<Schema>>) -> LinkSchema {
-        LinkSchema {
-            target,
-            far_schema: far_schema,
-        }
+impl<'t> LinkSchema<'t> {
+    pub fn new(target: Expression<'t>, far_schema: Option<Box<Schema<'t>>>) -> Self {
+        LinkSchema { target, far_schema }
     }
-    pub fn target(&self) -> &Expression {
+    pub fn target(&self) -> &Expression<'t> {
         &self.target
     }
-    pub fn far_schema(&self) -> Option<&Schema> {
+    pub fn far_schema(&self) -> Option<&Schema<'t>> {
         self.far_schema.as_deref()
     }
 }
 
-impl Merge for LinkSchema {
+impl Merge for LinkSchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
         let far_schema = self.far_schema.merge(&other.far_schema)?;
         let target = match (self.target.tokens().len(), other.target.tokens().len()) {
@@ -375,7 +372,7 @@ pub fn print_tree(schema: &Schema) {
                 "{pad:indent$}var {name} = {value}",
                 pad = "",
                 indent = indent,
-                name = String::from(name),
+                name = name,
                 value = value,
             );
         }
@@ -384,7 +381,7 @@ pub fn print_tree(schema: &Schema) {
                 "{pad:indent$}def {name}:",
                 pad = "",
                 indent = indent,
-                name = String::from(name),
+                name = name,
             );
             print_schema(def, indent + 4);
         }

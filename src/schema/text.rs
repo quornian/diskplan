@@ -73,12 +73,12 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
     }
 }
 
-fn schema<'a>(
-    whole: &'a str,
-    part: &'a str,
-    ops: Vec<(&'a str, Operator<'a>)>,
-    item_type: ItemType,
-) -> std::result::Result<(Option<Expression>, Subschema), ParseError<'a>> {
+fn schema<'t>(
+    whole: &'t str,
+    part: &'t str,
+    ops: Vec<(&'t str, Operator<'t>)>,
+    item_type: ItemType<'t>,
+) -> std::result::Result<(Option<Expression<'t>>, Subschema<'t>), ParseError<'t>> {
     let mut props = Properties::new(&item_type);
     for (span, op) in ops {
         match op {
@@ -136,7 +136,7 @@ fn schema<'a>(
                         )
                     })?;
                 let criteria = match binding {
-                    Binding::Static(s) => Match::fixed(s),
+                    Binding::Static(s) => Match::Fixed(s),
                     Binding::Dynamic(binding) => Match::Variable {
                         order: 0,
                         pattern,
@@ -272,19 +272,19 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
     }
 }
 
-enum ItemType {
+enum ItemType<'t> {
     Directory,
     File,
     Symlink {
-        target: Expression,
+        target: Expression<'t>,
         is_directory: bool,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Binding<'a> {
-    Static(&'a str),
-    Dynamic(Identifier),
+enum Binding<'t> {
+    Static(&'t str),
+    Dynamic(Identifier<'t>),
 }
 
 impl Display for Binding<'_> {
@@ -297,31 +297,31 @@ impl Display for Binding<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Operator<'a> {
+enum Operator<'t> {
     Item {
-        binding: Binding<'a>,
+        binding: Binding<'t>,
         is_directory: bool,
-        link: Option<Expression>,
-        children: Vec<(&'a str, Operator<'a>)>,
+        link: Option<Expression<'t>>,
+        children: Vec<(&'t str, Operator<'t>)>,
     },
     Let {
-        name: Identifier,
-        expr: Expression,
+        name: Identifier<'t>,
+        expr: Expression<'t>,
     },
     Def {
-        name: Identifier,
+        name: Identifier<'t>,
         is_directory: bool,
-        link: Option<Expression>,
-        children: Vec<(&'a str, Operator<'a>)>,
+        link: Option<Expression<'t>>,
+        children: Vec<(&'t str, Operator<'t>)>,
     },
     Use {
-        name: Identifier,
+        name: Identifier<'t>,
     },
-    Match(Expression),
+    Match(Expression<'t>),
     Mode(u16),
-    Owner(&'a str),
-    Group(&'a str),
-    Source(Expression),
+    Owner(&'t str),
+    Group(&'t str),
+    Source(Expression<'t>),
 }
 
 fn blank_line(s: &str) -> Res<&str, &str> {
@@ -396,7 +396,7 @@ fn expression(s: &str) -> Res<&str, Expression> {
 /// A sequence of characters that are not part of any variable
 ///
 fn non_variable(s: &str) -> Res<&str, Token> {
-    map(is_not("$\n"), Token::text)(s)
+    map(is_not("$\n"), Token::Text)(s)
 }
 
 /// A variable name, optionally braced, prefixed by a dollar sign, such as `${example}`

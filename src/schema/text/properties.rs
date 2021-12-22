@@ -9,32 +9,32 @@ use crate::schema::{
 
 use super::ItemType;
 
-pub struct Properties<'a, 'i> {
-    item_type: &'i ItemType,
-    match_expr: Option<Expression>,
-    inner: InnerProperties<'a>,
+pub struct Properties<'t, 'i> {
+    item_type: &'i ItemType<'t>,
+    match_expr: Option<Expression<'t>>,
+    inner: InnerProperties<'t>,
 
     // Set if this schema inherits a definition from elsewhere
-    use_def: Option<Identifier>,
+    use_def: Option<Identifier<'t>>,
 }
 
 #[derive(Default)]
-struct InnerProperties<'a> {
-    vars: HashMap<Identifier, Expression>,
-    defs: HashMap<Identifier, Schema>,
+struct InnerProperties<'t> {
+    vars: HashMap<Identifier<'t>, Expression<'t>>,
+    defs: HashMap<Identifier<'t>, Schema<'t>>,
 
-    owner: Option<&'a str>,
-    group: Option<&'a str>,
+    owner: Option<&'t str>,
+    group: Option<&'t str>,
     mode: Option<u16>,
 
     // Directory only
-    entries: Vec<SchemaEntry>,
+    entries: Vec<SchemaEntry<'t>>,
     // File only
-    source: Option<Expression>,
+    source: Option<Expression<'t>>,
 }
 
-impl<'a, 'i> Properties<'a, 'i> {
-    pub(in crate::schema::text) fn new(item_type: &'i ItemType) -> Self {
+impl<'t, 'i> Properties<'t, 'i> {
+    pub(in crate::schema::text) fn new(item_type: &'i ItemType<'t>) -> Self {
         Properties {
             item_type,
             match_expr: None,
@@ -43,25 +43,25 @@ impl<'a, 'i> Properties<'a, 'i> {
         }
     }
 
-    pub fn match_expr(&mut self, expr: Expression) -> Result<(), String> {
+    pub fn match_expr(&mut self, expr: Expression<'t>) -> Result<(), String> {
         if let Some(_) = self.match_expr.replace(expr) {
             return Err(format!("#match occurs twice"));
         }
         Ok(())
     }
-    pub fn let_var(&mut self, id: Identifier, expr: Expression) -> Result<(), String> {
+    pub fn let_var(&mut self, id: Identifier<'t>, expr: Expression<'t>) -> Result<(), String> {
         if let Some(_) = self.inner.vars.insert(id, expr) {
             return Err(format!("#let occurs twice"));
         }
         Ok(())
     }
-    pub fn define(&mut self, id: Identifier, schema: Schema) -> Result<(), String> {
+    pub fn define(&mut self, id: Identifier<'t>, schema: Schema<'t>) -> Result<(), String> {
         if let Some(_) = self.inner.defs.insert(id, schema) {
             return Err(format!("#def occurs twice"));
         }
         Ok(())
     }
-    pub fn use_definition(&mut self, id: Identifier) -> Result<(), String> {
+    pub fn use_definition(&mut self, id: Identifier<'t>) -> Result<(), String> {
         if self.inner.source.is_some() {
             return Err(format!("#use cannot be used in conjunction with #source"));
         }
@@ -71,13 +71,13 @@ impl<'a, 'i> Properties<'a, 'i> {
         self.inner.source = Some(Expression::new(vec![]));
         Ok(())
     }
-    pub fn owner(&mut self, owner: &'a str) -> Result<(), String> {
+    pub fn owner(&mut self, owner: &'t str) -> Result<(), String> {
         if let Some(_) = self.inner.owner.replace(owner) {
             return Err(format!("#owner occurs twice"));
         }
         Ok(())
     }
-    pub fn group(&mut self, group: &'a str) -> Result<(), String> {
+    pub fn group(&mut self, group: &'t str) -> Result<(), String> {
         if let Some(_) = self.inner.group.replace(group) {
             return Err(format!("#group occurs twice"));
         }
@@ -89,7 +89,7 @@ impl<'a, 'i> Properties<'a, 'i> {
         }
         Ok(())
     }
-    pub fn source(&mut self, source: Expression) -> Result<(), String> {
+    pub fn source(&mut self, source: Expression<'t>) -> Result<(), String> {
         if self.use_def.is_some() {
             return Err(format!("#source cannot be used in conjunction with #use"));
         }
@@ -98,7 +98,11 @@ impl<'a, 'i> Properties<'a, 'i> {
         }
         Ok(())
     }
-    pub fn add_entry(&mut self, criteria: Match, subschema: Subschema) -> Result<(), String> {
+    pub fn add_entry(
+        &mut self,
+        criteria: Match<'t>,
+        subschema: Subschema<'t>,
+    ) -> Result<(), String> {
         self.inner.entries.push(SchemaEntry {
             criteria,
             subschema,
@@ -106,7 +110,7 @@ impl<'a, 'i> Properties<'a, 'i> {
         Ok(())
     }
 
-    pub fn to_mapped_subschema(self) -> Result<(Option<Expression>, Subschema), String> {
+    pub fn to_mapped_subschema(self) -> Result<(Option<Expression<'t>>, Subschema<'t>), String> {
         let schema = match self.item_type {
             ItemType::Directory => Schema::Directory(self.inner.into_directory()?),
             ItemType::File => Schema::File(self.inner.into_file()?),
@@ -126,22 +130,22 @@ impl<'a, 'i> Properties<'a, 'i> {
     }
 }
 
-impl InnerProperties<'_> {
-    pub fn build_meta(&self) -> Meta {
+impl<'t> InnerProperties<'t> {
+    pub fn build_meta(&self) -> Meta<'t> {
         let mut meta = MetaBuilder::default();
         if let Some(owner) = self.owner {
-            meta.owner(owner);
+            meta = meta.owner(owner);
         }
         if let Some(group) = self.group {
-            meta.group(group);
+            meta = meta.group(group);
         }
         if let Some(mode) = self.mode {
-            meta.mode(mode);
+            meta = meta.mode(mode);
         }
         meta.build()
     }
 
-    pub fn into_directory(self) -> Result<DirectorySchema, String> {
+    pub fn into_directory(self) -> Result<DirectorySchema<'t>, String> {
         let meta = self.build_meta();
         Ok(DirectorySchema::new(
             self.vars,
@@ -151,7 +155,7 @@ impl InnerProperties<'_> {
         ))
     }
 
-    pub fn into_file(self) -> Result<FileSchema, String> {
+    pub fn into_file(self) -> Result<FileSchema<'t>, String> {
         // Files must have a #source unless they are #use-ing a definition from elsewhere
         let meta = self.build_meta();
         let source = if let Some(source) = self.source {
@@ -166,9 +170,9 @@ impl InnerProperties<'_> {
 
     pub fn into_symlink(
         self,
-        target: Expression,
+        target: Expression<'t>,
         is_directory: bool,
-    ) -> Result<LinkSchema, String> {
+    ) -> Result<LinkSchema<'t>, String> {
         let meta = self.build_meta();
         let schema = if self.vars.is_empty()
             && self.defs.is_empty()

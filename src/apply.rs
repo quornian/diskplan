@@ -13,17 +13,16 @@ use regex::Regex;
 use crate::{
     context::Context,
     schema::{
-        DirectorySchema, Expression, FileSchema, LinkSchema, Match, Merge, Meta, Schema,
-        SchemaEntry, Subschema, Token,
+        DirectorySchema, FileSchema, LinkSchema, Match, Merge, Meta, Schema, SchemaEntry, Subschema,
     },
 };
 
 /// The process to perform to apply a schema node to the target location on the filesystem
 #[derive(Debug, Clone, PartialEq)]
-pub enum Action {
+pub enum Action<'t> {
     CreateDirectory {
         path: PathBuf,
-        meta: Meta,
+        meta: Meta<'t>,
     },
     CreateSymlink {
         path: PathBuf,
@@ -32,16 +31,16 @@ pub enum Action {
     CreateFile {
         path: PathBuf,
         source: PathBuf,
-        meta: Meta,
+        meta: Meta<'t>,
     },
 }
 
-pub fn gather_actions(context: &Context) -> Result<Vec<Action>> {
+pub fn gather_actions<'t>(context: &Context<'t, '_>) -> Result<Vec<Action<'t>>> {
     let mut actions = Vec::new();
     apply_tree(context, &mut actions).map(|()| actions)
 }
 
-fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<()> {
+fn apply_tree<'t>(context: &'t Context<'t, '_>, actions: &mut Vec<Action<'t>>) -> Result<()> {
     eprintln!(
         "Applying to {}: {}",
         &context.root.to_str().unwrap(),
@@ -55,10 +54,10 @@ fn apply_tree(context: &Context, actions: &mut Vec<Action>) -> Result<()> {
     .with_context(|| format!("Failed to apply tree {:?}", context.target))
 }
 
-fn apply_file(
-    file_schema: &FileSchema,
-    context: &Context,
-    actions: &mut Vec<Action>,
+fn apply_file<'t>(
+    file_schema: &FileSchema<'t>,
+    context: &Context<'t, '_>,
+    actions: &mut Vec<Action<'t>>,
 ) -> Result<()> {
     // Ensure the file exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
@@ -73,10 +72,10 @@ fn apply_file(
     Ok(())
 }
 
-fn apply_link(
-    link_schema: &LinkSchema,
-    context: &Context,
-    actions: &mut Vec<Action>,
+fn apply_link<'t>(
+    link_schema: &LinkSchema<'t>,
+    context: &Context<'t, '_>,
+    actions: &mut Vec<Action<'t>>,
 ) -> Result<()> {
     // Ensure the link exists and its evaluated target path is absolute
     let link_target = context.evaluate(link_schema.target())?;
@@ -105,20 +104,20 @@ fn apply_link(
     Ok(())
 }
 
-fn apply_directory(
-    directory_schema: &DirectorySchema,
-    context: &Context,
-    actions: &mut Vec<Action>,
+fn apply_directory<'t>(
+    directory_schema: &'t DirectorySchema<'t>,
+    context: &Context<'t, '_>,
+    actions: &mut Vec<Action<'t>>,
 ) -> Result<()> {
     // Ensure the directory exists with the correct permissions and ownership
     // TODO: Consider skipping subprocess call if metadata already matches
     // install::install_directory(&context.target, directory_schema.meta())?;
     actions.push(Action::CreateDirectory {
         path: normalize(&context.root.join(&context.target)),
-        meta: directory_schema.meta().clone(),
+        meta: (*directory_schema.meta()).clone(),
     });
 
-    handle_entries(directory_schema.entries(), context, actions)
+    handle_entries(directory_schema.entries(), context, &mut actions)
 }
 
 struct DirectoryMap {
@@ -150,10 +149,10 @@ impl DirectoryMap {
     }
 }
 
-fn handle_entries<'i, I: Iterator<Item = &'i SchemaEntry>>(
+fn handle_entries<'t: 'i, 'i, I: Iterator<Item = &'i SchemaEntry<'t>>>(
     entries: I,
-    context: &Context,
-    actions: &mut Vec<Action>,
+    context: &Context<'t, '_>,
+    actions: &mut Vec<Action<'t>>,
 ) -> Result<()> {
     // Handle entries within this directory
     let mut map = DirectoryMap::from_directory(context.root.join(&context.target))?;
@@ -208,9 +207,8 @@ fn handle_entries<'i, I: Iterator<Item = &'i SchemaEntry>>(
                 };
                 // If we have this binding in our variables already, resolve it and use the fixed result
                 // issuing an error if the pattern doesn't match (no need to re-bind)
-                let expr = context.lookup(&binding);
-                if let Some(expr) = expr {
-                    let name: String = context.evaluate(&expr)?;
+                let name = context.lookup(&binding)?;
+                if let Some(name) = name {
                     if let Some(pattern) = pattern {
                         if !pattern.is_match(&name) {
                             return Err(anyhow!(
@@ -220,10 +218,11 @@ fn handle_entries<'i, I: Iterator<Item = &'i SchemaEntry>>(
                             ));
                         }
                     }
-                    match map.about_to_handle(name.clone().into()) {
+                    // TODO: Reduce this mayhem...
+                    match map.about_to_handle(name.clone().into_owned().into()) {
                         Ok(()) => {
                             // New | Update
-                            let child_path = context.target.join(name);
+                            let child_path = context.target.join(name.as_ref());
                             let merged;
                             let schema = match &entry.subschema {
                                 Subschema::Original(ref schema) => schema,
@@ -273,8 +272,7 @@ fn handle_entries<'i, I: Iterator<Item = &'i SchemaEntry>>(
                                 };
                                 let mut child_context = context.child(child_path, schema);
                                 // No need to parse, we know this is a Text token
-                                let expr = Expression::new(vec![Token::text(name)]);
-                                child_context.bind(binding.clone(), expr);
+                                child_context.bind(binding.clone(), name.into());
                                 apply_tree(&child_context, actions)?;
                             }
                         }
@@ -324,7 +322,7 @@ mod test {
                 defs,
                 meta,
                 vec![SchemaEntry {
-                    criteria: Match::fixed("place"),
+                    criteria: Match::Fixed("place"),
                     subschema: Subschema::Referenced {
                         definition: Identifier::new("thing"),
                         overrides: Schema::Directory(DirectorySchema::new(

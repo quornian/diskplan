@@ -13,13 +13,13 @@ impl Display for ParseError<'_> {
         let lineno = self.line_number();
         let line = self.text.lines().nth(lineno - 1).unwrap_or("<EOF>");
         let column = self.span.as_ptr() as usize - line.as_ptr() as usize;
-        write!(f, "Error: {}\n", self.error)?;
-        write!(f, "     |\n")?;
-        write!(f, "{:4} | {}\n", lineno, line)?;
+        writeln!(f, "Error: {}", self.error)?;
+        writeln!(f, "     |")?;
+        writeln!(f, "{:4} | {}", lineno, line)?;
         if column == 0 {
-            write!(f, "     |\n")?;
+            writeln!(f, "     |")?;
         } else {
-            write!(f, "     | {0:1$}^\n", "", column)?;
+            writeln!(f, "     | {0:1$}^", "", column)?;
         }
         if let Some(next) = &self.next {
             write!(f, "{}", next)?;
@@ -55,10 +55,8 @@ impl<'a, 'b> IntoIterator for &'b ParseError<'a> {
     type IntoIter = ParseErrorIter<'a, 'b>;
     type Item = &'b ParseError<'a>;
 
-    fn into_iter(self)->Self::IntoIter {
-        ParseErrorIter {
-            err: Some(self)
-        }
+    fn into_iter(self) -> Self::IntoIter {
+        ParseErrorIter { err: Some(self) }
     }
 }
 
