@@ -4,13 +4,13 @@ use crate::schema::{
     criteria::Match,
     expr::{Expression, Identifier},
     meta::{Meta, MetaBuilder},
-    DirectorySchema, FileSchema, LinkSchema, Schema, SchemaEntry, Subschema,
+    DirectorySchema, FileSchema, Schema, SchemaEntry, Subschema,
 };
 
 use super::ItemType;
 
-pub struct Properties<'t, 'i> {
-    item_type: &'i ItemType<'t>,
+pub struct Properties<'t> {
+    item_type: ItemType,
     match_expr: Option<Expression<'t>>,
     inner: InnerProperties<'t>,
 
@@ -20,6 +20,8 @@ pub struct Properties<'t, 'i> {
 
 #[derive(Default)]
 struct InnerProperties<'t> {
+    symlink: Option<Expression<'t>>,
+
     vars: HashMap<Identifier<'t>, Expression<'t>>,
     defs: HashMap<Identifier<'t>, Schema<'t>>,
 
@@ -33,12 +35,19 @@ struct InnerProperties<'t> {
     source: Option<Expression<'t>>,
 }
 
-impl<'t, 'i> Properties<'t, 'i> {
-    pub(in crate::schema::text) fn new(item_type: &'i ItemType<'t>) -> Self {
+impl<'t> Properties<'t> {
+    pub(in crate::schema::text) fn new(
+        item_type: ItemType,
+        symlink: Option<Expression<'t>>,
+    ) -> Self {
+        let inner = InnerProperties {
+            symlink,
+            ..Default::default()
+        };
         Properties {
             item_type,
             match_expr: None,
-            inner: Default::default(),
+            inner,
             use_def: None,
         }
     }
@@ -114,10 +123,6 @@ impl<'t, 'i> Properties<'t, 'i> {
         let schema = match self.item_type {
             ItemType::Directory => Schema::Directory(self.inner.into_directory()?),
             ItemType::File => Schema::File(self.inner.into_file()?),
-            ItemType::Symlink {
-                target,
-                is_directory,
-            } => Schema::Symlink(self.inner.into_symlink(target.clone(), *is_directory)?),
         };
         let subschema = match self.use_def {
             Some(use_def) => Subschema::Referenced {
@@ -148,6 +153,7 @@ impl<'t> InnerProperties<'t> {
     pub fn into_directory(self) -> Result<DirectorySchema<'t>, String> {
         let meta = self.build_meta();
         Ok(DirectorySchema::new(
+            self.symlink,
             self.vars,
             self.defs,
             meta,
@@ -165,37 +171,6 @@ impl<'t> InnerProperties<'t> {
                 "File has no #source (or #use). Should this have been a directory?"
             ))
         }?;
-        Ok(FileSchema::new(meta, source))
-    }
-
-    pub fn into_symlink(
-        self,
-        target: Expression<'t>,
-        is_directory: bool,
-    ) -> Result<LinkSchema<'t>, String> {
-        let meta = self.build_meta();
-        let schema = if self.vars.is_empty()
-            && self.defs.is_empty()
-            && meta.is_empty()
-            && self.entries.is_empty()
-        {
-            None
-        } else if is_directory {
-            Some(Box::new(Schema::Directory(DirectorySchema::new(
-                self.vars,
-                self.defs,
-                meta,
-                self.entries,
-            ))))
-        } else {
-            Some(Box::new(if let Some(source) = self.source {
-                Schema::File(FileSchema::new(meta, source))
-            } else {
-                return Err(format!(
-                    "File has no #source. Should this have been a directory?"
-                ));
-            }))
-        };
-        Ok(LinkSchema::new(target.clone(), schema))
+        Ok(FileSchema::new(self.symlink, meta, source))
     }
 }

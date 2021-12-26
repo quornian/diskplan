@@ -49,7 +49,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
             }
             error.unwrap()
         })?;
-    let (match_regex, subschema) = schema(text, text, ops, ItemType::Directory)?;
+    let (match_regex, subschema) = schema(text, text, ItemType::Directory, None, ops)?;
     if let Some(_) = match_regex {
         return Err(ParseError::new(
             "Top level #match is not allowed".into(),
@@ -76,10 +76,11 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
 fn schema<'t>(
     whole: &'t str,
     part: &'t str,
+    item_type: ItemType,
+    symlink: Option<Expression<'t>>,
     ops: Vec<(&'t str, Operator<'t>)>,
-    item_type: ItemType<'t>,
 ) -> std::result::Result<(Option<Expression<'t>>, Subschema<'t>), ParseError<'t>> {
-    let mut props = Properties::new(&item_type);
+    let mut props = Properties::new(item_type, symlink);
     for (span, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
@@ -92,7 +93,7 @@ fn schema<'t>(
             Operator::Group(group) => props.group(group),
             Operator::Source(source) => match item_type {
                 ItemType::File => props.source(source),
-                _ => {
+                ItemType::Directory => {
                     return Err(ParseError::new(
                         "Only files can have a #source".into(),
                         whole,
@@ -118,16 +119,12 @@ fn schema<'t>(
                         None,
                     ));
                 }
-                let sub_item_type = match (link, is_directory) {
-                    (Some(target), is_directory) => ItemType::Symlink {
-                        target,
-                        is_directory,
-                    },
-                    (_, false) => ItemType::File,
-                    (_, true) => ItemType::Directory,
+                let sub_item_type = match is_directory {
+                    false => ItemType::File,
+                    true => ItemType::Directory,
                 };
                 let (pattern, schema) =
-                    schema(whole, span, children, sub_item_type).map_err(|e| {
+                    schema(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Problem within \"{}\"", binding),
                             whole,
@@ -159,16 +156,12 @@ fn schema<'t>(
                         None,
                     ));
                 }
-                let sub_item_type = match (link, is_directory) {
-                    (Some(target), is_directory) => ItemType::Symlink {
-                        target,
-                        is_directory,
-                    },
-                    (_, false) => ItemType::File,
-                    (_, true) => ItemType::Directory,
+                let sub_item_type = match is_directory {
+                    false => ItemType::File,
+                    true => ItemType::Directory,
                 };
                 let (pattern, schema) =
-                    schema(whole, span, children, sub_item_type).map_err(|e| {
+                    schema(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Error within definition \"{}\"", name),
                             whole,
@@ -272,13 +265,10 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
     }
 }
 
-enum ItemType<'t> {
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ItemType {
     Directory,
     File,
-    Symlink {
-        target: Expression<'t>,
-        is_directory: bool,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

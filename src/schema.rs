@@ -107,7 +107,8 @@
 //! ));
 //! assert!(matches!(
 //!     link_entry.subschema,
-//!     Subschema::Original(Schema::Symlink(LinkSchema { .. }))
+//!     Subschema::Original(Schema::Directory(ds @ DirectorySchema { .. }))
+//!     if matches!(ds.symlink(), Some("/another/disk/example_target/")
 //! ));
 //! #
 //! #     }
@@ -150,7 +151,6 @@ pub use text::{parse_schema, ParseError};
 pub enum Schema<'t> {
     Directory(DirectorySchema<'t>),
     File(FileSchema<'t>),
-    Symlink(LinkSchema<'t>),
 }
 
 pub trait Merge
@@ -179,10 +179,7 @@ impl<'t> Merge for Schema<'t> {
             (Schema::File(schema_a), Schema::File(schema_b)) => {
                 Ok(Schema::File(schema_a.merge(schema_b)?))
             }
-            (Schema::Symlink(schema_a), Schema::Symlink(schema_b)) => {
-                Ok(Schema::Symlink(schema_a.merge(schema_b)?))
-            }
-            (Schema::Directory(_), _) | (Schema::File(_), _) | (Schema::Symlink(_), _) => {
+            (Schema::Directory(_), _) | (Schema::File(_), _) => {
                 Err(anyhow!("Cannot merge, mismatched types"))
             }
         }
@@ -213,6 +210,9 @@ impl PartialOrd for SchemaEntry<'_> {
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct DirectorySchema<'t> {
+    /// Symlink target, if this is a symbolic link
+    symlink: Option<Expression<'t>>,
+
     /// Text replacement variables
     vars: HashMap<Identifier<'t>, Expression<'t>>,
 
@@ -228,6 +228,7 @@ pub struct DirectorySchema<'t> {
 
 impl<'t> DirectorySchema<'t> {
     pub fn new(
+        symlink: Option<Expression<'t>>,
         vars: HashMap<Identifier<'t>, Expression<'t>>,
         defs: HashMap<Identifier<'t>, Schema<'t>>,
         meta: Meta<'t>,
@@ -236,11 +237,15 @@ impl<'t> DirectorySchema<'t> {
         let mut entries = entries;
         entries.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         DirectorySchema {
+            symlink,
             vars,
             defs,
             meta,
             entries,
         }
+    }
+    pub fn symlink(&self) -> Option<&Expression> {
+        self.symlink.as_ref()
     }
     pub fn vars(&self) -> &HashMap<Identifier, Expression> {
         &self.vars
@@ -258,6 +263,11 @@ impl<'t> DirectorySchema<'t> {
 
 impl Merge for DirectorySchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
+        let symlink = match (&self.symlink, &other.symlink) {
+            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two directories with symlink targets")),
+            (link @ Some(_), _) => Ok(link),
+            (_, link) => Ok(link),
+        }?;
         let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
         vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
         vars.extend(other.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
@@ -271,12 +281,21 @@ impl Merge for DirectorySchema<'_> {
         let mut entries = Vec::with_capacity(self.entries.len() + other.entries.len());
         entries.extend(self.entries.iter().cloned());
         entries.extend(other.entries.iter().cloned());
-        Ok(DirectorySchema::new(vars, defs, meta, entries))
+        Ok(DirectorySchema::new(
+            symlink.clone(),
+            vars,
+            defs,
+            meta,
+            entries,
+        ))
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileSchema<'t> {
+    /// Symlink target, if this is a symbolic link
+    symlink: Option<Expression<'t>>,
+
     /// Properties of this directory
     meta: Meta<'t>,
 
@@ -286,8 +305,19 @@ pub struct FileSchema<'t> {
 }
 
 impl<'t> FileSchema<'t> {
-    pub fn new(meta: Meta<'t>, source: Expression<'t>) -> FileSchema<'t> {
-        FileSchema { meta, source }
+    pub fn new(
+        symlink: Option<Expression<'t>>,
+        meta: Meta<'t>,
+        source: Expression<'t>,
+    ) -> FileSchema<'t> {
+        FileSchema {
+            symlink,
+            meta,
+            source,
+        }
+    }
+    pub fn symlink(&self) -> Option<&Expression> {
+        self.symlink.as_ref()
     }
     pub fn meta(&self) -> &Meta<'t> {
         &self.meta
@@ -299,6 +329,11 @@ impl<'t> FileSchema<'t> {
 
 impl Merge for FileSchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
+        let symlink = match (&self.symlink, &other.symlink) {
+            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two directories with symlink targets")),
+            (link @ Some(_), _) => Ok(link),
+            (_, link) => Ok(link),
+        }?;
         let meta = MetaBuilder::default()
             .merge(&self.meta)
             .merge(&other.meta)
@@ -314,46 +349,7 @@ impl Merge for FileSchema<'_> {
                 ))
             }
         };
-        Ok(FileSchema::new(meta, source))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LinkSchema<'t> {
-    /// Symlink target
-    target: Expression<'t>,
-
-    /// What to ensure, if anything, should be found at the other end
-    far_schema: Option<Box<Schema<'t>>>,
-}
-
-impl<'t> LinkSchema<'t> {
-    pub fn new(target: Expression<'t>, far_schema: Option<Box<Schema<'t>>>) -> Self {
-        LinkSchema { target, far_schema }
-    }
-    pub fn target(&self) -> &Expression<'t> {
-        &self.target
-    }
-    pub fn far_schema(&self) -> Option<&Schema<'t>> {
-        self.far_schema.as_deref()
-    }
-}
-
-impl Merge for LinkSchema<'_> {
-    fn merge(&self, other: &Self) -> Result<Self> {
-        let far_schema = self.far_schema.merge(&other.far_schema)?;
-        let target = match (self.target.tokens().len(), other.target.tokens().len()) {
-            (_, 0) => self.target.clone(),
-            (0, _) => other.target.clone(),
-            (_, _) => {
-                return Err(anyhow!(
-                    "Cannot merge link with two targets: {} and {}",
-                    self.target().to_string(),
-                    other.target().to_string()
-                ))
-            }
-        };
-        Ok(LinkSchema::new(target, far_schema))
+        Ok(FileSchema::new(symlink.clone(), meta, source))
     }
 }
 
@@ -362,7 +358,6 @@ pub fn print_tree(schema: &Schema) {
         match schema {
             Schema::File(file_schema) => print_file_schema(&file_schema, indent),
             Schema::Directory(dir_schema) => print_dir_schema(&dir_schema, indent),
-            Schema::Symlink(link_schema) => print_link_schema(&link_schema, indent),
         }
     }
     fn print_dir_schema(dir_schema: &DirectorySchema, indent: usize) {
@@ -418,17 +413,6 @@ pub fn print_tree(schema: &Schema) {
             indent = indent,
         );
         print_meta(&file_schema.meta, indent);
-    }
-    fn print_link_schema(link_schema: &LinkSchema, indent: usize) {
-        println!(
-            "{pad:indent$}[LINK -> {}]",
-            link_schema.target,
-            pad = "",
-            indent = indent
-        );
-        if let Some(far_schema) = link_schema.far_schema() {
-            print_schema(far_schema, indent + 4);
-        }
     }
     fn print_meta(meta: &Meta, indent: usize) {
         print!("{pad:indent$}meta ", pad = "", indent = indent);

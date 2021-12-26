@@ -488,7 +488,7 @@ fn test_usage() {
     let no_defs = || HashMap::default();
     let no_meta = || Meta::default();
     assert_eq!(
-        schema(s, s, ops.unwrap().1, ItemType::Directory),
+        schema(s, s, ItemType::Directory, None, ops.unwrap().1),
         Ok((
             None,
             Subschema::Original(Schema::Directory({
@@ -497,12 +497,14 @@ fn test_usage() {
                     Identifier::new("defined"),
                     Schema::Directory({
                         DirectorySchema::new(
+                            None,
                             no_vars(),
                             no_defs(),
                             no_meta(),
                             vec![SchemaEntry {
                                 criteria: Match::Fixed("file"),
                                 subschema: Subschema::Original(Schema::File(FileSchema::new(
+                                    None,
                                     no_meta(),
                                     Expression::new(vec![Token::Variable(Identifier::new(
                                         "emptyfile",
@@ -517,6 +519,7 @@ fn test_usage() {
                     subschema: Subschema::Referenced {
                         definition: Identifier::new("defined"),
                         overrides: Schema::Directory(DirectorySchema::new(
+                            None,
                             no_vars(),
                             no_defs(),
                             no_meta(),
@@ -524,7 +527,7 @@ fn test_usage() {
                         )),
                     },
                 }];
-                DirectorySchema::new(no_vars(), defs, no_meta(), entries)
+                DirectorySchema::new(None, no_vars(), defs, no_meta(), entries)
             }),)
         ))
     );
@@ -552,4 +555,51 @@ fn test_duplicate() {
     };
     let e = err.into_iter().last().unwrap();
     assert_eq!(e.line_number(), 7);
+}
+
+#[test]
+fn test_symlink_directory() {
+    let schema = parse_schema(indoc!(
+        "
+        directory/ -> /another/place
+        "
+    ))
+    .unwrap();
+    let test = match &schema {
+        Schema::Directory(DirectorySchema { entries, .. }) => &entries[0],
+        _ => panic!(),
+    };
+    assert_eq!(test.criteria, Match::Fixed("directory"));
+    let symlink = match &test.subschema {
+        Subschema::Original(Schema::Directory(DirectorySchema { symlink, .. })) => symlink,
+        _ => panic!(),
+    };
+    assert_eq!(
+        symlink,
+        &Some(Expression::new(vec![Token::Text("/another/place")]))
+    )
+}
+
+#[test]
+fn test_symlink_file() {
+    let schema = parse_schema(indoc!(
+        "
+        file -> /another/place
+            #source xxx
+        "
+    ))
+    .unwrap();
+    let test = match &schema {
+        Schema::Directory(DirectorySchema { entries, .. }) => &entries[0],
+        _ => panic!(),
+    };
+    assert_eq!(test.criteria, Match::Fixed("file"));
+    let symlink = match &test.subschema {
+        Subschema::Original(Schema::File(FileSchema { symlink, .. })) => symlink,
+        _ => panic!(),
+    };
+    assert_eq!(
+        symlink,
+        &Some(Expression::new(vec![Token::Text("/another/place")]))
+    )
 }
