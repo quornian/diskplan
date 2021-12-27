@@ -132,7 +132,7 @@
 //!
 
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 mod criteria;
 pub use criteria::Match;
@@ -141,12 +141,12 @@ mod expr;
 pub use expr::{Expression, Identifier, Token};
 
 mod meta;
-pub use meta::{Meta, MetaBuilder};
+pub use meta::Meta;
 
 mod text;
 pub use text::{parse_schema, ParseError};
 
-/// A node in an abstract directory hierarchy representing a file, directory or symlink
+/// A node in an abstract directory hierarchy
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema<'t> {
     Directory(DirectorySchema<'t>),
@@ -161,7 +161,7 @@ where
 }
 
 impl<'t> Merge for Option<Box<Schema<'t>>> {
-    fn merge(&self, other: &Option<Box<Schema<'t>>>) -> Result<Option<Box<Schema<'t>>>> {
+    fn merge(&self, other: &Option<Box<Schema<'t>>>) -> Result<Self> {
         match (self, other) {
             (_, None) => Ok(self.clone()),
             (None, _) => Ok(other.clone()),
@@ -171,7 +171,7 @@ impl<'t> Merge for Option<Box<Schema<'t>>> {
 }
 
 impl<'t> Merge for Schema<'t> {
-    fn merge(&self, other: &Schema<'t>) -> Result<Schema<'t>> {
+    fn merge(&self, other: &Schema<'t>) -> Result<Self> {
         match (self, other) {
             (Schema::Directory(schema_a), Schema::Directory(schema_b)) => {
                 Ok(Schema::Directory(schema_a.merge(schema_b)?))
@@ -186,32 +186,14 @@ impl<'t> Merge for Schema<'t> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct SchemaEntry<'t> {
-    pub criteria: Match<'t>,
-    pub subschema: Subschema<'t>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Subschema<'t> {
-    Referenced {
-        definition: Identifier<'t>,
-        overrides: Schema<'t>,
-    },
-    Original(Schema<'t>),
-}
-
-impl PartialOrd for SchemaEntry<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.criteria.partial_cmp(&other.criteria)
-    }
-}
-
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct DirectorySchema<'t> {
     /// Symlink target, if this is a symbolic link
     symlink: Option<Expression<'t>>,
+
+    /// Links to other schemas `#use`d by this one
+    uses: Vec<Identifier<'t>>,
 
     /// Text replacement variables
     vars: HashMap<Identifier<'t>, Expression<'t>>,
@@ -223,21 +205,27 @@ pub struct DirectorySchema<'t> {
     meta: Meta<'t>,
 
     /// Disk entries to be created within this directory
-    entries: Vec<SchemaEntry<'t>>,
+    entries: Vec<(Match<'t>, Schema<'t>)>,
 }
 
 impl<'t> DirectorySchema<'t> {
     pub fn new(
         symlink: Option<Expression<'t>>,
+        uses: Vec<Identifier<'t>>,
         vars: HashMap<Identifier<'t>, Expression<'t>>,
         defs: HashMap<Identifier<'t>, Schema<'t>>,
         meta: Meta<'t>,
-        entries: Vec<SchemaEntry<'t>>,
+        entries: Vec<(Match<'t>, Schema<'t>)>,
     ) -> Self {
         let mut entries = entries;
-        entries.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        entries.sort_by(|(match_a, _), (match_b, _)| {
+            match_a
+                .partial_cmp(match_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         DirectorySchema {
             symlink,
+            uses,
             vars,
             defs,
             meta,
@@ -256,7 +244,7 @@ impl<'t> DirectorySchema<'t> {
     pub fn meta(&self) -> &Meta<'t> {
         &self.meta
     }
-    pub fn entries(&self) -> impl Iterator<Item = &SchemaEntry> {
+    pub fn entries(&self) -> impl Iterator<Item = &(Match, Schema)> {
         self.entries.iter()
     }
 }
@@ -274,15 +262,13 @@ impl Merge for DirectorySchema<'_> {
         let mut defs = HashMap::with_capacity(self.defs.len() + other.defs.len());
         defs.extend(self.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
         defs.extend(other.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let meta = MetaBuilder::default()
-            .merge(&self.meta)
-            .merge(&other.meta)
-            .build();
+        let meta = self.meta.merge(&other.meta);
         let mut entries = Vec::with_capacity(self.entries.len() + other.entries.len());
         entries.extend(self.entries.iter().cloned());
         entries.extend(other.entries.iter().cloned());
         Ok(DirectorySchema::new(
             symlink.clone(),
+            Vec::new(), // Assuming a merge is the #use'd #def being merged in
             vars,
             defs,
             meta,
@@ -292,9 +278,27 @@ impl Merge for DirectorySchema<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Binding<'t> {
+    Static(&'t str),
+    Dynamic(Identifier<'t>),
+}
+
+impl Display for Binding<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Binding::Static(s) => write!(f, "{}", s),
+            Binding::Dynamic(id) => write!(f, "${}", id.value()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileSchema<'t> {
     /// Symlink target, if this is a symbolic link
     symlink: Option<Expression<'t>>,
+
+    /// Links to other schemas `#use`d by this one
+    uses: Vec<Identifier<'t>>,
 
     /// Properties of this directory
     meta: Meta<'t>,
@@ -307,11 +311,13 @@ pub struct FileSchema<'t> {
 impl<'t> FileSchema<'t> {
     pub fn new(
         symlink: Option<Expression<'t>>,
+        uses: Vec<Identifier<'t>>,
         meta: Meta<'t>,
         source: Expression<'t>,
-    ) -> FileSchema<'t> {
+    ) -> Self {
         FileSchema {
             symlink,
+            uses,
             meta,
             source,
         }
@@ -334,10 +340,7 @@ impl Merge for FileSchema<'_> {
             (link @ Some(_), _) => Ok(link),
             (_, link) => Ok(link),
         }?;
-        let meta = MetaBuilder::default()
-            .merge(&self.meta)
-            .merge(&other.meta)
-            .build();
+        let meta = self.meta.merge(&other.meta);
         let source = match (self.source.tokens().len(), other.source.tokens().len()) {
             (_, 0) => self.source.clone(),
             (0, _) => other.source.clone(),
@@ -349,7 +352,12 @@ impl Merge for FileSchema<'_> {
                 ))
             }
         };
-        Ok(FileSchema::new(symlink.clone(), meta, source))
+        Ok(FileSchema::new(
+            symlink.clone(),
+            Vec::new(), // Assuming a merge is the #use'd #def being merged in
+            meta,
+            source,
+        ))
     }
 }
 
@@ -381,28 +389,9 @@ pub fn print_tree(schema: &Schema) {
             print_schema(def, indent + 4);
         }
         print_meta(&dir_schema.meta, indent);
-        for entry in &dir_schema.entries {
-            println!(
-                "{pad:indent$}--> {:?}",
-                entry.criteria,
-                pad = "",
-                indent = indent
-            );
-            match &entry.subschema {
-                Subschema::Referenced {
-                    definition: def,
-                    overrides,
-                } => {
-                    println!(
-                        "{pad:indent$}USE {}",
-                        def.value(),
-                        pad = "",
-                        indent = indent
-                    );
-                    print_schema(&overrides, indent + 4);
-                }
-                Subschema::Original(schema) => print_schema(&schema, indent + 4),
-            }
+        for (criteria, schema) in &dir_schema.entries {
+            println!("{pad:indent$}--> {:?}", criteria, pad = "", indent = indent);
+            print_schema(schema, indent + 4);
         }
     }
     fn print_file_schema(file_schema: &FileSchema, indent: usize) {
@@ -416,17 +405,17 @@ pub fn print_tree(schema: &Schema) {
     }
     fn print_meta(meta: &Meta, indent: usize) {
         print!("{pad:indent$}meta ", pad = "", indent = indent);
-        match meta.owner() {
+        match meta.owner {
             Some(owner) => print!("{}", owner),
             None => print!("(keep)"),
         }
         print!(":");
-        match meta.group() {
+        match meta.group {
             Some(group) => print!("{}", group),
             None => print!("(keep)"),
         }
         print!(" mode=");
-        match meta.mode() {
+        match meta.mode {
             Some(mode) => print!("{:o}", mode),
             None => print!("(keep)"),
         }

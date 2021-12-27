@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
@@ -12,9 +10,8 @@ use nom::{
 };
 
 use crate::schema::{
-    criteria::Match,
     expr::{Expression, Identifier, Token},
-    Schema, Subschema,
+    Schema,
 };
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
@@ -24,6 +21,8 @@ use properties::Properties;
 
 mod error;
 pub use error::ParseError;
+
+use super::Binding;
 
 pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
     // Parse and process entire schema and handle any errors that arise
@@ -49,37 +48,43 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
             }
             error.unwrap()
         })?;
-    let (match_regex, subschema) = schema(text, text, ItemType::Directory, None, ops)?;
-    if let Some(_) = match_regex {
-        return Err(ParseError::new(
-            "Top level #match is not allowed".into(),
-            text,
-            text.find("\n#match")
-                .map(|pos| &text[pos + 1..pos + 7])
-                .unwrap_or(text),
-            None,
-        ));
-    }
-    match subschema {
-        Subschema::Referenced { .. } => Err(ParseError::new(
-            "Top level #use is not allowed".into(),
-            text,
-            text.find("\n#use")
-                .map(|pos| &text[pos + 1..pos + 7])
-                .unwrap_or(text),
-            None,
-        )),
-        Subschema::Original(schema) => Ok(schema),
-    }
+    let properties = {
+        let properties = schema_properties(text, text, ItemType::Directory, None, ops)?;
+        if properties.has_match() {
+            return Err(ParseError::new(
+                "Top level #match is not allowed".into(),
+                text,
+                text.find("\n#match")
+                    .map(|pos| &text[pos + 1..pos + 7])
+                    .unwrap_or(text),
+                None,
+            ));
+        }
+        if properties.has_use() {
+            return Err(ParseError::new(
+                "Top level #use is not allowed".into(),
+                text,
+                text.find("\n#use")
+                    .map(|pos| &text[pos + 1..pos + 7])
+                    .unwrap_or(text),
+                None,
+            ));
+        }
+        properties
+    };
+    let stack = [];
+    properties
+        .try_into_schema(&stack)
+        .map_err(|error| ParseError::new(error, text, text, None))
 }
 
-fn schema<'t>(
+fn schema_properties<'t, 'p>(
     whole: &'t str,
     part: &'t str,
     item_type: ItemType,
     symlink: Option<Expression<'t>>,
     ops: Vec<(&'t str, Operator<'t>)>,
-) -> std::result::Result<(Option<Expression<'t>>, Subschema<'t>), ParseError<'t>> {
+) -> std::result::Result<Properties<'t>, ParseError<'t>> {
     let mut props = Properties::new(item_type, symlink);
     for (span, op) in ops {
         match op {
@@ -123,8 +128,8 @@ fn schema<'t>(
                     false => ItemType::File,
                     true => ItemType::Directory,
                 };
-                let (pattern, schema) =
-                    schema(whole, span, sub_item_type, link, children).map_err(|e| {
+                let properties =
+                    schema_properties(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Problem within \"{}\"", binding),
                             whole,
@@ -132,15 +137,7 @@ fn schema<'t>(
                             Some(Box::new(e)),
                         )
                     })?;
-                let criteria = match binding {
-                    Binding::Static(s) => Match::Fixed(s),
-                    Binding::Dynamic(binding) => Match::Variable {
-                        order: 0,
-                        pattern,
-                        binding,
-                    },
-                };
-                props.add_entry(criteria, schema)
+                props.add_entry(binding, properties)
             }
             Operator::Def {
                 name,
@@ -160,8 +157,8 @@ fn schema<'t>(
                     false => ItemType::File,
                     true => ItemType::Directory,
                 };
-                let (pattern, schema) =
-                    schema(whole, span, sub_item_type, link, children).map_err(|e| {
+                let properties =
+                    schema_properties(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Error within definition \"{}\"", name),
                             whole,
@@ -170,31 +167,20 @@ fn schema<'t>(
                         )
                     })?;
 
-                if pattern.is_some() {
-                    return Err(ParseError::new(
-                        format!("#def has own #match"),
-                        whole,
-                        span,
-                        None,
-                    ));
-                }
-                if let Subschema::Original(schema) = schema {
-                    props.define(name, schema)
-                } else {
-                    // TODO: This may be okay
-                    return Err(ParseError::new(
-                        format!("#def has own #use"),
-                        whole,
-                        span,
-                        None,
-                    ));
-                }
+                // TODO: Consider if this is an issue
+                // if properties.match_expr.is_some() {
+                //     return Err(ParseError::new(
+                //         format!("#def has own #match"),
+                //         whole,
+                //         span,
+                //         None,
+                //     ));
+                // }
+                props.define(name, properties)
             }
         }.map_err(|s| ParseError::new(s, whole, span, None))?
     }
-    props
-        .to_mapped_subschema()
-        .map_err(|s| ParseError::new(s, whole, part, None))
+    Ok(props)
 }
 
 fn indentation(level: usize) -> impl Fn(&str) -> Res<&str, &str> {
@@ -269,21 +255,6 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
 enum ItemType {
     Directory,
     File,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Binding<'t> {
-    Static(&'t str),
-    Dynamic(Identifier<'t>),
-}
-
-impl Display for Binding<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Binding::Static(s) => write!(f, "{}", s),
-            Binding::Dynamic(id) => write!(f, "${}", id.value()),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
