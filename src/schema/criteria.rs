@@ -1,32 +1,30 @@
-use super::expr::{Expression, Identifier};
+use super::expr::Expression;
 
 /// Criteria for matching against names in a directory
 ///
-#[derive(Debug, Clone, PartialEq)]
-pub enum Match<'t> {
-    /// Match the exact name of the item, not bound
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pattern<'t> {
+    /// Match the exact name of the item
     Fixed(&'t str),
-    /// Bind the name to an identifier, and match the (optional) regular expression
-    Variable {
-        /// Used to sort criteria when matching against directory entries, lower numbers are tried
-        /// first with the first successful match winning
-        order: i16,
-        pattern: Option<Expression<'t>>,
-        binding: Identifier<'t>,
-    },
+    /// Match a regular expression
+    Regex(Expression<'t>),
 }
 
-impl PartialOrd for Match<'_> {
+impl PartialOrd for Pattern<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Pattern<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         use std::cmp::Ordering::{Greater, Less};
-        use Match::{Fixed, Variable};
+        use Pattern::{Fixed, Regex};
         match (self, other) {
-            (Fixed(a), Fixed(b)) if a == b => None,
-            (Fixed(a), Fixed(b)) if a != b => Some(a.cmp(b)),
-            (Fixed(_), _) => Some(Less),
-            (_, Fixed(_)) => Some(Greater),
-            (Variable { order: a, .. }, Variable { order: b, .. }) if a == b => None,
-            (Variable { order: a, .. }, Variable { order: b, .. }) => Some(a.cmp(b)),
+            (Fixed(a), Fixed(b)) => a.cmp(b),
+            (Fixed(_), Regex(_)) => Less,
+            (Regex(_), Fixed(_)) => Greater,
+            (Regex(a), Regex(b)) => a.cmp(b),
         }
     }
 }

@@ -9,22 +9,25 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::schema::{
-    expr::{Expression, Identifier, Token},
-    Schema,
-};
+use crate::schema::expr::{Expression, Identifier, Token};
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
-mod properties;
-use properties::Properties;
+mod builder;
+use builder::SchemaNodeBuilder;
 
 mod error;
 pub use error::ParseError;
 
-use super::Binding;
+use super::{Binding, Pattern, SchemaNode};
 
-pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
+#[derive(Debug)]
+pub enum NodeType {
+    Directory,
+    File,
+}
+
+pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
     // Parse and process entire schema and handle any errors that arise
     let (_, ops) =
         all_consuming(preceded(many0(blank_line), many0(operator(0))))(&text).map_err(|e| {
@@ -48,88 +51,71 @@ pub fn parse_schema(text: &str) -> std::result::Result<Schema, ParseError> {
             }
             error.unwrap()
         })?;
-    let properties = {
-        let properties = schema_properties(text, text, ItemType::Directory, None, ops)?;
-        if properties.has_match() {
-            return Err(ParseError::new(
-                "Top level #match is not allowed".into(),
-                text,
-                text.find("\n#match")
-                    .map(|pos| &text[pos + 1..pos + 7])
-                    .unwrap_or(text),
-                None,
-            ));
-        }
-        if properties.has_use() {
-            return Err(ParseError::new(
-                "Top level #use is not allowed".into(),
-                text,
-                text.find("\n#use")
-                    .map(|pos| &text[pos + 1..pos + 7])
-                    .unwrap_or(text),
-                None,
-            ));
-        }
-        properties
-    };
-    let stack = [];
-    properties
-        .try_into_schema(&stack)
-        .map_err(|error| ParseError::new(error, text, text, None))
+    let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
+    if schema_node.pattern.is_some() {
+        return Err(ParseError::new(
+            "Top level #match is not allowed".into(),
+            text,
+            text.find("\n#match")
+                .map(|pos| &text[pos + 1..pos + 7])
+                .unwrap_or(text),
+            None,
+        ));
+    }
+    if !schema_node.uses.is_empty() {
+        return Err(ParseError::new(
+            "Top level #use is not allowed".into(),
+            text,
+            text.find("\n#use")
+                .map(|pos| &text[pos + 1..pos + 7])
+                .unwrap_or(text),
+            None,
+        ));
+    }
+    Ok(schema_node)
 }
 
-fn schema_properties<'t, 'p>(
+fn schema_node<'t, 'p>(
     whole: &'t str,
     part: &'t str,
-    item_type: ItemType,
+    item_type: NodeType,
     symlink: Option<Expression<'t>>,
     ops: Vec<(&'t str, Operator<'t>)>,
-) -> std::result::Result<Properties<'t>, ParseError<'t>> {
-    let mut props = Properties::new(item_type, symlink);
+) -> std::result::Result<SchemaNode<'t>, ParseError<'t>> {
+    let part_parse_error = |e: anyhow::Error| ParseError::new(e.to_string(), whole, part, None);
+    let mut builder = SchemaNodeBuilder::new(
+        match item_type {
+            NodeType::Directory => NodeType::Directory,
+            NodeType::File => NodeType::File,
+        },
+        symlink,
+    );
     for (span, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
-            Operator::Match(expr) => props.match_expr(expr),
+            Operator::Match(expr) => builder.match_pattern(Pattern::Regex(expr)),
 
             // Operators that apply to this item
-            Operator::Use { name } => props.use_definition(name),
-            Operator::Mode(mode) => props.mode(mode),
-            Operator::Owner(owner) => props.owner(owner),
-            Operator::Group(group) => props.group(group),
-            Operator::Source(source) => match item_type {
-                ItemType::File => props.source(source),
-                ItemType::Directory => {
-                    return Err(ParseError::new(
-                        "Only files can have a #source".into(),
-                        whole,
-                        span,
-                        None,
-                    ));
-                }
-            },
+            Operator::Use { name } => builder.use_definition(name),
+            Operator::Mode(mode) => builder.mode(mode),
+            Operator::Owner(owner) => builder.owner(owner),
+            Operator::Group(group) => builder.group(group),
+            Operator::Source(source) => builder.source(source),
 
             // Operators that apply to child items
-            Operator::Let { name, expr } => props.let_var(name, expr),
+            Operator::Let { name, expr } => builder.let_var(name, expr),
             Operator::Item {
                 binding,
                 is_directory,
                 link,
                 children,
             } => {
-                if let ItemType::File = item_type {
-                    return Err(ParseError::new(
-                        "Files cannot have child items. If this was meant to be a directory, add a /".into(),
-                        whole,
-                        span,
-                        None,
-                    ));
-                }
                 let sub_item_type = match is_directory {
-                    false => ItemType::File,
-                    true => ItemType::Directory,
+                    false => NodeType::File,
+                    true => NodeType::Directory,
                 };
-                let properties =
-                    schema_properties(whole, span, sub_item_type, link, children).map_err(|e| {
+                let item_node =
+                    schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Problem within \"{}\"", binding),
                             whole,
@@ -137,7 +123,7 @@ fn schema_properties<'t, 'p>(
                             Some(Box::new(e)),
                         )
                     })?;
-                props.add_entry(binding, properties)
+                builder.add_entry(binding, item_node)
             }
             Operator::Def {
                 name,
@@ -145,7 +131,7 @@ fn schema_properties<'t, 'p>(
                 link,
                 children,
             } => {
-                if let ItemType::File = item_type {
+                if let NodeType::File = item_type {
                     return Err(ParseError::new(
                         format!("Files cannot have child items"),
                         whole,
@@ -154,11 +140,11 @@ fn schema_properties<'t, 'p>(
                     ));
                 }
                 let sub_item_type = match is_directory {
-                    false => ItemType::File,
-                    true => ItemType::Directory,
+                    false => NodeType::File,
+                    true => NodeType::Directory,
                 };
                 let properties =
-                    schema_properties(whole, span, sub_item_type, link, children).map_err(|e| {
+                    schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
                             format!("Error within definition \"{}\"", name),
                             whole,
@@ -176,11 +162,13 @@ fn schema_properties<'t, 'p>(
                 //         None,
                 //     ));
                 // }
-                props.define(name, properties)
+                builder.define(name, properties)
             }
-        }.map_err(|s| ParseError::new(s, whole, span, None))?
+        }
+        .map_err(|s| ParseError::new(s.to_string(), whole, span, None))?
     }
-    Ok(props)
+    // TODO: Handle error spans, child errors?, etc.
+    builder.build().map_err(part_parse_error)
 }
 
 fn indentation(level: usize) -> impl Fn(&str) -> Res<&str, &str> {
@@ -249,12 +237,6 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
             ),
         )))(s)
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum ItemType {
-    Directory,
-    File,
 }
 
 #[derive(Debug, Clone, PartialEq)]

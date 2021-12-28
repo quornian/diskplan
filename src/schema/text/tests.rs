@@ -10,10 +10,9 @@ use nom::{
 };
 
 use crate::schema::{
-    criteria::Match,
     expr::{Expression, Identifier, Token},
     text::{def_header, end_of_lines, indentation, operator, parse_schema, Operator},
-    Binding, DirectorySchema, FileSchema, Schema,
+    Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
 };
 
 #[test]
@@ -37,19 +36,19 @@ fn test_extraneous_whitespace() {
     let text = "dir/";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
     // Trailing whitespace
     let text = "dir/\n\n";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
     // Preceding whitespace
     let text = "\n\ndir/";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, Schema::Directory(DirectorySchema { entries, .. }) if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
 }
 
@@ -563,19 +562,27 @@ fn test_symlink_directory() {
         "
     ))
     .unwrap();
-    let (sub_match, sub_schema) = match &schema {
-        Schema::Directory(DirectorySchema { entries, .. }) => &entries[0],
+    let (bind, node) = match &schema {
+        SchemaNode {
+            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            ..
+        } => &entries[0],
         _ => panic!(),
     };
-    assert_eq!(sub_match, &Match::Fixed("directory"));
-    let symlink = match sub_schema {
-        Schema::Directory(DirectorySchema { symlink, .. }) => symlink,
+    assert_eq!(bind, &Binding::Static("directory"));
+    let (symlink, entries) = match node {
+        SchemaNode {
+            symlink,
+            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            ..
+        } => (symlink, entries),
         _ => panic!(),
     };
+    assert_eq!(entries.len(), 0);
     assert_eq!(
         symlink,
         &Some(Expression::new(vec![Token::Text("/another/place")]))
-    )
+    );
 }
 
 #[test]
@@ -587,17 +594,24 @@ fn test_symlink_file() {
         "
     ))
     .unwrap();
-    let (sub_match, sub_schema) = match &schema {
-        Schema::Directory(DirectorySchema { entries, .. }) => &entries[0],
+    let (bind, node) = match &schema {
+        SchemaNode {
+            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            ..
+        } => &entries[0],
         _ => panic!(),
     };
-    assert_eq!(sub_match, &Match::Fixed("file"));
-    let symlink = match sub_schema {
-        Schema::File(FileSchema { symlink, .. }) => symlink,
+    assert_eq!(bind, &Binding::Static("file"));
+    let symlink = match node {
+        SchemaNode {
+            symlink,
+            schema: Schema::File(FileSchema { .. }),
+            ..
+        } => symlink,
         _ => panic!(),
     };
     assert_eq!(
         symlink,
         &Some(Expression::new(vec![Token::Text("/another/place")]))
-    )
+    );
 }

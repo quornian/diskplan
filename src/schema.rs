@@ -135,7 +135,7 @@ use anyhow::{anyhow, Result};
 use std::{collections::HashMap, fmt::Display};
 
 mod criteria;
-pub use criteria::Match;
+pub use criteria::Pattern;
 
 mod expr;
 pub use expr::{Expression, Identifier, Token};
@@ -147,6 +147,25 @@ mod text;
 pub use text::{parse_schema, ParseError};
 
 /// A node in an abstract directory hierarchy
+#[derive(Debug, Clone, PartialEq)]
+pub struct SchemaNode<'t> {
+    /// Condition against which to match file/directory names
+    pub pattern: Option<Pattern<'t>>,
+
+    /// Symlink target - if this produces a symbolic link. Operates on the target end.
+    pub symlink: Option<Expression<'t>>,
+
+    /// Links to other schemas `#use`d by this one (found in parent [`DirectorySchema`] definitions)
+    pub uses: Vec<Identifier<'t>>,
+
+    /// Properties of this file/directory
+    pub meta: Meta<'t>,
+
+    /// Properties specific to the underlying (file or directory) type
+    pub schema: Schema<'t>,
+}
+
+/// File/directory specific aspects of a node in the tree
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema<'t> {
     Directory(DirectorySchema<'t>),
@@ -161,12 +180,43 @@ where
 }
 
 impl<'t> Merge for Option<Box<Schema<'t>>> {
-    fn merge(&self, other: &Option<Box<Schema<'t>>>) -> Result<Self> {
+    fn merge(&self, other: &Self) -> Result<Self> {
         match (self, other) {
             (_, None) => Ok(self.clone()),
             (None, _) => Ok(other.clone()),
             (Some(a), Some(b)) => a.merge(b).map(Box::new).map(Some),
         }
+    }
+}
+
+impl<'t> Merge for SchemaNode<'t> {
+    fn merge(&self, other: &Self) -> Result<Self> {
+        let pattern = match (&self.pattern, &other.pattern) {
+            (Some(_), Some(_)) => Err(anyhow!(
+                "Cannot merge two entries that both have match conditions"
+            )),
+            (pattern @ Some(_), _) => Ok(pattern),
+            (_, pattern) => Ok(pattern),
+        }?;
+        let symlink = match (&self.symlink, &other.symlink) {
+            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two entries that are both symlinks")),
+            (link @ Some(_), _) => Ok(link),
+            (_, link) => Ok(link),
+        }?;
+        let mut uses = Vec::with_capacity(self.uses.len() + other.uses.len());
+        for use_ in &self.uses {
+            uses.push(use_.clone());
+        }
+        for use_ in &other.uses {
+            uses.push(use_.clone());
+        }
+        Ok(SchemaNode {
+            pattern: pattern.clone(),
+            symlink: symlink.clone(),
+            uses,
+            meta: self.meta.merge(&other.meta),
+            schema: self.schema.merge(&other.schema)?,
+        })
     }
 }
 
@@ -189,97 +239,59 @@ impl<'t> Merge for Schema<'t> {
 /// A DirectorySchema is a container of variables, definitions (named schemas) and a directory listing
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct DirectorySchema<'t> {
-    /// Symlink target, if this is a symbolic link
-    symlink: Option<Expression<'t>>,
-
-    /// Links to other schemas `#use`d by this one
-    uses: Vec<Identifier<'t>>,
-
     /// Text replacement variables
     vars: HashMap<Identifier<'t>, Expression<'t>>,
 
     /// Definitions of sub-schemas
-    defs: HashMap<Identifier<'t>, Schema<'t>>,
-
-    /// Properties of this directory
-    meta: Meta<'t>,
+    defs: HashMap<Identifier<'t>, SchemaNode<'t>>,
 
     /// Disk entries to be created within this directory
-    entries: Vec<(Match<'t>, Schema<'t>)>,
+    entries: Vec<(Binding<'t>, SchemaNode<'t>)>,
 }
 
 impl<'t> DirectorySchema<'t> {
     pub fn new(
-        symlink: Option<Expression<'t>>,
-        uses: Vec<Identifier<'t>>,
         vars: HashMap<Identifier<'t>, Expression<'t>>,
-        defs: HashMap<Identifier<'t>, Schema<'t>>,
-        meta: Meta<'t>,
-        entries: Vec<(Match<'t>, Schema<'t>)>,
+        defs: HashMap<Identifier<'t>, SchemaNode<'t>>,
+        entries: Vec<(Binding<'t>, SchemaNode<'t>)>,
     ) -> Self {
         let mut entries = entries;
-        entries.sort_by(|(match_a, _), (match_b, _)| {
-            match_a
-                .partial_cmp(match_b)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        entries.sort_by(|(a, _), (b, _)| a.cmp(b));
         DirectorySchema {
-            symlink,
-            uses,
             vars,
             defs,
-            meta,
             entries,
         }
-    }
-    pub fn symlink(&self) -> Option<&Expression> {
-        self.symlink.as_ref()
     }
     pub fn vars(&self) -> &HashMap<Identifier, Expression> {
         &self.vars
     }
-    pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, Schema> {
+    pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, SchemaNode> {
         &self.defs
     }
-    pub fn meta(&self) -> &Meta<'t> {
-        &self.meta
-    }
-    pub fn entries(&self) -> impl Iterator<Item = &(Match, Schema)> {
-        self.entries.iter()
+    pub fn entries(&self) -> &[(Binding, SchemaNode)] {
+        &self.entries[..]
     }
 }
 
 impl Merge for DirectorySchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
-        let symlink = match (&self.symlink, &other.symlink) {
-            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two directories with symlink targets")),
-            (link @ Some(_), _) => Ok(link),
-            (_, link) => Ok(link),
-        }?;
         let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
         vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
         vars.extend(other.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
         let mut defs = HashMap::with_capacity(self.defs.len() + other.defs.len());
         defs.extend(self.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
         defs.extend(other.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let meta = self.meta.merge(&other.meta);
         let mut entries = Vec::with_capacity(self.entries.len() + other.entries.len());
         entries.extend(self.entries.iter().cloned());
         entries.extend(other.entries.iter().cloned());
-        Ok(DirectorySchema::new(
-            symlink.clone(),
-            Vec::new(), // Assuming a merge is the #use'd #def being merged in
-            vars,
-            defs,
-            meta,
-            entries,
-        ))
+        Ok(DirectorySchema::new(vars, defs, entries))
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Binding<'t> {
-    Static(&'t str),
+    Static(&'t str), // Static is ordered first
     Dynamic(Identifier<'t>),
 }
 
@@ -294,39 +306,14 @@ impl Display for Binding<'_> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileSchema<'t> {
-    /// Symlink target, if this is a symbolic link
-    symlink: Option<Expression<'t>>,
-
-    /// Links to other schemas `#use`d by this one
-    uses: Vec<Identifier<'t>>,
-
-    /// Properties of this directory
-    meta: Meta<'t>,
-
     /// Path to the resource to be copied as file content
     // TODO: Make source enum: Enforce(...), Default(...) latter only creates if missing
     source: Expression<'t>,
 }
 
 impl<'t> FileSchema<'t> {
-    pub fn new(
-        symlink: Option<Expression<'t>>,
-        uses: Vec<Identifier<'t>>,
-        meta: Meta<'t>,
-        source: Expression<'t>,
-    ) -> Self {
-        FileSchema {
-            symlink,
-            uses,
-            meta,
-            source,
-        }
-    }
-    pub fn symlink(&self) -> Option<&Expression> {
-        self.symlink.as_ref()
-    }
-    pub fn meta(&self) -> &Meta<'t> {
-        &self.meta
+    pub fn new(source: Expression<'t>) -> Self {
+        FileSchema { source }
     }
     pub fn source(&self) -> &Expression<'t> {
         &self.source
@@ -335,12 +322,6 @@ impl<'t> FileSchema<'t> {
 
 impl Merge for FileSchema<'_> {
     fn merge(&self, other: &Self) -> Result<Self> {
-        let symlink = match (&self.symlink, &other.symlink) {
-            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two directories with symlink targets")),
-            (link @ Some(_), _) => Ok(link),
-            (_, link) => Ok(link),
-        }?;
-        let meta = self.meta.merge(&other.meta);
         let source = match (self.source.tokens().len(), other.source.tokens().len()) {
             (_, 0) => self.source.clone(),
             (0, _) => other.source.clone(),
@@ -352,11 +333,6 @@ impl Merge for FileSchema<'_> {
                 ))
             }
         };
-        Ok(FileSchema::new(
-            symlink.clone(),
-            Vec::new(), // Assuming a merge is the #use'd #def being merged in
-            meta,
-            source,
-        ))
+        Ok(FileSchema::new(source))
     }
 }

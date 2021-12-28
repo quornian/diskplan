@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Expression<'t>(Vec<Token<'t>>);
 
 impl Expression<'_> {
@@ -22,7 +22,7 @@ impl Display for Expression<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Token<'t> {
     Text(&'t str),
     Variable(Identifier<'t>),
@@ -37,7 +37,7 @@ impl Display for Token<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Identifier<'t>(&'t str);
 
 impl<'t> Identifier<'t> {
