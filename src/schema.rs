@@ -266,6 +266,9 @@ impl<'t> DirectorySchema<'t> {
     pub fn vars(&self) -> &HashMap<Identifier, Expression> {
         &self.vars
     }
+    pub fn get_var<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a Expression<'t>> {
+        self.vars.get(id)
+    }
     pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, SchemaNode> {
         &self.defs
     }
