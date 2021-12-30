@@ -1,6 +1,10 @@
 use anyhow::{anyhow, Context as _, Result};
 use clap::{App, Arg};
-use diskplan::schema::{parse_schema, Identifier};
+use diskplan::{
+    filesystem,
+    schema::{parse_schema, Identifier},
+    traverse::traverse,
+};
 use std::{fs::File, io::Read, path::Path};
 
 fn main() -> Result<()> {
@@ -55,11 +59,11 @@ fn main() -> Result<()> {
     })()
     .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
-    let schema = parse_schema(&content)
+    let schema_root = parse_schema(&content)
         .map_err(|e| anyhow!("{}", e))
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
-    // let mut context = Context::new(&schema, Path::new(target), Path::new("."));
+    let fs = filesystem::MemoryFilesystem::new();
 
     // if let Some(keyvalues) = matches.values_of("let") {
     //     let keys = keyvalues.clone().into_iter().step_by(2);
@@ -75,27 +79,25 @@ fn main() -> Result<()> {
     // }
     // let context = context;
 
-    // // println!("{:#?}", schema);
+    traverse(&schema_root, &fs, target)?;
 
-    // //print_tree(&schema);
+    print_tree("/", &fs, 0)?;
 
-    // //println!("before");
-    // let actions = gather_actions(&context)?;
-    // //println!("after");
+    Ok(())
+}
 
-    // for action in actions {
-    //     if apply {
-    //         println!("Performing action: {:?}", action);
-    //         match action {
-    //             Action::CreateDirectory { path, meta } => install::install_directory(&path, &meta)?,
-    //             Action::CreateFile { path, source, meta } => {
-    //                 install::install_file(&path, &source, &meta)?
-    //             }
-    //             Action::CreateSymlink { path, target } => install::install_link(&path, &target)?,
-    //         }
-    //     } else {
-    //         println!("Would perform action: {:?}", action);
-    //     }
-    // }
+fn print_tree<FS>(path: &str, fs: &FS, depth: usize) -> Result<()>
+where
+    FS: filesystem::Filesystem,
+{
+    let (_, name) = filesystem::split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
+    let dir = fs.is_directory(path);
+    println!("{0:1$}{2}{3}", "", depth, name, if dir { "/" } else { "" });
+    if fs.is_directory(path) {
+        for child in fs.list_directory(path)? {
+            let child = filesystem::join(path, &child);
+            print_tree(&child, fs, depth + 1)?;
+        }
+    }
     Ok(())
 }

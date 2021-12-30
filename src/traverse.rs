@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, path::Path};
 
 use anyhow::Result;
 
@@ -6,13 +6,17 @@ mod eval;
 mod pattern;
 
 use crate::{
-    schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
+    filesystem::{self, Filesystem},
+    schema::{Binding, DirectorySchema, FileSchema, Identifier, Schema, SchemaNode},
     traverse::{eval::evaluate, pattern::CompiledPattern},
 };
 
-pub fn traverse<'a>(root: &'a SchemaNode<'_>) -> Result<()> {
-    let mut stack = Vec::new();
-    traverse_over(&root, &mut stack)
+pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &FS, target: &str) -> Result<()>
+where
+    FS: Filesystem,
+{
+    let mut stack = vec![];
+    traverse_over(&root, &mut stack, filesystem, target)
 }
 
 enum Scope<'a> {
@@ -21,15 +25,22 @@ enum Scope<'a> {
 }
 
 // TODO: Error handling: include stack in result and format as traceback
-fn traverse_over<'a>(node: &'a SchemaNode<'_>, stack: &mut Vec<Scope<'a>>) -> Result<()> {
+fn traverse_over<'a, FS>(
+    node: &'a SchemaNode<'_>,
+    stack: &mut Vec<Scope<'a>>,
+    filesystem: &FS,
+    path: &str,
+) -> Result<()>
+where
+    FS: Filesystem,
+{
     match node.schema {
         Schema::Directory(ref directory) => {
-            // FIXME: Pull from FS
-            let mut listing = "existing1\nexisting2"
-                .lines()
+            let mut listing = filesystem
+                .list_directory(path)
+                .unwrap_or_else(|_| vec![])
                 .into_iter()
-                .map(String::from)
-                .map(Option::Some)
+                .map(Some)
                 .collect();
 
             stack.push(Scope::Directory(directory));
@@ -37,18 +48,17 @@ fn traverse_over<'a>(node: &'a SchemaNode<'_>, stack: &mut Vec<Scope<'a>>) -> Re
             for (binding, child_node) in directory.entries() {
                 let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack)?;
                 for name in marked_matches(&mut listing, binding, pattern) {
-                    println!(
-                        "{0:1$}Create {2} (bound to: {3:?})",
-                        "",
-                        stack.len(),
-                        name,
-                        binding
-                    );
+                    let child_path = filesystem::join(path, name.as_ref());
+
+                    create(child_node, &child_path, filesystem, stack)?;
+
                     match binding {
-                        Binding::Static(_) => traverse_over(child_node, stack)?,
+                        Binding::Static(_) => {
+                            traverse_over(child_node, stack, filesystem, &child_path)?
+                        }
                         Binding::Dynamic(var) => {
                             stack.push(Scope::Binding(var, name.into()));
-                            traverse_over(child_node, stack)?;
+                            traverse_over(child_node, stack, filesystem, &child_path)?;
                             stack.pop();
                         }
                     }
@@ -60,6 +70,26 @@ fn traverse_over<'a>(node: &'a SchemaNode<'_>, stack: &mut Vec<Scope<'a>>) -> Re
         Schema::File(ref file) => {
             let source = evaluate(file.source(), stack)?;
             println!("{0:1$}#source {2}", "", stack.len(), source);
+        }
+    }
+    Ok(())
+}
+
+fn create<FS>(node: &SchemaNode, path: &str, filesystem: &FS, stack: &mut Vec<Scope>) -> Result<()>
+where
+    FS: Filesystem,
+{
+    match &node.schema {
+        Schema::Directory(_) => {
+            if !filesystem.is_directory(path) {
+                filesystem.create_directory(path)?;
+            }
+        }
+        Schema::File(file) => {
+            if !filesystem.is_file(path) {
+                // FIXME: Copy file, don't create one with the contents of the source
+                filesystem.create_file(path, evaluate(file.source(), stack)?)?;
+            }
         }
     }
     Ok(())
