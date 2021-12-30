@@ -2,16 +2,19 @@ use std::{cell::RefCell, collections::HashMap};
 
 use anyhow::{anyhow, Result};
 
-use super::{split, Filesystem};
+use super::{join, split, Filesystem};
 
+#[derive(Debug)]
 pub struct MemoryFilesystem {
     inner: RefCell<Inner>,
 }
 
+#[derive(Debug)]
 struct Inner {
     map: HashMap<String, Node>,
 }
 
+#[derive(Debug)]
 enum Node {
     File { content: String },
     Directory { children: Vec<String> },
@@ -127,7 +130,7 @@ impl Inner {
             _ => panic!("Parent can only be a directory"),
         }
         // Insert full path and node into map
-        self.map.insert(path.into(), node);
+        self.map.insert(join(&parent, name), node);
         Ok(())
     }
 

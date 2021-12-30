@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::Path};
+use std::borrow::Cow;
 
 use anyhow::Result;
 
@@ -6,8 +6,8 @@ mod eval;
 mod pattern;
 
 use crate::{
-    filesystem::{self, Filesystem},
-    schema::{Binding, DirectorySchema, FileSchema, Identifier, Schema, SchemaNode},
+    filesystem::{self, parent, Filesystem},
+    schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traverse::{eval::evaluate, pattern::CompiledPattern},
 };
 
@@ -34,43 +34,39 @@ fn traverse_over<'a, FS>(
 where
     FS: Filesystem,
 {
-    match node.schema {
-        Schema::Directory(ref directory) => {
-            let mut listing = filesystem
-                .list_directory(path)
-                .unwrap_or_else(|_| vec![])
-                .into_iter()
-                .map(Some)
-                .collect();
+    // Create this entry, following symlinks
+    create(node, &path, filesystem, stack)?;
 
-            stack.push(Scope::Directory(directory));
+    // Traverse over children
+    if let Schema::Directory(ref directory) = node.schema {
+        let mut listing = filesystem
+            .list_directory(path)
+            .unwrap_or_else(|_| vec![])
+            .into_iter()
+            .map(Some)
+            .collect();
 
-            for (binding, child_node) in directory.entries() {
-                let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack)?;
-                for name in marked_matches(&mut listing, binding, pattern) {
-                    let child_path = filesystem::join(path, name.as_ref());
+        stack.push(Scope::Directory(directory));
 
-                    create(child_node, &child_path, filesystem, stack)?;
+        for (binding, child_node) in directory.entries() {
+            let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack)?;
+            for name in marked_matches(&mut listing, binding, pattern) {
+                let child_path = filesystem::join(path, name.as_ref());
 
-                    match binding {
-                        Binding::Static(_) => {
-                            traverse_over(child_node, stack, filesystem, &child_path)?
-                        }
-                        Binding::Dynamic(var) => {
-                            stack.push(Scope::Binding(var, name.into()));
-                            traverse_over(child_node, stack, filesystem, &child_path)?;
-                            stack.pop();
-                        }
+                match binding {
+                    Binding::Static(_) => {
+                        traverse_over(child_node, stack, filesystem, &child_path)?
+                    }
+                    Binding::Dynamic(var) => {
+                        stack.push(Scope::Binding(var, name.into()));
+                        traverse_over(child_node, stack, filesystem, &child_path)?;
+                        stack.pop();
                     }
                 }
             }
+        }
 
-            stack.pop();
-        }
-        Schema::File(ref file) => {
-            let source = evaluate(file.source(), stack)?;
-            println!("{0:1$}#source {2}", "", stack.len(), source);
-        }
+        stack.pop();
     }
     Ok(())
 }
@@ -79,6 +75,25 @@ fn create<FS>(node: &SchemaNode, path: &str, filesystem: &FS, stack: &mut Vec<Sc
 where
     FS: Filesystem,
 {
+    let target;
+    let mut path = path;
+    if let Some(expr) = &node.symlink {
+        target = evaluate(expr, stack)?;
+
+        // TODO: Come up with a better way to specify parent structure when following symlinks
+        if let Some(parent) = parent(&target) {
+            if !filesystem.exists(parent) {
+                eprintln!(
+                    "WARNING: Parent directory for symlink target does not exist, creating: {} \
+                    (for {} -> {})",
+                    parent, path, target
+                );
+                filesystem.create_directory_all(parent)?;
+            }
+        }
+        filesystem.create_symlink(path, target.clone())?;
+        path = &target;
+    }
     match &node.schema {
         Schema::Directory(_) => {
             if !filesystem.is_directory(path) {

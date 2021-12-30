@@ -1,3 +1,5 @@
+//! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
+//! amd virtual ([`MemoryFilesystem`]) implementation.
 use anyhow::Result;
 
 mod memory;
@@ -8,6 +10,18 @@ pub use physical::DiskFilesystem;
 
 pub trait Filesystem {
     fn create_directory(&self, path: &str) -> Result<()>;
+
+    fn create_directory_all(&self, path: &str) -> Result<()> {
+        if let Some((parent, _)) = split(path) {
+            if parent != "/" {
+                self.create_directory_all(parent)?;
+            }
+        }
+        if !self.is_directory(path) {
+            self.create_directory(path)?;
+        }
+        Ok(())
+    }
 
     fn create_file(&self, path: &str, content: String) -> Result<()>;
 
