@@ -1,11 +1,11 @@
 //! A system for specifying abstract directory trees and applying them to disk.
 //!
-//! # Schemas
+//! # Schema Tree
 //!
-//! Diskplan uses a simple language to define its tree of filesystem nodes.
-//! Here is the skeleton of an example [`schema`]:
+//! Diskplan uses a simple language to define a tree of files, directories and symlinks.
+//! Here is the skeleton of an example schema tree:
 //! ```
-//! let schema = diskplan::schema::parse_schema(
+//! let schema_root = diskplan::schema::parse_schema(
 //! # concat!(
 //! "
 //! top_level_directory/
@@ -22,6 +22,7 @@
 //!         ...
 //! # */, "
 //!         symlink_file -> ...
+//! #             #source example
 //! # " /*
 //!             ...
 //! # */, "
@@ -34,9 +35,11 @@
 //! )?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-//! Directory entries are named, with sub-directories signfied by a slash, symlinks with an arrow.
+//! Directory entries are named, sub-directories are signfied by a slash, symlinks by an arrow.
 //!
-//! Further to the above skeleton example:
+//! Tags (prefixed by a `#`) are used to set properties of a node. Variables are used to
+//!
+//! Further to the above skeleton:
 //! * Files must specify a `#source` with a local path to the file's content
 //! * Properties of any level can be set using `#owner`, `#group` and `#mode` tags
 //! * Entries in the tree can be given names with `#def` and reused elsewhere with `#use`
@@ -47,93 +50,74 @@
 //! using all of the above features:
 //!
 //! ```
-//! let schema = diskplan::schema::parse_schema(
+//! let schema_root = diskplan::schema::parse_schema(
 //! "
-//! #let remote_disk = /net/remote
-//!
-//! #mode 777
-//!
-//! #def admin_directory/
-//!     #owner admin
-//!     #group admin
-//!     #mode 750
-//!
-//! $zone/
-//!     #match zone_[a-z]
-//!
-//!     description.md
-//!         #source resources/common_zone_description.md
-//!
-//!     admin/
-//!         #use admin_directory
-//!
-//!         zone_image.img
-//!             #source ${remote_disk}/resources/${zone}.img
-//!
-//!         storage/ -> ${remote_disk}/storage_pool/${zone}/
-//!             database.db
-//!                 #source resources/empty_database.db
-//!
+#![doc = include_str!("doc/fragments/schema")]
 //! "
 //! )?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! # Application
-//!
-//! To look at how a schema would apply to a directory on disk, we first associate the two with a
-//! [`Context`][context::Context] object, and then run [`gather_actions`][apply::gather_actions]:
+//! Given this existing structure in the filesystem:
 //! ```
-//! use std::path::Path;
-//! use diskplan::{schema::parse_schema, context::Context, apply::gather_actions};
+//! let input_tree = "
+#![doc = include_str!("doc/fragments/input_tree")]
+//! ";
+//! ```
 //!
-//! // Construct a Schema
-//! let schema = parse_schema("
+//! This output structure is produced:
+//! ```
+//! let output_tree = "
+#![doc = include_str!("doc/fragments/output_tree")]
+//! ";
+//! #
+//! # // Now verify it so our docs are always correct
+//! # let target = "/local";
+//! # use diskplan::{doctests::verify_trees, schema::parse_schema};
+//! # let schema_root = parse_schema(include_str!("doc/fragments/schema"))?;
+//! # let input_tree = include_str!("doc/fragments/input_tree");
+//! # verify_trees(&schema_root, input_tree, output_tree, target)?;
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! # Traversal
+//!
+//! To look at how a schema tree would apply to a directory on disk, we need a
+//! [`Filesystem`][crate::filesystem::Filesystem] to apply it to, and a starting path.
+//!
+//! We can use the in-memory filesystem to test:
+//! ```
+//! use diskplan::{
+//!     filesystem::{Filesystem, MemoryFilesystem},
+//!     traverse::traverse,
+//!     schema::parse_schema
+//! };
+//!
+//! // Construct a schema
+//! let schema_root = parse_schema("
 //! directory/
 //!     #mode 777
 //! ")?;
 //!
 //! // Define the target location to apply it
-//! let target = Path::new("/tmp/root");
+//! let target = "/local";
 //!
-//! // Build the initial, root level Context
-//! let context = Context::new(&schema, target, Path::new("."));
+//! // Construct the initial filesystem
+//! let fs = MemoryFilesystem::new();
 //!
-//! // Collect the actions to be performed, and print them out
-//! let actions = gather_actions(&context)?;
-//! for action in actions {
-//!     println!("Would apply: {:#?}", action);
-//! }
+//! // Run the traversal to apply the tree to the filesystem
+//! fs.create_directory(target);
+//! traverse(&schema_root, &fs, target)?;
+//!
+//! assert!(fs.is_directory("/local/directory"));
+//! #
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! ```text
-//! Would apply: CreateDirectory {
-//!     path: "/tmp/root",
-//!     meta: Meta {
-//!         owner: None,
-//!         group: None,
-//!         mode: None,
-//!     },
-//! }
-//! Would apply: CreateDirectory {
-//!     path: "/tmp/root/directory",
-//!     meta: Meta {
-//!         owner: None,
-//!         group: None,
-//!         mode: Some(
-//!             511,
-//!         ),
-//!     },
-//! }
-//! ```
-//!
-//! See the [`install`] module for how to apply actions to the filesystem.
-//!
 
 pub mod filesystem;
-// pub mod apply;
-// pub mod context;
-// pub mod install;
 pub mod schema;
 pub mod traverse;
+
+#[cfg(doctest)]
+pub mod doctests;

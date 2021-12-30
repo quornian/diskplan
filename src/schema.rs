@@ -1,4 +1,4 @@
-//! Provides [Schema] and the means to constuct a schema from text form ([parse_schema]).
+//! Provides the means to constuct a tree of [SchemaNode]s from text form ([parse_schema]).
 //!
 //! The language of the text form uses significant whitespace (four spaces) for each level. It
 //! distinguishes between files and directories by the lack or presence of a `/`, and whether

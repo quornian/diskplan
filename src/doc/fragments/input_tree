@@ -1,0 +1,7 @@
+/
+├── net/
+│   └── remote/
+└── local/
+    ├── non_zone/
+    ├── zone_a/
+    └── zone_b/
