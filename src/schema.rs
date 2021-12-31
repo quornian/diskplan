@@ -28,8 +28,8 @@
 //!
 //! The top level of a schema describes a directory, whose [metadata][Meta] may be set by `#owner`, `#group` and `#mode` tags:
 //! ```
-//! use diskplan::schema::*;
 //! use indoc::indoc;
+//! use diskplan::schema::*;
 //!
 //! let text = indoc!(
 //! "
@@ -39,16 +39,12 @@
 //! "
 //! );
 //!
-//! let schema = parse_schema(text)?;
+//! let schema_root = parse_schema(text)?;
 //!
-//! let directory: DirectorySchema = match schema {
-//!     Schema::Directory(directory) => directory,
-//!     _ => panic!("Expected Schema::Directory")
-//! };
-//!
-//! assert_eq!(directory.meta().owner(), Some("person"));
-//! assert_eq!(directory.meta().group(), Some("user"));
-//! assert_eq!(directory.meta().mode(), Some(0o777));
+//! assert!(matches!(schema_root.schema, Schema::Directory(_)));
+//! assert_eq!(schema_root.meta.owner, Some("person"));
+//! assert_eq!(schema_root.meta.group, Some("user"));
+//! assert_eq!(schema_root.meta.mode, Some(0o777));
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -69,9 +65,9 @@
 //! "
 //! # );
 //! // ...
-//! # match parse_schema(text)? {
+//! # match parse_schema(text)?.schema {
 //! #     Schema::Directory(directory) => {
-//! assert_eq!(directory.entries().count(), 2);
+//! assert_eq!(directory.entries().len(), 2);
 //! #     }
 //! #     _ => panic!("Expected directory schema")
 //! # }
@@ -97,19 +93,19 @@
 //! "
 //! # );
 //! // ...
-//! # match parse_schema(text)? {
+//! # match parse_schema(text)?.schema {
 //! #     Schema::Directory(directory) => {
 //! #
-//! let link_entry: &SchemaEntry = directory.entries().next().unwrap();
+//! let (binding, node) = directory.entries().first().unwrap();
 //! assert!(matches!(
-//!     link_entry.criteria,
-//!     Match::Fixed(ref name) if name == &String::from("example_link")
+//!     binding,
+//!     Binding::Static(ref name) if name == &String::from("example_link")
 //! ));
-//! assert!(matches!(
-//!     link_entry.subschema,
-//!     Subschema::Original(Schema::Directory(ds @ DirectorySchema { .. }))
-//!     if matches!(ds.symlink(), Some("/another/disk/example_target/")
-//! ));
+//! assert_eq!(
+//!     node.symlink.as_ref().unwrap().to_string(),
+//!     String::from("/another/disk/example_target/")
+//! );
+//! assert!(matches!(node.schema, Schema::Directory(_)));
 //! #
 //! #     }
 //! #     _ => panic!("Expected directory schema")

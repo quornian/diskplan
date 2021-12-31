@@ -30,7 +30,6 @@ pub fn verify_trees(
 
     // Apply schema
     traverse(&schema_root, &fs, target)?;
-    println!("{}", fs.all_paths().join("\n"));
 
     // Check tree matches expected output tree
     for entry in parse_tree(out_tree)? {

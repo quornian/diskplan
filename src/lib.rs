@@ -119,5 +119,6 @@ pub mod filesystem;
 pub mod schema;
 pub mod traverse;
 
-#[cfg(doctest)]
+//#[cfg(test)]
+#[doc(hidden)]
 pub mod doctests;
