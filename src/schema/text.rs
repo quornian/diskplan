@@ -333,7 +333,10 @@ fn identifier(s: &str) -> Res<&str, Identifier> {
 /// Expression, such as "static/$varA/${varB}v2/${NAME}"
 ///
 fn expression(s: &str) -> Res<&str, Expression> {
-    map(many1(alt((non_variable, variable))), Expression::new)(s)
+    map(
+        consumed(many1(alt((non_variable, variable)))),
+        |(expr, tokens)| Expression::from_parsed(expr, tokens),
+    )(s)
 }
 
 /// A sequence of characters that are not part of any variable
