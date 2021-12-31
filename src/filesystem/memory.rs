@@ -1,6 +1,6 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use super::{join, split, Filesystem};
 
@@ -32,20 +32,37 @@ impl MemoryFilesystem {
     }
 }
 
+fn normalize(path: &str) -> Cow<'_, str> {
+    let mut path = Cow::Borrowed(path);
+    while path.contains("//") {
+        path = Cow::Owned(path.replace("//", "/"));
+    }
+    while path.contains("/./") {
+        path = Cow::Owned(path.replace("/./", "/"));
+    }
+    path
+}
+
 impl Filesystem for MemoryFilesystem {
     fn create_directory(&self, path: &str) -> Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.insert_node(path, Node::Directory { children: vec![] })
+        inner
+            .insert_node(path, Node::Directory { children: vec![] })
+            .with_context(|| format!("Creating directory: {}", path))
     }
 
     fn create_file(&self, path: &str, content: String) -> Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.insert_node(path, Node::File { content })
+        inner
+            .insert_node(path, Node::File { content })
+            .with_context(|| format!("Creating file: {}", path))
     }
 
     fn create_symlink(&self, path: &str, target: String) -> Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.insert_node(path, Node::Symlink { target })
+        inner
+            .insert_node(path, Node::Symlink { target })
+            .with_context(|| format!("Creating symlink: {}", path))
     }
 
     fn exists(&self, path: &str) -> bool {
@@ -75,23 +92,18 @@ impl Filesystem for MemoryFilesystem {
 
     fn list_directory(&self, path: &str) -> Result<Vec<String>> {
         let inner = self.inner.borrow();
-        match inner
-            .dereference(path)
-            .and_then(|path| inner.map.get(&path))
-        {
+        match inner.map.get(&inner.dereference(path)?) {
             None => Err(anyhow!("No such file or directory: {}", path)),
             Some(Node::Directory { children }) => Ok(children.clone()),
             Some(Node::File { .. }) => Err(anyhow!("Tried to list directory of a file")),
             Some(Node::Symlink { .. }) => unreachable!("Dereferenced"),
         }
+        .with_context(|| format!("Listing directory: {}", path))
     }
 
     fn read_file(&self, path: &str) -> Result<String> {
         let inner = self.inner.borrow();
-        match inner
-            .dereference(path)
-            .and_then(|path| inner.map.get(&path))
-        {
+        match inner.map.get(&inner.dereference(path)?) {
             None => Err(anyhow!("No such file or directory: {}", path)),
             Some(Node::File { content }) => Ok(content.clone()),
             Some(Node::Directory { .. }) => Err(anyhow!("Tried to read a directory")),
@@ -111,19 +123,22 @@ impl Filesystem for MemoryFilesystem {
 
 impl Inner {
     fn insert_node(&mut self, path: &str, node: Node) -> Result<()> {
+        let path = normalize(path);
+
         // Check it doesn't already exist
-        if self.map.contains_key(path) {
+        if self.map.contains_key(path.as_ref()) {
             return Err(anyhow!("File exists: {:?}", path));
         }
         // Get the parent node and file name
-        let (parent, name) = split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
+        let (parent, name) = split(path.as_ref()).ok_or_else(|| anyhow!("No parent: {}", path))?;
         let parent = self
             .dereference(parent)
-            .ok_or_else(|| anyhow!("No such file or directory: {}", parent))?;
+            .with_context(|| format!("Dereferencing {}", parent))?;
         let parent_node = self
             .map
             .get_mut(&parent)
-            .ok_or_else(|| anyhow!("Outside filesystem: {}", parent))?;
+            .ok_or_else(|| anyhow!("Outside filesystem: {}", parent))
+            .with_context(|| format!("Dereferencing {}", parent))?;
         // Insert name into parent
         match parent_node {
             Node::Directory { ref mut children } => children.push(name.into()),
@@ -134,14 +149,16 @@ impl Inner {
         Ok(())
     }
 
-    fn dereference(&self, path: &str) -> Option<String> {
-        let mut path: String = path.into();
-        loop {
-            match self.map.get(&path) {
-                Some(Node::Symlink { target }) => path = target.clone(),
-                Some(_) => break Some(path),
-                None => break None,
-            }
+    fn dereference(&self, path: &str) -> Result<String> {
+        let path = normalize(path);
+        match self.map.get(path.as_ref()) {
+            Some(Node::Symlink { target }) => self.dereference(target),
+            Some(_) => Ok(path.into_owned()),
+            None => Err(anyhow!(
+                "No such file or directory: {}\n{:#?}",
+                path,
+                self.map
+            )),
         }
     }
 }
