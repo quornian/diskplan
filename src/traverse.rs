@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 mod eval;
 mod pattern;
@@ -17,6 +17,7 @@ where
 {
     let mut stack = vec![];
     traverse_over(&root, &mut stack, filesystem, target)
+        .with_context(|| format!("Traversing over {}", target.to_owned()))
 }
 
 enum Scope<'a> {
@@ -35,7 +36,7 @@ where
     FS: Filesystem,
 {
     // Create this entry, following symlinks
-    create(node, &path, filesystem, stack)?;
+    create(node, path, filesystem, stack)?;
 
     // Traverse over children
     if let Schema::Directory(ref directory) = node.schema {
@@ -54,12 +55,13 @@ where
                 let child_path = filesystem::join(path, name.as_ref());
 
                 match binding {
-                    Binding::Static(_) => {
-                        traverse_over(child_node, stack, filesystem, &child_path)?
-                    }
+                    Binding::Static(_) => traverse_over(child_node, stack, filesystem, &child_path)
+                        .with_context(|| format!("Creating static {}", child_path))?,
                     Binding::Dynamic(var) => {
                         stack.push(Scope::Binding(var, name.into()));
-                        traverse_over(child_node, stack, filesystem, &child_path)?;
+                        traverse_over(child_node, stack, filesystem, &child_path).with_context(
+                            || format!("Creating dynamic (as ${}) {}", var, child_path),
+                        )?;
                         stack.pop();
                     }
                 }
@@ -71,7 +73,7 @@ where
     Ok(())
 }
 
-fn create<FS>(node: &SchemaNode, path: &str, filesystem: &FS, stack: &mut Vec<Scope>) -> Result<()>
+fn create<FS>(node: &SchemaNode, path: &str, filesystem: &FS, stack: &[Scope]) -> Result<()>
 where
     FS: Filesystem,
 {
@@ -88,22 +90,30 @@ where
                     (for {} -> {})",
                     parent, path, target
                 );
-                filesystem.create_directory_all(parent)?;
+                filesystem
+                    .create_directory_all(parent)
+                    .context("Creating parent directories")?;
             }
         }
-        filesystem.create_symlink(path, target.clone())?;
+        filesystem
+            .create_symlink(path, target.clone())
+            .context("Creating as symlink")?;
         path = &target;
     }
     match &node.schema {
         Schema::Directory(_) => {
             if !filesystem.is_directory(path) {
-                filesystem.create_directory(path)?;
+                filesystem
+                    .create_directory(path)
+                    .context("Creating as directory")?;
             }
         }
         Schema::File(file) => {
             if !filesystem.is_file(path) {
                 // FIXME: Copy file, don't create one with the contents of the source
-                filesystem.create_file(path, evaluate(file.source(), stack)?)?;
+                filesystem
+                    .create_file(path, evaluate(file.source(), stack)?)
+                    .context("Creating as file")?;
             }
         }
     }
