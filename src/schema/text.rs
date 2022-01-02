@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_a, is_not, tag},
     character::complete::{alpha1, alphanumeric1, char, line_ending, space0, space1},
-    combinator::{all_consuming, consumed, eof, map, opt, recognize},
+    combinator::{all_consuming, consumed, eof, map, opt, recognize, value},
     error::{context, VerboseError, VerboseErrorKind},
     multi::{count, many0, many1},
     sequence::{delimited, pair, preceded, tuple},
@@ -19,7 +19,7 @@ use builder::SchemaNodeBuilder;
 mod error;
 pub use error::ParseError;
 
-use super::{Binding, Pattern, SchemaNode};
+use super::{expr::Special, Binding, Pattern, SchemaNode};
 
 #[derive(Debug)]
 pub enum NodeType {
@@ -348,13 +348,38 @@ fn non_variable(s: &str) -> Res<&str, Token> {
 /// A variable name, optionally braced, prefixed by a dollar sign, such as `${example}`
 ///
 fn variable(s: &str) -> Res<&str, Token> {
-    map(
-        preceded(
-            char('$'),
-            alt((delimited(char('{'), identifier, char('}')), identifier)),
-        ),
-        Token::Variable,
-    )(s)
+    let braced = |parser| alt((delimited(char('{'), parser, char('}')), parser));
+    let vars = |s| {
+        alt((
+            value(
+                Token::Special(Special::PathRelative),
+                tag(Special::SAME_PATH_RELATIVE),
+            ),
+            value(
+                Token::Special(Special::PathAbsolute),
+                tag(Special::SAME_PATH_ABSOLUTE),
+            ),
+            value(
+                Token::Special(Special::PathNameOnly),
+                tag(Special::SAME_PATH_NAME),
+            ),
+            value(
+                Token::Special(Special::ParentRelative),
+                tag(Special::PARENT_PATH_RELATIVE),
+            ),
+            value(
+                Token::Special(Special::ParentAbsolute),
+                tag(Special::PARENT_PATH_ABSOLUTE),
+            ),
+            value(
+                Token::Special(Special::ParentNameOnly),
+                tag(Special::PARENT_PATH_NAME),
+            ),
+            value(Token::Special(Special::RootPath), tag(Special::ROOT_PATH)),
+            map(identifier, Token::Variable),
+        ))(s)
+    };
+    preceded(char('$'), braced(vars))(s)
 }
 
 #[cfg(test)]

@@ -1,6 +1,8 @@
 //! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
 //! amd virtual ([`MemoryFilesystem`]) implementation.
-use anyhow::Result;
+use std::borrow::Cow;
+
+use anyhow::{anyhow, Result};
 
 mod memory;
 mod physical;
@@ -42,13 +44,21 @@ pub trait Filesystem {
     fn read_link(&self, path: &str) -> Result<String>;
 }
 
+pub fn name(path: &str) -> &str {
+    path.rfind('/')
+        .map_or_else(|| path, |index| &path[index + 1..])
+}
+
 pub fn parent(path: &str) -> Option<&str> {
     path.rfind('/').map(|index| &path[..index])
 }
 
 pub fn join(path: &str, child: &str) -> String {
-    // TODO: Consider join(parent, "/absolute/child")
-    format!("{}/{}", path.trim_end_matches('/'), child)
+    format!(
+        "{}/{}",
+        path.trim_end_matches('/'),
+        child.trim_start_matches('/')
+    )
 }
 
 pub fn split(path: &str) -> Option<(&str, &str)> {
@@ -60,4 +70,52 @@ pub fn split(path: &str) -> Option<(&str, &str)> {
             (parent, child)
         }
     })
+}
+
+pub fn normalize(path: &str) -> Cow<'_, str> {
+    let mut path = Cow::Borrowed(path);
+    while path.contains("//") {
+        path = Cow::Owned(path.replace("//", "/"));
+    }
+    while path.contains("/./") {
+        path = Cow::Owned(path.replace("/./", "/"));
+    }
+    path
+}
+
+pub struct SplitPath<'a> {
+    root: &'a str,
+    full: String,
+}
+
+impl<'a> SplitPath<'a> {
+    pub fn new(root: &'a str) -> Result<Self> {
+        match root.starts_with("/") {
+            false => Err(anyhow!("Root must be an absolute path")),
+            true => Ok(SplitPath {
+                root: root,
+                full: root.to_owned(),
+            }),
+        }
+    }
+
+    pub fn root(&self) -> &str {
+        self.root
+    }
+
+    pub fn absolute(&self) -> &str {
+        &self.full
+    }
+
+    pub fn relative(&self) -> &str {
+        self.full.strip_prefix(self.root).unwrap()
+    }
+
+    pub fn join(&self, path: &str) -> Self {
+        let path = normalize(path);
+        SplitPath {
+            root: self.root,
+            full: join(&self.full, &path),
+        }
+    }
 }

@@ -1,8 +1,8 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap};
 
 use anyhow::{anyhow, Context, Result};
 
-use super::{join, split, Filesystem};
+use super::{join, normalize, split, Filesystem};
 
 #[derive(Debug)]
 pub struct MemoryFilesystem {
@@ -30,17 +30,6 @@ impl MemoryFilesystem {
             inner: RefCell::new(Inner { map }),
         }
     }
-}
-
-fn normalize(path: &str) -> Cow<'_, str> {
-    let mut path = Cow::Borrowed(path);
-    while path.contains("//") {
-        path = Cow::Owned(path.replace("//", "/"));
-    }
-    while path.contains("/./") {
-        path = Cow::Owned(path.replace("/./", "/"));
-    }
-    path
 }
 
 impl Filesystem for MemoryFilesystem {

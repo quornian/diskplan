@@ -1,7 +1,7 @@
 use anyhow::Result;
 use regex::Regex;
 
-use crate::schema::Pattern;
+use crate::{filesystem::SplitPath, schema::Pattern};
 
 use super::{eval::evaluate, Scope};
 
@@ -12,12 +12,16 @@ pub(super) enum CompiledPattern<'a> {
 }
 
 impl<'a> CompiledPattern<'a> {
-    pub fn compile(pattern: Option<&Pattern<'a>>, stack: &[Scope]) -> Result<CompiledPattern<'a>> {
+    pub fn compile(
+        pattern: Option<&Pattern<'a>>,
+        stack: &[Scope],
+        path: &SplitPath,
+    ) -> Result<CompiledPattern<'a>> {
         Ok(match pattern {
             None => CompiledPattern::Any,
             Some(Pattern::Fixed(fixed)) => CompiledPattern::Fixed(fixed),
             Some(Pattern::Regex(expr)) => {
-                let pattern = evaluate(expr, stack)?;
+                let pattern = evaluate(expr, stack, path)?;
                 Regex::new(&pattern)?; // Ensure it's valid before encasing to avoid injection
                 CompiledPattern::Regex(Regex::new(&format!("^(?:{})$", pattern))?)
             }

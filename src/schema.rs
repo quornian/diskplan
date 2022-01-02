@@ -134,7 +134,7 @@ mod criteria;
 pub use criteria::Pattern;
 
 mod expr;
-pub use expr::{Expression, Identifier, Token};
+pub use expr::{Expression, Identifier, Special, Token};
 
 mod meta;
 pub use meta::Meta;

@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 
-use crate::schema::{Expression, Identifier, Token};
+use crate::{
+    filesystem::{name, parent, SplitPath},
+    schema::{Expression, Identifier, Special, Token},
+};
 
 use super::Scope;
 
@@ -9,7 +12,11 @@ enum Value<'a> {
     String(&'a str),
 }
 
-pub(super) fn evaluate<'a>(expr: &Expression<'_>, stack: &[Scope]) -> Result<String> {
+pub(super) fn evaluate<'a>(
+    expr: &Expression<'_>,
+    stack: &[Scope],
+    path: &SplitPath,
+) -> Result<String> {
     let mut value = String::new();
     for token in expr.tokens() {
         match token {
@@ -19,10 +26,25 @@ pub(super) fn evaluate<'a>(expr: &Expression<'_>, stack: &[Scope]) -> Result<Str
                     anyhow!("Undefined variable '{}' in expression '{}'", var, expr)
                 })?;
                 match sub {
-                    Value::Expression(expr) => value.push_str(&evaluate(expr, stack)?),
+                    Value::Expression(expr) => value.push_str(&evaluate(expr, stack, path)?),
                     Value::String(s) => value.push_str(s),
                 }
             }
+            Token::Special(special) => value.push_str(match special {
+                Special::PathAbsolute => path.absolute(),
+                Special::PathRelative => path.relative(),
+                Special::PathNameOnly => name(path.relative()),
+                Special::ParentAbsolute => parent(path.absolute())
+                    .ok_or_else(|| anyhow!("Path has no parent: {}", path.absolute()))?,
+
+                Special::ParentRelative => parent(path.relative())
+                    .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?,
+                Special::ParentNameOnly => name(
+                    parent(path.relative())
+                        .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?,
+                ),
+                Special::RootPath => path.root(),
+            }),
         }
     }
     Ok(value)

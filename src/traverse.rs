@@ -6,7 +6,7 @@ mod eval;
 mod pattern;
 
 use crate::{
-    filesystem::{self, parent, Filesystem},
+    filesystem::{parent, Filesystem, SplitPath},
     schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traverse::{eval::evaluate, pattern::CompiledPattern},
 };
@@ -16,13 +16,23 @@ where
     FS: Filesystem,
 {
     let mut stack = vec![];
-    traverse_over(&root, &mut stack, filesystem, target)
+    traverse_over(&root, &mut stack, filesystem, &SplitPath::new(target)?)
         .with_context(|| format!("Traversing over {}", target.to_owned()))
 }
 
+#[derive(Debug)]
 enum Scope<'a> {
     Directory(&'a DirectorySchema<'a>),
     Binding(&'a Identifier<'a>, String),
+}
+
+impl Scope<'_> {
+    pub fn as_binding(&self) -> Option<(&Identifier, &String)> {
+        match self {
+            Scope::Binding(id, value) => Some((id, value)),
+            _ => None,
+        }
+    }
 }
 
 // TODO: Error handling: include stack in result and format as traceback
@@ -30,18 +40,18 @@ fn traverse_over<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: &mut Vec<Scope<'a>>,
     filesystem: &FS,
-    path: &str,
+    path: &SplitPath,
 ) -> Result<()>
 where
     FS: Filesystem,
 {
     // Create this entry, following symlinks
-    create(node, path, filesystem, stack)?;
+    create(node, stack, filesystem, &path)?;
 
     // Traverse over children
     if let Schema::Directory(ref directory) = node.schema {
         let mut listing = filesystem
-            .list_directory(path)
+            .list_directory(path.absolute())
             .unwrap_or_else(|_| vec![])
             .into_iter()
             .map(Some)
@@ -50,17 +60,31 @@ where
         stack.push(Scope::Directory(directory));
 
         for (binding, child_node) in directory.entries() {
-            let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack)?;
+            // Note: Since we don't know the name of the thing we're matching yet, any path
+            // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
+            // using the parent directory
+            let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack, &path)?;
+
             for name in marked_matches(&mut listing, binding, pattern) {
-                let child_path = filesystem::join(path, name.as_ref());
+                let child_path = path.join(name.as_ref());
 
                 match binding {
                     Binding::Static(_) => traverse_over(child_node, stack, filesystem, &child_path)
-                        .with_context(|| format!("Creating static {}", child_path))?,
+                        .with_context(|| format!("Creating {}", child_path.absolute()))?,
                     Binding::Dynamic(var) => {
+                        let top = stack.len();
                         stack.push(Scope::Binding(var, name.into()));
                         traverse_over(child_node, stack, filesystem, &child_path).with_context(
-                            || format!("Creating dynamic (as ${}) {}", var, child_path),
+                            || {
+                                format!(
+                                    "Creating {}, setting {}",
+                                    child_path.absolute(),
+                                    &stack[top]
+                                        .as_binding()
+                                        .map(|(var, value)| format!("${} = {}", var, value))
+                                        .unwrap_or_else(|| "(no binding on stack)".into()),
+                                )
+                            },
                         )?;
                         stack.pop();
                     }
@@ -73,22 +97,27 @@ where
     Ok(())
 }
 
-fn create<FS>(node: &SchemaNode, path: &str, filesystem: &FS, stack: &[Scope]) -> Result<()>
+fn create<FS>(node: &SchemaNode, stack: &[Scope], filesystem: &FS, path: &SplitPath) -> Result<()>
 where
     FS: Filesystem,
 {
+    let target_str;
     let target;
     let mut path = path;
     if let Some(expr) = &node.symlink {
-        target = evaluate(expr, stack)?;
+        target_str = evaluate(expr, stack, path)?;
+        target = SplitPath::new(&target_str)
+            .with_context(|| format!("Following symlink {} -> {}", path.absolute(), target_str))?;
 
         // TODO: Come up with a better way to specify parent structure when following symlinks
-        if let Some(parent) = parent(&target) {
+        if let Some(parent) = parent(&target.absolute()) {
             if !filesystem.exists(parent) {
                 eprintln!(
                     "WARNING: Parent directory for symlink target does not exist, creating: {} \
                     (for {} -> {})",
-                    parent, path, target
+                    parent,
+                    path.absolute(),
+                    target.absolute()
                 );
                 filesystem
                     .create_directory_all(parent)
@@ -96,23 +125,24 @@ where
             }
         }
         filesystem
-            .create_symlink(path, target.clone())
+            .create_symlink(path.absolute(), target.absolute().to_owned())
             .context("Creating as symlink")?;
+
         path = &target;
     }
     match &node.schema {
         Schema::Directory(_) => {
-            if !filesystem.is_directory(path) {
+            if !filesystem.is_directory(path.absolute()) {
                 filesystem
-                    .create_directory(path)
+                    .create_directory(path.absolute())
                     .context("Creating as directory")?;
             }
         }
         Schema::File(file) => {
-            if !filesystem.is_file(path) {
+            if !filesystem.is_file(path.absolute()) {
                 // FIXME: Copy file, don't create one with the contents of the source
                 filesystem
-                    .create_file(path, evaluate(file.source(), stack)?)
+                    .create_file(path.absolute(), evaluate(file.source(), stack, path)?)
                     .context("Creating as file")?;
             }
         }

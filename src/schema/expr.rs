@@ -50,6 +50,27 @@ impl Display for Expression<'_> {
 pub enum Token<'t> {
     Text(&'t str),
     Variable(Identifier<'t>),
+    Special(Special),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Special {
+    PathRelative,
+    PathAbsolute,
+    PathNameOnly,
+    ParentRelative,
+    ParentAbsolute,
+    ParentNameOnly,
+    RootPath,
+}
+impl Special {
+    pub const SAME_PATH_RELATIVE: &'static str = "PATH";
+    pub const SAME_PATH_ABSOLUTE: &'static str = "FULL_PATH";
+    pub const SAME_PATH_NAME: &'static str = "NAME";
+    pub const PARENT_PATH_RELATIVE: &'static str = "PARENT_PATH";
+    pub const PARENT_PATH_ABSOLUTE: &'static str = "PARENT_FULL_PATH";
+    pub const PARENT_PATH_NAME: &'static str = "PARENT_NAME";
+    pub const ROOT_PATH: &'static str = "ROOT_PATH";
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
