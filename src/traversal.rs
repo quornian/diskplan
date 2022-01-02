@@ -8,7 +8,7 @@ mod pattern;
 use crate::{
     filesystem::{parent, Filesystem, SplitPath},
     schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
-    traverse::{eval::evaluate, pattern::CompiledPattern},
+    traversal::{eval::evaluate, pattern::CompiledPattern},
 };
 
 pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &FS, target: &str) -> Result<()>

@@ -4,7 +4,7 @@ use indoc::indoc;
 use crate::{
     filesystem::{Filesystem, MemoryFilesystem},
     schema::parse_schema,
-    traverse::traverse,
+    traversal::traverse,
 };
 
 #[test]

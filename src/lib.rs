@@ -89,7 +89,7 @@
 //! ```
 //! use diskplan::{
 //!     filesystem::{Filesystem, MemoryFilesystem},
-//!     traverse::traverse,
+//!     traversal::traverse,
 //!     schema::parse_schema
 //! };
 //!
@@ -117,7 +117,7 @@
 
 pub mod filesystem;
 pub mod schema;
-pub mod traverse;
+pub mod traversal;
 
 //#[cfg(test)]
 #[doc(hidden)]

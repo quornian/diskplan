@@ -3,7 +3,7 @@ use clap::{App, Arg};
 use diskplan::{
     filesystem,
     schema::{parse_schema, Identifier},
-    traverse::traverse,
+    traversal::traverse,
 };
 use std::{fs::File, io::Read, path::Path};
 

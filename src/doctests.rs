@@ -4,7 +4,7 @@ use regex::Regex;
 use crate::{
     filesystem::{Filesystem, MemoryFilesystem},
     schema::SchemaNode,
-    traverse::traverse,
+    traversal::traverse,
 };
 
 pub fn verify_trees(
