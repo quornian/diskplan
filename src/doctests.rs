@@ -1,7 +1,8 @@
+// Note: Included in lib.rs doctests via `include!()` macro
 use anyhow::Result;
 use regex::Regex;
 
-use crate::{
+use diskplan::{
     filesystem::{Filesystem, MemoryFilesystem},
     schema::SchemaNode,
     traversal::traverse,

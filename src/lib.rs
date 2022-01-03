@@ -72,11 +72,12 @@
 //! ";
 //! #
 //! # // Now verify it so our docs are always correct
+//! # mod doctests { include!{"doctests.rs"} }
+//! # use diskplan::schema::parse_schema;
 //! # let target = "/local";
-//! # use diskplan::{doctests::verify_trees, schema::parse_schema};
 //! # let schema_root = parse_schema(include_str!("doc/fragments/schema"))?;
 //! # let input_tree = include_str!("doc/fragments/input_tree");
-//! # verify_trees(&schema_root, input_tree, output_tree, target)?;
+//! # doctests::verify_trees(&schema_root, input_tree, output_tree, target)?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -92,6 +93,7 @@
 //!     traversal::traverse,
 //!     schema::parse_schema
 //! };
+//! # mod doctests { include!{"doctests.rs"} }
 //!
 //! // Construct a schema
 //! let schema_root = parse_schema("
@@ -118,7 +120,3 @@
 pub mod filesystem;
 pub mod schema;
 pub mod traversal;
-
-//#[cfg(test)]
-#[doc(hidden)]
-pub mod doctests;
