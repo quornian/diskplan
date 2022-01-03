@@ -13,7 +13,7 @@
 //!     ...
 //! # */, "
 //!     file
-//! #         #source example
+//! #         #source /src/example
 //! # " /*
 //!         ...
 //! # */, "
@@ -22,7 +22,7 @@
 //!         ...
 //! # */, "
 //!         symlink_file -> ...
-//! #             #source example
+//! #             #source /src/example
 //! # " /*
 //!             ...
 //! # */, "

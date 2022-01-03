@@ -11,7 +11,7 @@ $zone/
     #match zone_[a-z]
 
     description.md
-        #source resources/common_zone_description.md
+        #source ${remote_disk}/resources/common_zone_description.md
 
     admin/
         #use admin_directory
@@ -21,4 +21,4 @@ $zone/
 
         storage/ -> ${remote_disk}/storage_pool/${zone}
             database.db
-                #source resources/empty_database.db
+                #source ${remote_disk}/resources/empty_database.db

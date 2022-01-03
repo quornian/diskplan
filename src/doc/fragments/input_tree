@@ -1,6 +1,11 @@
 /
 ├── net/
 │   └── remote/
+│       └── resources/
+│           ├── common_zone_description.md
+│           ├── empty_database.db
+│           ├── zone_a.img
+│           └── zone_b.img
 └── local/
     ├── non_zone/
     ├── zone_a/
