@@ -28,18 +28,13 @@
 //!
 //! The top level of a schema describes a directory, whose [metadata][Meta] may be set by `#owner`, `#group` and `#mode` tags:
 //! ```
-//! use indoc::indoc;
 //! use diskplan::schema::*;
 //!
-//! let text = indoc!(
-//! "
+//! let schema_root = parse_schema("
 //!     #owner person
 //!     #group user
 //!     #mode 777
-//! "
-//! );
-//!
-//! let schema_root = parse_schema(text)?;
+//! ")?;
 //!
 //! assert!(matches!(schema_root.schema, Schema::Directory(_)));
 //! assert_eq!(schema_root.meta.owner, Some("person"));
@@ -50,11 +45,10 @@
 //!
 //! A [DirectorySchema] may contain sub-directories, files...
 //! ```
-//! # use indoc::indoc;
 //! # use diskplan::schema::*;
 //! #
 //! // ...
-//! # let text = indoc!(
+//! # let text =
 //! "
 //!     subdirectory/
 //!         #owner admin
@@ -63,7 +57,7 @@
 //!     file_name
 //!         #source content/example_file
 //! "
-//! # );
+//! # ;
 //! // ...
 //! # match parse_schema(text)?.schema {
 //! #     Schema::Directory(directory) => {
@@ -78,11 +72,10 @@
 //! ...and symlinks to directories and files (with its sub-schema applied to the target):
 //!
 //! ```
-//! # use indoc::indoc;
 //! # use diskplan::schema::*;
 //! #
 //! // ...
-//! # let text = indoc!(
+//! # let text =
 //! "
 //!     example_link/ -> /another/disk/example_target/
 //!         #owner admin
@@ -91,7 +84,7 @@
 //!         file_to_create_at_target_end
 //!             #source content/example_file
 //! "
-//! # );
+//! # ;
 //! // ...
 //! # match parse_schema(text)?.schema {
 //! #     Schema::Directory(directory) => {
@@ -120,7 +113,20 @@
 //!
 //! ## Variable Substitution
 //!
-//! **TODO**: Document `#let` and the use of variables in expressions
+//! Variables can be used to drive construction, for example:
+//! ```
+//! # let text =
+//! "
+//!     #let asset_type = character
+//!     #let asset_name = Monkey
+//!
+//!     assets/
+//!         $asset_type/
+//!             $asset/
+//!                 reference/
+//! "
+//! # ;
+//! ```
 //!
 //! ## Schema Reuse
 //!

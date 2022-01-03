@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Result};
 
 use super::{join, normalize, split, Filesystem};
 
+/// An in-memory representation of a file system
 #[derive(Debug)]
 pub struct MemoryFilesystem {
     inner: RefCell<Inner>,

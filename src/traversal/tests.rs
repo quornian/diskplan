@@ -1,5 +1,4 @@
 use anyhow::Result;
-use indoc::indoc;
 
 use crate::{
     filesystem::{Filesystem, MemoryFilesystem},
@@ -9,14 +8,14 @@ use crate::{
 
 #[test]
 fn test_traverse() -> Result<()> {
-    let schema_root = parse_schema(indoc!(
+    let schema_root = parse_schema(
         "
         subdir/
         $any/
             deeper
                 #source res/$any
         ",
-    ))
+    )
     .unwrap();
     let filesystem = MemoryFilesystem::new();
     traverse(&schema_root, &filesystem, "/")?;
@@ -26,12 +25,12 @@ fn test_traverse() -> Result<()> {
 
 #[test]
 fn test_create_directory() -> Result<()> {
-    let root = parse_schema(indoc!(
+    let root = parse_schema(
         "
         subdir/
             subsubdir/
-    "
-    ))?;
+        ",
+    )?;
     // Initialize root for filesystem
     let fs = MemoryFilesystem::new();
     assert!(!fs.is_directory("/primary"));
@@ -48,13 +47,13 @@ fn test_create_directory() -> Result<()> {
 
 #[test]
 fn test_create_file() -> Result<()> {
-    let root = parse_schema(indoc!(
+    let root = parse_schema(
         "
         subdirlink/
             subfile
                 #source /resource/file
-    "
-    ))?;
+        ",
+    )?;
     // Initialize filesystem
     let fs = MemoryFilesystem::new();
     fs.create_directory("/primary")?;
@@ -76,13 +75,13 @@ fn test_create_file() -> Result<()> {
 
 #[test]
 fn test_create_symlink() -> Result<()> {
-    let root = parse_schema(indoc!(
+    let root = parse_schema(
         "
         subdirlink/ -> /secondary/${NAME}
             subfile
                 #source /resource/file
-    "
-    ))?;
+        ",
+    )?;
     // Initialize filesystem
     let fs = MemoryFilesystem::new();
     fs.create_directory("/primary")?;

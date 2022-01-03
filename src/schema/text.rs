@@ -28,29 +28,39 @@ pub enum NodeType {
 }
 
 pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
+    // Strip several levels of initial indentation to help with indented literal schemas
+    let any_indent = |s| {
+        opt(alt((
+            many1(operator(0)),
+            many1(operator(1)),
+            many1(operator(2)),
+            many1(operator(3)),
+            many1(operator(4)),
+        )))(s)
+    };
     // Parse and process entire schema and handle any errors that arise
-    let (_, ops) =
-        all_consuming(preceded(many0(blank_line), many0(operator(0))))(&text).map_err(|e| {
-            let e = match e {
-                nom::Err::Error(e) | nom::Err::Failure(e) => e,
-                nom::Err::Incomplete(_) => unreachable!(),
-            };
-            let mut error = None;
-            for (r, e) in e.errors.iter().rev() {
-                error = Some(ParseError::new(
-                    match e {
-                        VerboseErrorKind::Nom(p) => {
-                            format!("Invalid token while looking for: {:?}", p)
-                        }
-                        _ => format!("Error parsing {:?}", e),
-                    },
-                    text,
-                    r,
-                    error.map(Box::new),
-                ));
-            }
-            error.unwrap()
-        })?;
+    let (_, ops) = all_consuming(preceded(many0(blank_line), any_indent))(&text).map_err(|e| {
+        let e = match e {
+            nom::Err::Error(e) | nom::Err::Failure(e) => e,
+            nom::Err::Incomplete(_) => unreachable!(),
+        };
+        let mut error = None;
+        for (r, e) in e.errors.iter().rev() {
+            error = Some(ParseError::new(
+                match e {
+                    VerboseErrorKind::Nom(p) => {
+                        format!("Invalid token while looking for: {:?}", p)
+                    }
+                    _ => format!("Error parsing {:?}", e),
+                },
+                text,
+                r,
+                error.map(Box::new),
+            ));
+        }
+        error.unwrap()
+    })?;
+    let ops = ops.unwrap_or_else(Vec::new);
     let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
     if schema_node.pattern.is_some() {
         return Err(ParseError::new(

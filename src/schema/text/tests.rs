@@ -1,6 +1,5 @@
 use std::vec;
 
-use indoc::indoc;
 use nom::{
     branch::alt,
     character::complete::{alphanumeric1, line_ending},
@@ -11,7 +10,7 @@ use nom::{
 
 use crate::schema::{
     expr::{Expression, Identifier, Token},
-    text::{def_header, end_of_lines, indentation, operator, parse_schema, Operator},
+    text::{blank_line, def_header, end_of_lines, indentation, operator, parse_schema, Operator},
     Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
 };
 
@@ -19,6 +18,17 @@ use crate::schema::{
 fn test_invalid_space() {
     assert!(parse_schema("okay_entry/").is_ok());
     assert!(parse_schema("invalid entry/").is_err());
+}
+
+#[test]
+fn test_indentation() {
+    assert!(operator(0)("entry/").is_ok());
+    assert!(operator(0)("  entry/").is_err());
+    assert!(operator(1)("  entry/").is_err());
+    assert!(operator(1)("    entry/").is_ok());
+
+    assert!(parse_schema("entry/").is_ok());
+    assert!(parse_schema("    entry/").is_ok());
 }
 
 #[test]
@@ -85,28 +95,28 @@ fn test_operator_span() {
 
 #[test]
 fn test_invalid_child() {
-    parse_schema(indoc!(
+    parse_schema(
         "
         okay_entry
             #source /tmp
-        "
-    ))
+        ",
+    )
     .unwrap();
-    parse_schema(indoc!(
+    parse_schema(
         "
         okay_entry/
             child
                 #source /tmp
-        "
-    ))
+        ",
+    )
     .unwrap();
-    assert!(parse_schema(indoc!(
+    assert!(parse_schema(
         "
         okay_entry
             child
                 #source /tmp
         "
-    ))
+    )
     .is_err());
 }
 
@@ -295,32 +305,36 @@ fn test_trailing_whitespace() {
 
 #[test]
 fn test_multiline_meta_ops() {
-    let s = indoc!(
-        "
+    let s = "
         #mode 777
         #owner usr-1
         #group grpX
         "
-    );
-    let t = indoc!(
-        "
-        #owner usr-1
-        #group grpX
-        "
-    );
-    let u = indoc!(
-        "
-        #group grpX
-        "
-    );
-    assert_eq!(operator(0)(s), Ok((t, (&s[0..10], Operator::Mode(0o777)))));
+    .strip_prefix("\n")
+    .unwrap();
+
+    let line = "        #mode 777\n";
+    let pos = s.find(line).unwrap();
+    let end = pos + line.len();
+    let t = &s[end..];
     assert_eq!(
-        operator(0)(t),
-        Ok((u, (&s[10..23], Operator::Owner("usr-1"))))
+        operator(2)(s),
+        Ok((t, (&s[pos..end], Operator::Mode(0o777))))
     );
+
+    let line = "        #owner usr-1\n";
+    let pos = s.find(line).unwrap();
+    let end = pos + line.len();
+    let u = &s[end..];
     assert_eq!(
-        operator(0)(u),
-        Ok(("", (&s[23..], Operator::Group("grpX"))))
+        operator(2)(t),
+        Ok((u, (&s[pos..end], Operator::Owner("usr-1"))))
+    );
+    let line = "        #group grpX\n";
+    let pos = s.find(line).unwrap();
+    assert_eq!(
+        operator(2)(u),
+        Ok(("", (&s[pos..], Operator::Group("grpX"))))
     );
 }
 
@@ -382,26 +396,25 @@ fn test_def_with_newline() {
 
 #[test]
 fn test_def_with_block() {
-    let s = indoc!(
-        "
+    let s = "
         #def defined/
             file
             dir/
-        "
-    );
+    ";
     assert_eq!(
-        operator(0)(s),
+        preceded(many0(blank_line), operator(2))(s),
         Ok((
             "",
             (
-                s,
+                &s[1..], // Skip /n
                 Operator::Def {
                     name: Identifier::new("defined"),
                     is_directory: true,
                     link: None,
                     children: vec![
                         (
-                            &s[14..23],
+                            &s[s.find("            file").unwrap()
+                                ..s.find("            dir").unwrap()],
                             Operator::Item {
                                 binding: Binding::Static("file"),
                                 is_directory: false,
@@ -410,7 +423,7 @@ fn test_def_with_block() {
                             }
                         ),
                         (
-                            &s[23..],
+                            &s[s.find("            dir").unwrap()..],
                             Operator::Item {
                                 binding: Binding::Static("dir"),
                                 is_directory: true,
@@ -427,24 +440,22 @@ fn test_def_with_block() {
 
 #[test]
 fn test_usage() {
-    let s = indoc!(
-        "
+    let s = "
         #def defined/
             file
                 #source $emptyfile
         usage/
             #use defined
-        "
-    );
+        ";
     // Some important positions
-    let def_pos = 0;
-    let file_pos = s.find("    file").unwrap();
-    let source_pos = s.find("        #source").unwrap();
-    let usage_pos = s.find("usage").unwrap();
-    let use_pos = s.find("    #use").unwrap();
+    let def_pos = s.find("        #def").unwrap();
+    let file_pos = s.find("            file").unwrap();
+    let source_pos = s.find("                #source").unwrap();
+    let usage_pos = s.find("        usage").unwrap();
+    let use_pos = s.find("            #use").unwrap();
 
     // Test raw operators parsed from the "file"
-    let ops = many0(operator(0))(s);
+    let ops = preceded(many0(blank_line), many0(operator(2)))(s);
     assert_eq!(
         ops,
         Ok((
@@ -545,8 +556,7 @@ fn test_usage() {
 
 #[test]
 fn test_duplicate() {
-    let schema = indoc!(
-        "
+    let schema = "
         directory/
             #owner admin
 
@@ -554,8 +564,7 @@ fn test_duplicate() {
                 #owner admin
                 #mode 777
                 #owner admin
-        "
-    );
+        ";
     let pos = schema.rfind("#owner").unwrap();
     parse_schema(&schema[..pos]).unwrap();
 
@@ -564,16 +573,16 @@ fn test_duplicate() {
         ok => panic!("Unexpected: {:?}", ok),
     };
     let e = err.into_iter().last().unwrap();
-    assert_eq!(e.line_number(), 7);
+    assert_eq!(e.line_number(), 8);
 }
 
 #[test]
 fn test_symlink_directory() {
-    let schema = parse_schema(indoc!(
+    let schema = parse_schema(
         "
         directory/ -> /another/place
-        "
-    ))
+        ",
+    )
     .unwrap();
     let (bind, node) = match &schema {
         SchemaNode {
@@ -603,12 +612,12 @@ fn test_symlink_directory() {
 
 #[test]
 fn test_symlink_file() {
-    let schema = parse_schema(indoc!(
+    let schema = parse_schema(
         "
         file -> /another/place
             #source xxx
-        "
-    ))
+        ",
+    )
     .unwrap();
     let (bind, node) = match &schema {
         SchemaNode {

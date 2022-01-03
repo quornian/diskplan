@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use super::Filesystem;
 
+/// Access to a real file system
 pub struct DiskFilesystem;
 
 impl Filesystem for DiskFilesystem {

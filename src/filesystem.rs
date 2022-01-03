@@ -1,5 +1,5 @@
 //! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
-//! amd virtual ([`MemoryFilesystem`]) implementation.
+//! and virtual ([`MemoryFilesystem`]) implementation.
 use std::borrow::Cow;
 
 use anyhow::{anyhow, Result};
@@ -10,6 +10,7 @@ mod physical;
 pub use memory::MemoryFilesystem;
 pub use physical::DiskFilesystem;
 
+/// Operations of a file system
 pub trait Filesystem {
     fn create_directory(&self, path: &str) -> Result<()>;
 
