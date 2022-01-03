@@ -52,3 +52,32 @@ fn test_create_directory() -> Result<()> {
     assert!(fs.is_file("/tmp/new/one/foo"));
     Ok(())
 }
+
+#[test]
+fn test_create_symlink() -> Result<()> {
+    let root = parse_schema(indoc!(
+        "
+        subdirlink/ -> /secondary/${NAME}
+            subfile
+                #source /resource/file
+    "
+    ))?;
+    // Initialize filesystem
+    let fs = MemoryFilesystem::new();
+    fs.create_directory("/primary")?;
+    fs.create_directory("/resource")?;
+    fs.create_file("/resource/file", "FILE CONTENT".into())?;
+
+    traverse(&root, &fs, "/primary")
+        .map_err(|e| anyhow::anyhow!("{}\n{:#?}", e, fs))
+        .unwrap();
+
+    // Now check the outcome
+    assert_eq!(
+        fs.read_link("/primary/subdirlink")
+            .map_err(|e| e.to_string()),
+        Ok("/secondary/subdirlink".to_owned())
+    );
+    assert!(fs.is_file("/secondary/subdirlink/subfile"));
+    Ok(())
+}

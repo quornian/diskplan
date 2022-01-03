@@ -101,10 +101,9 @@ fn create<FS>(node: &SchemaNode, stack: &[Scope], filesystem: &FS, path: &SplitP
 where
     FS: Filesystem,
 {
-    let target_str;
     let target;
-    let mut path = path;
-    if let Some(expr) = &node.symlink {
+    let target_str;
+    let to_create = if let Some(expr) = &node.symlink {
         target_str = evaluate(expr, stack, path)?;
         target = SplitPath::new(&target_str)
             .with_context(|| format!("Following symlink {} -> {}", path.absolute(), target_str))?;
@@ -128,21 +127,23 @@ where
             .create_symlink(path.absolute(), target.absolute().to_owned())
             .context("Creating as symlink")?;
 
-        path = &target;
-    }
+        target.absolute()
+    } else {
+        path.absolute()
+    };
     match &node.schema {
         Schema::Directory(_) => {
-            if !filesystem.is_directory(path.absolute()) {
+            if !filesystem.is_directory(to_create) {
                 filesystem
-                    .create_directory(path.absolute())
+                    .create_directory(to_create)
                     .context("Creating as directory")?;
             }
         }
         Schema::File(file) => {
-            if !filesystem.is_file(path.absolute()) {
+            if !filesystem.is_file(to_create) {
                 // FIXME: Copy file, don't create one with the contents of the source
                 filesystem
-                    .create_file(path.absolute(), evaluate(file.source(), stack, path)?)
+                    .create_file(to_create, evaluate(file.source(), stack, path)?)
                     .context("Creating as file")?;
             }
         }
