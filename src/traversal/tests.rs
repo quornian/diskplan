@@ -29,27 +29,48 @@ fn test_create_directory() -> Result<()> {
     let root = parse_schema(indoc!(
         "
         subdir/
-            subfile
-                #source something
-        $var/
-            foo
-                #source /tmp/resource/$var.foo
+            subsubdir/
     "
     ))?;
     // Initialize root for filesystem
     let fs = MemoryFilesystem::new();
-    fs.create_directory("/tmp")?;
-    fs.create_directory("/tmp/new")?;
-
-    // Initialize an existing directory that will match the $var pattern
-    fs.create_directory("/tmp/new/one")?;
+    assert!(!fs.is_directory("/primary"));
 
     // TRAVERSE
-    traverse(&root, &fs, "/tmp/new")?;
+    traverse(&root, &fs, "/primary")?;
 
     // Now check the outcome
-    assert!(fs.is_directory("/tmp/new/one"));
-    assert!(fs.is_file("/tmp/new/one/foo"));
+    assert!(fs.is_directory("/primary"));
+    assert!(fs.is_directory("/primary/subdir"));
+    assert!(fs.is_directory("/primary/subdir/subsubdir"));
+    Ok(())
+}
+
+#[test]
+fn test_create_file() -> Result<()> {
+    let root = parse_schema(indoc!(
+        "
+        subdirlink/
+            subfile
+                #source /resource/file
+    "
+    ))?;
+    // Initialize filesystem
+    let fs = MemoryFilesystem::new();
+    fs.create_directory("/primary")?;
+    fs.create_directory("/resource")?;
+    fs.create_file("/resource/file", "FILE CONTENT".into())?;
+
+    traverse(&root, &fs, "/primary")
+        .map_err(|e| anyhow::anyhow!("{}\n{:#?}", e, fs))
+        .unwrap();
+
+    // Now check the outcome
+    assert!(fs.is_file("/primary/subdirlink/subfile"));
+    assert_eq!(
+        fs.read_file("/primary/subdirlink/subfile").unwrap(),
+        "FILE CONTENT".to_owned()
+    );
     Ok(())
 }
 

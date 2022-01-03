@@ -142,8 +142,10 @@ where
         Schema::File(file) => {
             if !filesystem.is_file(to_create) {
                 // FIXME: Copy file, don't create one with the contents of the source
+                let source = evaluate(file.source(), stack, path)?;
+                let source = filesystem.read_file(&source)?;
                 filesystem
-                    .create_file(to_create, evaluate(file.source(), stack, path)?)
+                    .create_file(to_create, source)
                     .context("Creating as file")?;
             }
         }
