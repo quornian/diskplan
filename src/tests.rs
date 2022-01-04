@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::Result;
 
 use crate::{
@@ -6,21 +8,18 @@ use crate::{
     traversal::traverse,
 };
 
-macro_rules! assert_effect {
+macro_rules! assert_effect_of {
     {
         applying:
             $text:literal
         onto:
             $root:literal
-        $(
-        containing:
             $(directories:
                 $($in_directory:literal)+ )?
             $(files:
                 $($in_file:literal [ $in_content:literal ])+ )?
             $(symlinks:
                 $($in_link:literal -> $in_target:literal)+ )?
-        )?
         yields:
             $(directories:
                 $($out_directory:literal)+ )?
@@ -35,28 +34,48 @@ macro_rules! assert_effect {
         let fs = MemoryFilesystem::new();
         let root = $root;
         // containing:
-        $(
-        $($(fs.create_directory($in_directory)?;)+)?
-        $($(fs.create_file($in_file, $in_content.to_owned())?;)+)?
-        $($(fs.create_symlink($in_link, $in_target.to_owned())?;)+)?
-        )?
+        let mut expected_paths: HashSet<String> = HashSet::new();
+        $($(
+            fs.create_directory($in_directory)?;
+            expected_paths.insert($in_directory.to_owned());
+        )+)?
+        $($(
+            fs.create_file($in_file, $in_content.to_owned())?;
+            expected_paths.insert($in_file.to_owned());
+        )+)?
+        $($(
+            fs.create_symlink($in_link, $in_target.to_owned())?;
+            expected_paths.insert($in_link.to_owned());
+        )+)?
         // yields:
         traverse(&node, &fs, root)?;
-        $($(assert!(fs.is_directory($out_directory));)+)?
+        expected_paths.insert("/".to_owned());
+        expected_paths.insert(root.to_owned());
+        $($(
+            assert!(fs.is_directory($out_directory));
+            expected_paths.insert($out_directory.to_owned());
+        )+)?
         $($(
             assert!(fs.is_file($out_file));
             assert_eq!(&fs.read_file($out_file)?, $out_content);
+            expected_paths.insert($out_file.to_owned());
         )+)?
         $($(
             assert!(fs.is_link($out_link));
             assert_eq!(&fs.read_link($out_link)?, $out_target);
+            expected_paths.insert($out_link.to_owned());
         )+)?
+        let actual_paths = fs.to_path_set();
+        let unaccounted: Vec<_> = actual_paths.difference(&expected_paths).collect();
+        if !unaccounted.is_empty() {
+            panic!("Paths unaccounted for: {:?}", unaccounted);
+        }
     }};
 }
 
 #[test]
 fn test_create_directory() -> Result<()> {
-    assert_effect! {
+    assert_effect_of! {
         applying: "
             subdir/
                 subsubdir/
@@ -74,7 +93,7 @@ fn test_create_directory() -> Result<()> {
 
 #[test]
 fn test_create_file() -> Result<()> {
-    assert_effect! {
+    assert_effect_of! {
         applying: "
             subdir/
                 subsubfile
@@ -82,15 +101,15 @@ fn test_create_file() -> Result<()> {
             subfile
                 #source /resource/file2
             "
-        onto:
-            "/primary"
-        containing:
+        onto: "/primary"
             directories:
                 "/resource"
             files:
                 "/resource/file1" ["FILE CONTENT 1"]
                 "/resource/file2" ["FILE CONTENT 2"]
         yields:
+            directories:
+                "/primary/subdir"
             files:
                 "/primary/subdir/subsubfile" ["FILE CONTENT 1"]
                 "/primary/subfile" ["FILE CONTENT 2"]
@@ -100,20 +119,21 @@ fn test_create_file() -> Result<()> {
 
 #[test]
 fn test_create_symlink() -> Result<()> {
-    assert_effect! {
+    assert_effect_of! {
         applying: "
             subdirlink/ -> /secondary/${NAME}
                 subfile
                     #source /resource/file
             "
-        onto:
-            "/primary"
-        containing:
+        onto: "/primary"
             directories:
                 "/resource"
             files:
                 "/resource/file" ["FILE CONTENT"]
         yields:
+            directories:
+                "/secondary"
+                "/secondary/subdirlink"
             files:
                 "/secondary/subdirlink/subfile" ["FILE CONTENT"]
             symlinks:

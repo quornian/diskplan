@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 use anyhow::{anyhow, Context, Result};
 
@@ -30,6 +34,10 @@ impl MemoryFilesystem {
         MemoryFilesystem {
             inner: RefCell::new(Inner { map }),
         }
+    }
+
+    pub fn to_path_set<'a>(&'a self) -> HashSet<String> {
+        self.inner.borrow().map.keys().cloned().collect()
     }
 }
 
