@@ -120,3 +120,6 @@
 pub mod filesystem;
 pub mod schema;
 pub mod traversal;
+
+#[cfg(test)]
+mod tests;

@@ -177,6 +177,3 @@ fn marked_matches<'a>(
     };
     matched.into_iter()
 }
-
-#[cfg(test)]
-mod tests;
