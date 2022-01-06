@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 
-use anyhow::{Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 
 mod eval;
 mod pattern;
+mod reuse;
 
 use crate::{
     filesystem::{parent, Filesystem, SplitPath},
@@ -15,7 +16,7 @@ pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &FS, target: &str)
 where
     FS: Filesystem,
 {
-    traverse_over(&root, None, filesystem, &SplitPath::new(target)?)
+    traverse_over(root, None, filesystem, &SplitPath::new(target)?)
         .with_context(|| format!("Traversing over {}", target.to_owned()))
 }
 
@@ -25,6 +26,7 @@ enum Scope<'a> {
     Binding(&'a Identifier<'a>, String),
 }
 
+#[derive(Debug)]
 pub struct Stack<'a> {
     parent: Option<&'a Stack<'a>>,
     scope: Scope<'a>,
@@ -39,8 +41,54 @@ impl Scope<'_> {
     }
 }
 
-// TODO: Error handling: include stack in result and format as traceback
+fn expand_uses<'a>(
+    node: &'a SchemaNode,
+    stack: Option<&'a Stack>,
+) -> Result<Vec<&'a SchemaNode<'a>>> {
+    // Expand `node` to itself and any `#use`s within
+    let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
+    use_schemas.push(node);
+    // Include node itself and its #defs in the scope
+    let stack: Option<Stack> = match node {
+        SchemaNode {
+            schema: Schema::Directory(d),
+            ..
+        } => Some(Stack {
+            parent: stack,
+            scope: Scope::Directory(d),
+        }),
+        _ => None,
+    };
+    for used in &node.uses {
+        use_schemas.push(reuse::find_definition(used, stack.as_ref()).ok_or_else(|| {
+            anyhow!(
+                "No definition (#def) found for {}. Stack:\n{:#?}",
+                used,
+                stack
+            )
+        })?);
+    }
+    Ok(use_schemas)
+}
+
 fn traverse_over<'a, FS>(
+    node: &'a SchemaNode<'_>,
+    stack: Option<&'a Stack<'a>>,
+    filesystem: &FS,
+    path: &SplitPath,
+) -> Result<()>
+where
+    FS: Filesystem,
+{
+    println!("Path: {}", path.absolute());
+    for node in expand_uses(node, stack)? {
+        traverse_into(node, stack, filesystem, path)
+            .with_context(|| format!("Traversing over {}", path.absolute()))?;
+    }
+    Ok(())
+}
+
+fn traverse_into<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &FS,

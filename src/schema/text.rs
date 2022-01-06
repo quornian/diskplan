@@ -72,16 +72,6 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
             None,
         ));
     }
-    if !schema_node.uses.is_empty() {
-        return Err(ParseError::new(
-            "Top level #use is not allowed".into(),
-            text,
-            text.find("\n#use")
-                .map(|pos| &text[pos + 1..pos + 7])
-                .unwrap_or(text),
-            None,
-        ));
-    }
     Ok(schema_node)
 }
 

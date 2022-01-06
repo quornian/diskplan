@@ -174,6 +174,22 @@ pub enum Schema<'t> {
     File(FileSchema<'t>),
 }
 
+impl Schema<'_> {
+    pub fn as_directory(&self) -> Option<&DirectorySchema> {
+        match self {
+            Schema::Directory(directory) => Some(directory),
+            _ => None,
+        }
+    }
+
+    pub fn as_file(&self) -> Option<&FileSchema> {
+        match self {
+            Schema::File(file) => Some(file),
+            _ => None,
+        }
+    }
+}
+
 pub trait Merge
 where
     Self: Sized,
@@ -274,6 +290,9 @@ impl<'t> DirectorySchema<'t> {
     pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, SchemaNode> {
         &self.defs
     }
+    pub fn get_def<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a SchemaNode<'t>> {
+        self.defs.get(id)
+    }
     pub fn entries(&self) -> &[(Binding, SchemaNode)] {
         &self.entries[..]
     }
@@ -341,3 +360,6 @@ impl Merge for FileSchema<'_> {
         Ok(FileSchema::new(source))
     }
 }
+
+#[cfg(test)]
+mod tests;

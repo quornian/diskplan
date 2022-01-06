@@ -91,3 +91,9 @@ impl Display for Identifier<'_> {
         write!(f, "{}", self.0)
     }
 }
+
+impl<'a> From<&'a str> for Identifier<'a> {
+    fn from(s: &'a str) -> Self {
+        Identifier::new(s)
+    }
+}
