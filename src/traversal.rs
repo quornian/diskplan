@@ -15,8 +15,7 @@ pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &FS, target: &str)
 where
     FS: Filesystem,
 {
-    let mut stack = vec![];
-    traverse_over(&root, &mut stack, filesystem, &SplitPath::new(target)?)
+    traverse_over(&root, None, filesystem, &SplitPath::new(target)?)
         .with_context(|| format!("Traversing over {}", target.to_owned()))
 }
 
@@ -24,6 +23,11 @@ where
 enum Scope<'a> {
     Directory(&'a DirectorySchema<'a>),
     Binding(&'a Identifier<'a>, String),
+}
+
+pub struct Stack<'a> {
+    parent: Option<&'a Stack<'a>>,
+    scope: Scope<'a>,
 }
 
 impl Scope<'_> {
@@ -38,7 +42,7 @@ impl Scope<'_> {
 // TODO: Error handling: include stack in result and format as traceback
 fn traverse_over<'a, FS>(
     node: &'a SchemaNode<'_>,
-    stack: &mut Vec<Scope<'a>>,
+    stack: Option<&'a Stack<'a>>,
     filesystem: &FS,
     path: &SplitPath,
 ) -> Result<()>
@@ -57,47 +61,57 @@ where
             .map(Some)
             .collect();
 
-        stack.push(Scope::Directory(directory));
+        let stack = Stack {
+            parent: stack,
+            scope: Scope::Directory(directory),
+        };
 
         for (binding, child_node) in directory.entries() {
             // Note: Since we don't know the name of the thing we're matching yet, any path
             // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
             // using the parent directory
-            let pattern = CompiledPattern::compile(child_node.pattern.as_ref(), stack, &path)?;
+            let pattern =
+                CompiledPattern::compile(child_node.pattern.as_ref(), Some(&stack), &path)?;
 
             for name in marked_matches(&mut listing, binding, pattern) {
                 let child_path = path.join(name.as_ref());
 
                 match binding {
-                    Binding::Static(_) => traverse_over(child_node, stack, filesystem, &child_path)
-                        .with_context(|| format!("Creating {}", child_path.absolute()))?,
+                    Binding::Static(_) => {
+                        traverse_over(child_node, Some(&stack), filesystem, &child_path)
+                            .with_context(|| format!("Creating {}", child_path.absolute()))?
+                    }
                     Binding::Dynamic(var) => {
-                        let top = stack.len();
-                        stack.push(Scope::Binding(var, name.into()));
-                        traverse_over(child_node, stack, filesystem, &child_path).with_context(
-                            || {
+                        let stack = Stack {
+                            parent: Some(&stack),
+                            scope: Scope::Binding(var, name.into()),
+                        };
+                        traverse_over(child_node, Some(&stack), filesystem, &child_path)
+                            .with_context(|| {
                                 format!(
                                     "Creating {}, setting {}",
                                     child_path.absolute(),
-                                    &stack[top]
+                                    &stack
+                                        .scope
                                         .as_binding()
                                         .map(|(var, value)| format!("${} = {}", var, value))
                                         .unwrap_or_else(|| "(no binding on stack)".into()),
                                 )
-                            },
-                        )?;
-                        stack.pop();
+                            })?;
                     }
                 }
             }
         }
-
-        stack.pop();
     }
     Ok(())
 }
 
-fn create<FS>(node: &SchemaNode, stack: &[Scope], filesystem: &FS, path: &SplitPath) -> Result<()>
+fn create<FS>(
+    node: &SchemaNode,
+    stack: Option<&Stack>,
+    filesystem: &FS,
+    path: &SplitPath,
+) -> Result<()>
 where
     FS: Filesystem,
 {

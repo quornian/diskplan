@@ -5,16 +5,16 @@ use crate::{
     schema::{Expression, Identifier, Special, Token},
 };
 
-use super::Scope;
+use super::{Scope, Stack};
 
 enum Value<'a> {
     Expression(&'a Expression<'a>),
     String(&'a str),
 }
 
-pub(super) fn evaluate<'a>(
+pub(super) fn evaluate(
     expr: &Expression<'_>,
-    stack: &[Scope],
+    stack: Option<&Stack>,
     path: &SplitPath,
 ) -> Result<String> {
     let mut value = String::new();
@@ -50,9 +50,9 @@ pub(super) fn evaluate<'a>(
     Ok(value)
 }
 
-fn lookup<'a>(var: &Identifier<'a>, stack: &'a [Scope]) -> Option<Value<'a>> {
-    stack.last().and_then(|top| {
-        match top {
+fn lookup<'a>(var: &Identifier<'a>, stack: Option<&'a Stack>) -> Option<Value<'a>> {
+    if let Some(Stack { parent, scope }) = stack {
+        match scope {
             &Scope::Directory(directory) => directory.get_var(var).map(Value::Expression),
             &Scope::Binding(bind, ref value) => {
                 if bind == var {
@@ -62,6 +62,8 @@ fn lookup<'a>(var: &Identifier<'a>, stack: &'a [Scope]) -> Option<Value<'a>> {
                 }
             }
         }
-        .or_else(|| lookup(var, &stack[..stack.len() - 1]))
-    })
+        .or_else(|| lookup(var, *parent))
+    } else {
+        None
+    }
 }

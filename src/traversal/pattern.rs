@@ -3,7 +3,7 @@ use regex::Regex;
 
 use crate::{filesystem::SplitPath, schema::Pattern};
 
-use super::{eval::evaluate, Scope};
+use super::{eval::evaluate, Stack};
 
 pub(super) enum CompiledPattern<'a> {
     Any,
@@ -14,7 +14,7 @@ pub(super) enum CompiledPattern<'a> {
 impl<'a> CompiledPattern<'a> {
     pub fn compile(
         pattern: Option<&Pattern<'a>>,
-        stack: &[Scope],
+        stack: Option<&Stack>,
         path: &SplitPath,
     ) -> Result<CompiledPattern<'a>> {
         Ok(match pattern {
