@@ -12,7 +12,7 @@ impl Filesystem for DiskFilesystem {
         Ok(fs::create_dir(path)?)
     }
 
-    fn create_file(&self, path: &str, content: String) -> Result<()> {
+    fn create_file(&self, _path: &str, _content: String) -> Result<()> {
         todo!()
     }
 
@@ -32,7 +32,7 @@ impl Filesystem for DiskFilesystem {
         fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
     }
 
-    fn is_link(&self, path: &str) -> bool {
+    fn is_link(&self, _path: &str) -> bool {
         todo!()
     }
 
@@ -46,11 +46,11 @@ impl Filesystem for DiskFilesystem {
         Ok(listing)
     }
 
-    fn read_file(&self, path: &str) -> Result<String> {
+    fn read_file(&self, _path: &str) -> Result<String> {
         todo!()
     }
 
-    fn read_link(&self, path: &str) -> Result<String> {
+    fn read_link(&self, _path: &str) -> Result<String> {
         todo!()
     }
 }
