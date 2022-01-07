@@ -218,7 +218,7 @@ where
 fn marked_matches<'a>(
     listing: &mut Vec<Option<String>>,
     binding: &Binding<'a>,
-    pattern: CompiledPattern<'a>,
+    pattern: CompiledPattern,
 ) -> impl Iterator<Item = Cow<'a, str>> {
     let mut matched = Vec::new();
 

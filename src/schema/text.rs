@@ -19,7 +19,7 @@ use builder::SchemaNodeBuilder;
 mod error;
 pub use error::ParseError;
 
-use super::{expr::Special, Binding, Pattern, SchemaNode};
+use super::{expr::Special, Binding, SchemaNode};
 
 #[derive(Debug)]
 pub enum NodeType {
@@ -93,7 +93,7 @@ fn schema_node<'t, 'p>(
     for (span, op) in ops {
         match op {
             // Operators that affect the parent (when looking up this item)
-            Operator::Match(expr) => builder.match_pattern(Pattern::Regex(expr)),
+            Operator::Match(expr) => builder.match_pattern(expr),
 
             // Operators that apply to this item
             Operator::Use { name } => builder.use_definition(name),

@@ -136,9 +136,6 @@
 use anyhow::{anyhow, Result};
 use std::{collections::HashMap, fmt::Display};
 
-mod criteria;
-pub use criteria::Pattern;
-
 mod expr;
 pub use expr::{Expression, Identifier, Special, Token};
 
@@ -152,7 +149,7 @@ pub use text::{parse_schema, ParseError};
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaNode<'t> {
     /// Condition against which to match file/directory names
-    pub pattern: Option<Pattern<'t>>,
+    pub pattern: Option<Expression<'t>>,
 
     /// Symlink target - if this produces a symbolic link. Operates on the target end.
     pub symlink: Option<Expression<'t>>,

@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 
 use crate::schema::{
-    Binding, DirectorySchema, Expression, FileSchema, Identifier, Meta, Pattern, Schema, SchemaNode,
+    Binding, DirectorySchema, Expression, FileSchema, Identifier, Meta, Schema, SchemaNode,
 };
 
 use super::NodeType;
 
 #[derive(Debug)]
 pub struct SchemaNodeBuilder<'t> {
-    pattern: Option<Pattern<'t>>,
+    pattern: Option<Expression<'t>>,
     symlink: Option<Expression<'t>>,
     uses: Vec<Identifier<'t>>,
     meta: Meta<'t>,
@@ -48,7 +48,7 @@ impl<'t> SchemaNodeBuilder<'t> {
         }
     }
 
-    pub fn match_pattern(&mut self, pattern: Pattern<'t>) -> Result<()> {
+    pub fn match_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.pattern.is_some() {
             return Err(anyhow!("#match occurs twice"));
         }

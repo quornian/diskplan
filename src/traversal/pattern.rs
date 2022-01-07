@@ -1,26 +1,24 @@
 use anyhow::Result;
 use regex::Regex;
 
-use crate::{filesystem::SplitPath, schema::Pattern};
+use crate::{filesystem::SplitPath, schema::Expression};
 
 use super::{eval::evaluate, Stack};
 
-pub(super) enum CompiledPattern<'a> {
+pub(super) enum CompiledPattern {
     Any,
-    Fixed(&'a str),
     Regex(regex::Regex),
 }
 
-impl<'a> CompiledPattern<'a> {
+impl CompiledPattern {
     pub fn compile(
-        pattern: Option<&Pattern<'a>>,
+        pattern: Option<&Expression>,
         stack: Option<&Stack>,
         path: &SplitPath,
-    ) -> Result<CompiledPattern<'a>> {
+    ) -> Result<CompiledPattern> {
         Ok(match pattern {
             None => CompiledPattern::Any,
-            Some(Pattern::Fixed(fixed)) => CompiledPattern::Fixed(fixed),
-            Some(Pattern::Regex(expr)) => {
+            Some(expr) => {
                 let pattern = evaluate(expr, stack, path)?;
                 Regex::new(&pattern)?; // Ensure it's valid before encasing to avoid injection
                 CompiledPattern::Regex(Regex::new(&format!("^(?:{})$", pattern))?)
@@ -31,7 +29,6 @@ impl<'a> CompiledPattern<'a> {
     pub fn matches(&self, text: &str) -> bool {
         match self {
             &Self::Any => true,
-            &Self::Fixed(fixed) => text == fixed,
             &Self::Regex(ref regex) => regex.is_match(text),
         }
     }
