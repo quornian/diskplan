@@ -43,6 +43,23 @@ pub trait Filesystem {
     fn read_file(&self, path: &str) -> Result<String>;
 
     fn read_link(&self, path: &str) -> Result<String>;
+
+    fn canonicalize(&self, path: &str) -> Result<String> {
+        let path = normalize(path);
+        let mut canon = String::with_capacity(path.len());
+        if !path.starts_with('/') {
+            // TODO: Keep a current_directory to provide relative path support
+            return Err(anyhow!("Only absolute paths supported"));
+        }
+        for part in path[1..].split('/') {
+            canon.push('/');
+            canon.push_str(part);
+            if self.is_link(&canon) {
+                canon = self.canonicalize(&self.read_link(&canon)?)?;
+            }
+        }
+        Ok(canon)
+    }
 }
 
 pub fn name(path: &str) -> &str {
