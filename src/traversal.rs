@@ -8,7 +8,7 @@ mod pattern;
 mod reuse;
 
 use crate::{
-    filesystem::{normalize, parent, Filesystem, SplitPath},
+    filesystem::{self, Filesystem, SplitPath},
     schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
@@ -179,36 +179,42 @@ fn create<FS>(
 where
     FS: Filesystem,
 {
-    let target;
-    let target_str;
-    let to_create = if let Some(expr) = &node.symlink {
-        target_str = evaluate(expr, stack, path)?;
-        target = SplitPath::new(&target_str)
-            .with_context(|| format!("Following symlink {} -> {}", path.absolute(), target_str))?;
+    // References held to data within by `to_create`, but only in the symlink branch
+    let link_str;
+    let link_target;
+
+    let to_create;
+    if let Some(expr) = &node.symlink {
+        link_str = evaluate(expr, stack, path)?;
+        link_target = SplitPath::new(&link_str)
+            .with_context(|| format!("Following symlink {} -> {}", path.absolute(), link_str))?;
 
         // TODO: Come up with a better way to specify parent structure when following symlinks
-        if let Some(parent) = parent(&target.absolute()) {
+        if let Some(parent) = filesystem::parent(&link_target.absolute()) {
             if !filesystem.exists(parent) {
                 eprintln!(
                     "WARNING: Parent directory for symlink target does not exist, creating: {} \
                     (for {} -> {})",
                     parent,
                     path.absolute(),
-                    target.absolute()
+                    link_target.absolute()
                 );
                 filesystem
                     .create_directory_all(parent)
                     .context("Creating parent directories")?;
             }
         }
+        // Create the symlink pointing to its target before (forming the target itself)
         filesystem
-            .create_symlink(path.absolute(), target.absolute().to_owned())
+            .create_symlink(path.absolute(), link_target.absolute().to_owned())
             .context("As symlink")?;
-
-        target.absolute()
+        // From here on, use the target path for creation. Further traversal will use the original
+        // path, and resolving canonical paths through the symlink
+        to_create = link_target.absolute();
     } else {
-        path.absolute()
-    };
+        to_create = path.absolute();
+    }
+
     match &node.schema {
         Schema::Directory(_) => {
             if !filesystem.is_directory(to_create) {
@@ -219,11 +225,10 @@ where
         }
         Schema::File(file) => {
             if !filesystem.is_file(to_create) {
-                // FIXME: Copy file, don't create one with the contents of the source
                 let source = evaluate(file.source(), stack, path)?;
-                let source = filesystem.read_file(&source)?;
+                let content = filesystem.read_file(&source)?;
                 filesystem
-                    .create_file(to_create, source)
+                    .create_file(to_create, content)
                     .context("As file")?;
             }
         }
