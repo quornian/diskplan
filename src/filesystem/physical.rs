@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, io::Write};
 
 use anyhow::Result;
 
@@ -9,11 +9,13 @@ pub struct DiskFilesystem;
 
 impl Filesystem for DiskFilesystem {
     fn create_directory(&self, path: &str) -> Result<()> {
-        Ok(fs::create_dir(path)?)
+        fs::create_dir(path).map_err(Into::into)
     }
 
-    fn create_file(&self, _path: &str, _content: String) -> Result<()> {
-        todo!()
+    fn create_file(&self, path: &str, content: String) -> Result<()> {
+        let mut file = fs::File::create(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
     }
 
     fn create_symlink(&self, path: &str, target: String) -> Result<()> {
@@ -25,15 +27,21 @@ impl Filesystem for DiskFilesystem {
     }
 
     fn is_directory(&self, path: &str) -> bool {
-        fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false)
+        fs::metadata(path)
+            .map(|m| m.file_type().is_dir())
+            .unwrap_or(false)
     }
 
     fn is_file(&self, path: &str) -> bool {
-        fs::metadata(path).map(|m| m.is_file()).unwrap_or(false)
+        fs::metadata(path)
+            .map(|m| m.file_type().is_file())
+            .unwrap_or(false)
     }
 
-    fn is_link(&self, _path: &str) -> bool {
-        todo!()
+    fn is_link(&self, path: &str) -> bool {
+        fs::symlink_metadata(path)
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false)
     }
 
     fn list_directory(&self, path: &str) -> Result<Vec<String>> {
@@ -46,11 +54,11 @@ impl Filesystem for DiskFilesystem {
         Ok(listing)
     }
 
-    fn read_file(&self, _path: &str) -> Result<String> {
-        todo!()
+    fn read_file(&self, path: &str) -> Result<String> {
+        fs::read_to_string(path).map_err(Into::into)
     }
 
-    fn read_link(&self, _path: &str) -> Result<String> {
-        todo!()
+    fn read_link(&self, path: &str) -> Result<String> {
+        Ok(fs::read_link(path)?.to_string_lossy().into_owned())
     }
 }
