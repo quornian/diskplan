@@ -501,57 +501,6 @@ fn test_usage() {
             ]
         ))
     );
-
-    /*
-    // Check the schema this builds
-    let no_vars = || HashMap::default();
-    let no_defs = || HashMap::default();
-    let no_meta = || Meta::default();
-    assert_eq!(
-        schema_properties(s, s, ItemType::Directory, None, ops.unwrap().1),
-        Ok((
-            None,
-            Subschema::Original(Schema::Directory({
-                let mut defs = HashMap::new();
-                defs.insert(
-                    Identifier::new("defined"),
-                    Schema::Directory({
-                        DirectorySchema::new(
-                            None,
-                            no_vars(),
-                            no_defs(),
-                            no_meta(),
-                            vec![SchemaEntry {
-                                criteria: Match::Fixed("file"),
-                                subschema: Subschema::Original(Schema::File(FileSchema::new(
-                                    None,
-                                    no_meta(),
-                                    Expression::from_parsed(vec![Token::Variable(Identifier::new(
-                                        "emptyfile",
-                                    ))]),
-                                ))),
-                            }],
-                        )
-                    }),
-                );
-                let entries = vec![SchemaEntry {
-                    criteria: Match::Fixed("usage"),
-                    subschema: Subschema::Referenced {
-                        definition: Identifier::new("defined"),
-                        overrides: Schema::Directory(DirectorySchema::new(
-                            None,
-                            no_vars(),
-                            no_defs(),
-                            no_meta(),
-                            vec![],
-                        )),
-                    },
-                }];
-                DirectorySchema::new(None, no_vars(), defs, no_meta(), entries)
-            }),)
-        ))
-    );
-    */
 }
 
 #[test]
