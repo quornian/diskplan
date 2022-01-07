@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Write;
 
 use anyhow::{anyhow, Context as _, Result};
 
@@ -7,7 +8,7 @@ mod pattern;
 mod reuse;
 
 use crate::{
-    filesystem::{parent, Filesystem, SplitPath},
+    filesystem::{normalize, parent, Filesystem, SplitPath},
     schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
@@ -17,7 +18,6 @@ where
     FS: Filesystem,
 {
     traverse_over(root, None, filesystem, &SplitPath::new(target)?)
-        .with_context(|| format!("Traversing over {}", target.to_owned()))
 }
 
 #[derive(Debug)]
@@ -82,10 +82,25 @@ where
 {
     println!("Path: {}", path.absolute());
     for node in expand_uses(node, stack)? {
-        traverse_into(node, stack, filesystem, path)
-            .with_context(|| format!("Traversing over {}", path.absolute()))?;
+        traverse_into(node, stack, filesystem, path).with_context(|| {
+            format!("Into {}\n{}", path.absolute(), summarize_schema_node(node))
+        })?;
     }
     Ok(())
+}
+
+fn summarize_schema_node(node: &SchemaNode) -> String {
+    let mut f = String::new();
+    match &node.schema {
+        Schema::Directory(ds) => {
+            write!(f, "Schema: directory ({} entries)", ds.entries().len()).unwrap()
+        }
+        Schema::File(fs) => write!(f, "Schema: file (source: {})", fs.source()).unwrap(),
+    }
+    if let Some(pattern) = &node.pattern {
+        write!(f, "(matching: {})", pattern).unwrap()
+    }
+    f
 }
 
 fn traverse_into<'a, FS>(
@@ -98,7 +113,8 @@ where
     FS: Filesystem,
 {
     // Create this entry, following symlinks
-    create(node, stack, filesystem, &path)?;
+    create(node, stack, filesystem, &path)
+        .with_context(|| format!("Create {}", path.absolute()))?;
 
     // Traverse over children
     if let Schema::Directory(ref directory) = node.schema {
@@ -127,7 +143,7 @@ where
                 match binding {
                     Binding::Static(_) => {
                         traverse_over(child_node, Some(&stack), filesystem, &child_path)
-                            .with_context(|| format!("Creating {}", child_path.absolute()))?
+                            .with_context(|| format!("Over {}", child_path.absolute()))?
                     }
                     Binding::Dynamic(var) => {
                         let stack = Stack {
@@ -137,13 +153,13 @@ where
                         traverse_over(child_node, Some(&stack), filesystem, &child_path)
                             .with_context(|| {
                                 format!(
-                                    "Creating {}, setting {}",
+                                    "Over {} (with {})",
                                     child_path.absolute(),
                                     &stack
                                         .scope
                                         .as_binding()
                                         .map(|(var, value)| format!("${} = {}", var, value))
-                                        .unwrap_or_else(|| "(no binding on stack)".into()),
+                                        .unwrap_or_else(|| "<no binding>".into()),
                                 )
                             })?;
                     }
@@ -187,7 +203,7 @@ where
         }
         filesystem
             .create_symlink(path.absolute(), target.absolute().to_owned())
-            .context("Creating as symlink")?;
+            .context("As symlink")?;
 
         target.absolute()
     } else {
@@ -198,7 +214,7 @@ where
             if !filesystem.is_directory(to_create) {
                 filesystem
                     .create_directory(to_create)
-                    .context("Creating as directory")?;
+                    .context("As directory")?;
             }
         }
         Schema::File(file) => {
@@ -208,7 +224,7 @@ where
                 let source = filesystem.read_file(&source)?;
                 filesystem
                     .create_file(to_create, source)
-                    .context("Creating as file")?;
+                    .context("As file")?;
             }
         }
     }
