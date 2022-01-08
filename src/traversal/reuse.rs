@@ -1,8 +1,39 @@
-use crate::schema::{Identifier, SchemaNode};
+use anyhow::{anyhow, Result};
 
 use super::{Scope, Stack};
+use crate::schema::{Identifier, Schema, SchemaNode};
 
-pub fn find_definition<'a>(
+pub fn expand_uses<'a>(
+    node: &'a SchemaNode,
+    stack: Option<&'a Stack>,
+) -> Result<Vec<&'a SchemaNode<'a>>> {
+    // Expand `node` to itself and any `#use`s within
+    let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
+    use_schemas.push(node);
+    // Include node itself and its #defs in the scope
+    let stack: Option<Stack> = match node {
+        SchemaNode {
+            schema: Schema::Directory(d),
+            ..
+        } => Some(Stack {
+            parent: stack,
+            scope: Scope::Directory(d),
+        }),
+        _ => None,
+    };
+    for used in &node.uses {
+        use_schemas.push(find_definition(used, stack.as_ref()).ok_or_else(|| {
+            anyhow!(
+                "No definition (#def) found for {}. Stack:\n{:#?}",
+                used,
+                stack
+            )
+        })?);
+    }
+    Ok(use_schemas)
+}
+
+fn find_definition<'a>(
     var: &Identifier<'a>,
     stack: Option<&Stack<'a>>,
 ) -> Option<&'a SchemaNode<'a>> {
