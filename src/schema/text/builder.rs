@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 
-use crate::{
-    filesystem::Attributes,
-    schema::{Binding, DirectorySchema, Expression, FileSchema, Identifier, Schema, SchemaNode},
+use crate::schema::{
+    Attributes, Binding, DirectorySchema, Expression, FileSchema, Identifier, Schema, SchemaNode,
 };
 
 use super::NodeType;

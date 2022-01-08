@@ -4,11 +4,9 @@ use std::borrow::Cow;
 
 use anyhow::{anyhow, Result};
 
-mod attributes;
 mod memory;
 mod physical;
 
-pub use attributes::Attributes;
 pub use memory::MemoryFilesystem;
 pub use physical::DiskFilesystem;
 

@@ -135,7 +135,8 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use crate::filesystem::Attributes;
+mod attributes;
+pub use attributes::Attributes;
 
 mod expr;
 pub use expr::{Expression, Identifier, Special, Token};
