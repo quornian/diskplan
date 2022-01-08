@@ -18,12 +18,4 @@ impl<'t> Attributes<'t> {
             _ => false,
         }
     }
-
-    pub fn merge(&self, other: &Self) -> Self {
-        Attributes {
-            owner: other.owner.or(self.owner),
-            group: other.group.or(self.group),
-            mode: other.mode.or(self.mode),
-        }
-    }
 }

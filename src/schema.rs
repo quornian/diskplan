@@ -133,16 +133,15 @@
 //! **TODO**: Document `#def` and `#use`
 //!
 
-use anyhow::{anyhow, Result};
 use std::{collections::HashMap, fmt::Display};
+
+use crate::filesystem::Attributes;
 
 mod expr;
 pub use expr::{Expression, Identifier, Special, Token};
 
 mod text;
 pub use text::{parse_schema, ParseError};
-
-use crate::filesystem::Attributes;
 
 /// A node in an abstract directory hierarchy
 #[derive(Debug, Clone, PartialEq)]
@@ -182,70 +181,6 @@ impl Schema<'_> {
         match self {
             Schema::File(file) => Some(file),
             _ => None,
-        }
-    }
-}
-
-pub trait Merge
-where
-    Self: Sized,
-{
-    fn merge(&self, other: &Self) -> Result<Self>;
-}
-
-impl<'t> Merge for Option<Box<Schema<'t>>> {
-    fn merge(&self, other: &Self) -> Result<Self> {
-        match (self, other) {
-            (_, None) => Ok(self.clone()),
-            (None, _) => Ok(other.clone()),
-            (Some(a), Some(b)) => a.merge(b).map(Box::new).map(Some),
-        }
-    }
-}
-
-impl<'t> Merge for SchemaNode<'t> {
-    fn merge(&self, other: &Self) -> Result<Self> {
-        let pattern = match (&self.pattern, &other.pattern) {
-            (Some(_), Some(_)) => Err(anyhow!(
-                "Cannot merge two entries that both have match conditions"
-            )),
-            (pattern @ Some(_), _) => Ok(pattern),
-            (_, pattern) => Ok(pattern),
-        }?;
-        let symlink = match (&self.symlink, &other.symlink) {
-            (Some(_), Some(_)) => Err(anyhow!("Cannot merge two entries that are both symlinks")),
-            (link @ Some(_), _) => Ok(link),
-            (_, link) => Ok(link),
-        }?;
-        let mut uses = Vec::with_capacity(self.uses.len() + other.uses.len());
-        for use_ in &self.uses {
-            uses.push(use_.clone());
-        }
-        for use_ in &other.uses {
-            uses.push(use_.clone());
-        }
-        Ok(SchemaNode {
-            pattern: pattern.clone(),
-            symlink: symlink.clone(),
-            uses,
-            attributes: self.attributes.merge(&other.attributes),
-            schema: self.schema.merge(&other.schema)?,
-        })
-    }
-}
-
-impl<'t> Merge for Schema<'t> {
-    fn merge(&self, other: &Schema<'t>) -> Result<Self> {
-        match (self, other) {
-            (Schema::Directory(schema_a), Schema::Directory(schema_b)) => {
-                Ok(Schema::Directory(schema_a.merge(schema_b)?))
-            }
-            (Schema::File(schema_a), Schema::File(schema_b)) => {
-                Ok(Schema::File(schema_a.merge(schema_b)?))
-            }
-            (Schema::Directory(_), _) | (Schema::File(_), _) => {
-                Err(anyhow!("Cannot merge, mismatched types"))
-            }
         }
     }
 }
@@ -294,21 +229,6 @@ impl<'t> DirectorySchema<'t> {
     }
 }
 
-impl Merge for DirectorySchema<'_> {
-    fn merge(&self, other: &Self) -> Result<Self> {
-        let mut vars = HashMap::with_capacity(self.vars.len() + other.vars.len());
-        vars.extend(self.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
-        vars.extend(other.vars.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let mut defs = HashMap::with_capacity(self.defs.len() + other.defs.len());
-        defs.extend(self.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
-        defs.extend(other.defs.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let mut entries = Vec::with_capacity(self.entries.len() + other.entries.len());
-        entries.extend(self.entries.iter().cloned());
-        entries.extend(other.entries.iter().cloned());
-        Ok(DirectorySchema::new(vars, defs, entries))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Binding<'t> {
     Static(&'t str), // Static is ordered first
@@ -337,23 +257,6 @@ impl<'t> FileSchema<'t> {
     }
     pub fn source(&self) -> &Expression<'t> {
         &self.source
-    }
-}
-
-impl Merge for FileSchema<'_> {
-    fn merge(&self, other: &Self) -> Result<Self> {
-        let source = match (self.source.tokens().len(), other.source.tokens().len()) {
-            (_, 0) => self.source.clone(),
-            (0, _) => other.source.clone(),
-            (_, _) => {
-                return Err(anyhow!(
-                    "Cannot merge file with two sources: {} and {}",
-                    self.source().to_string(),
-                    other.source().to_string()
-                ))
-            }
-        };
-        Ok(FileSchema::new(source))
     }
 }
 
