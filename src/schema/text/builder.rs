@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 
-use crate::schema::{
-    Binding, DirectorySchema, Expression, FileSchema, Identifier, Meta, Schema, SchemaNode,
+use crate::{
+    filesystem::Attributes,
+    schema::{Binding, DirectorySchema, Expression, FileSchema, Identifier, Schema, SchemaNode},
 };
 
 use super::NodeType;
@@ -13,7 +14,7 @@ pub struct SchemaNodeBuilder<'t> {
     pattern: Option<Expression<'t>>,
     symlink: Option<Expression<'t>>,
     uses: Vec<Identifier<'t>>,
-    meta: Meta<'t>,
+    attributes: Attributes<'t>,
     type_specific: TypeSpecific<'t>,
 }
 
@@ -35,7 +36,7 @@ impl<'t> SchemaNodeBuilder<'t> {
             pattern: None,
             symlink,
             uses: Vec::new(),
-            meta: Meta::default(),
+            attributes: Attributes::default(),
 
             type_specific: match node_type {
                 NodeType::Directory => TypeSpecific::Directory {
@@ -99,26 +100,26 @@ impl<'t> SchemaNodeBuilder<'t> {
     }
 
     pub fn owner(&mut self, owner: &'t str) -> Result<()> {
-        if self.meta.owner.is_some() {
+        if self.attributes.owner.is_some() {
             return Err(anyhow!("#owner occurs twice"));
         }
-        self.meta.owner = Some(owner);
+        self.attributes.owner = Some(owner);
         Ok(())
     }
 
     pub fn group(&mut self, group: &'t str) -> Result<()> {
-        if self.meta.group.is_some() {
+        if self.attributes.group.is_some() {
             return Err(anyhow!("#group occurs twice"));
         }
-        self.meta.group = Some(group);
+        self.attributes.group = Some(group);
         Ok(())
     }
 
     pub fn mode(&mut self, mode: u16) -> Result<()> {
-        if self.meta.mode.is_some() {
+        if self.attributes.mode.is_some() {
             return Err(anyhow!("#mode occurs twice"));
         }
-        self.meta.mode = Some(mode);
+        self.attributes.mode = Some(mode);
         Ok(())
     }
 
@@ -160,7 +161,7 @@ impl<'t> SchemaNodeBuilder<'t> {
             pattern,
             symlink,
             uses,
-            meta,
+            attributes,
             type_specific,
         } = self;
         let schema = match type_specific {
@@ -182,7 +183,7 @@ impl<'t> SchemaNodeBuilder<'t> {
             pattern,
             symlink,
             uses,
-            meta,
+            attributes,
             schema,
         })
     }

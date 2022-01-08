@@ -26,7 +26,7 @@
 //!
 //! # Simple Schema
 //!
-//! The top level of a schema describes a directory, whose [metadata][Meta] may be set by `#owner`, `#group` and `#mode` tags:
+//! The top level of a schema describes a directory, whose [attributes][Attributes] may be set by `#owner`, `#group` and `#mode` tags:
 //! ```
 //! use diskplan::schema::*;
 //!
@@ -37,9 +37,9 @@
 //! ")?;
 //!
 //! assert!(matches!(schema_root.schema, Schema::Directory(_)));
-//! assert_eq!(schema_root.meta.owner, Some("person"));
-//! assert_eq!(schema_root.meta.group, Some("user"));
-//! assert_eq!(schema_root.meta.mode, Some(0o777));
+//! assert_eq!(schema_root.attributes.owner, Some("person"));
+//! assert_eq!(schema_root.attributes.group, Some("user"));
+//! assert_eq!(schema_root.attributes.mode, Some(0o777));
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -139,11 +139,10 @@ use std::{collections::HashMap, fmt::Display};
 mod expr;
 pub use expr::{Expression, Identifier, Special, Token};
 
-mod meta;
-pub use meta::Meta;
-
 mod text;
 pub use text::{parse_schema, ParseError};
+
+use crate::filesystem::Attributes;
 
 /// A node in an abstract directory hierarchy
 #[derive(Debug, Clone, PartialEq)]
@@ -158,7 +157,7 @@ pub struct SchemaNode<'t> {
     pub uses: Vec<Identifier<'t>>,
 
     /// Properties of this file/directory
-    pub meta: Meta<'t>,
+    pub attributes: Attributes<'t>,
 
     /// Properties specific to the underlying (file or directory) type
     pub schema: Schema<'t>,
@@ -229,7 +228,7 @@ impl<'t> Merge for SchemaNode<'t> {
             pattern: pattern.clone(),
             symlink: symlink.clone(),
             uses,
-            meta: self.meta.merge(&other.meta),
+            attributes: self.attributes.merge(&other.attributes),
             schema: self.schema.merge(&other.schema)?,
         })
     }
