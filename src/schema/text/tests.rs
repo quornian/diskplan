@@ -9,7 +9,7 @@ use nom::{
 };
 
 use crate::schema::{
-    expr::{Expression, Identifier, Token},
+    expression::{Expression, Identifier, Token},
     text::{blank_line, def_header, end_of_lines, indentation, operator, parse_schema, Operator},
     Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
 };

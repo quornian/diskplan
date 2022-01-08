@@ -9,7 +9,8 @@ use nom::{
     IResult, Parser,
 };
 
-use crate::schema::expr::{Expression, Identifier, Token};
+use super::{Binding, SchemaNode};
+use crate::schema::{Expression, Identifier, Special, Token};
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 
@@ -18,8 +19,6 @@ use builder::SchemaNodeBuilder;
 
 mod error;
 pub use error::ParseError;
-
-use super::{expr::Special, Binding, SchemaNode};
 
 #[derive(Debug)]
 pub enum NodeType {

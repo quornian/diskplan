@@ -138,8 +138,8 @@ use std::{collections::HashMap, fmt::Display};
 mod attributes;
 pub use attributes::Attributes;
 
-mod expr;
-pub use expr::{Expression, Identifier, Special, Token};
+mod expression;
+pub use expression::{Expression, Identifier, Special, Token};
 
 mod text;
 pub use text::{parse_schema, ParseError};
