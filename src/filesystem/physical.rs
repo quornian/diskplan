@@ -8,17 +8,17 @@ use super::Filesystem;
 pub struct DiskFilesystem;
 
 impl Filesystem for DiskFilesystem {
-    fn create_directory(&self, path: &str) -> Result<()> {
+    fn create_directory(&mut self, path: &str) -> Result<()> {
         fs::create_dir(path).map_err(Into::into)
     }
 
-    fn create_file(&self, path: &str, content: String) -> Result<()> {
+    fn create_file(&mut self, path: &str, content: String) -> Result<()> {
         let mut file = fs::File::create(path)?;
         file.write_all(content.as_bytes())?;
         Ok(())
     }
 
-    fn create_symlink(&self, path: &str, target: String) -> Result<()> {
+    fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
         Ok(std::os::unix::fs::symlink(target, path)?)
     }
 

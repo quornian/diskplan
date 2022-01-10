@@ -48,7 +48,7 @@ impl MemoryFilesystem {
 }
 
 impl Filesystem for MemoryFilesystem {
-    fn create_directory(&self, path: &str) -> Result<()> {
+    fn create_directory(&mut self, path: &str) -> Result<()> {
         let (parent, name) = self
             .canonical_split(path)
             .with_context(|| format!("Splitting {}", path))?;
@@ -58,7 +58,7 @@ impl Filesystem for MemoryFilesystem {
             .with_context(|| format!("Creating directory: {}", path))
     }
 
-    fn create_file(&self, path: &str, content: String) -> Result<()> {
+    fn create_file(&mut self, path: &str, content: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
         let mut inner = self.inner.borrow_mut();
         inner
@@ -66,7 +66,7 @@ impl Filesystem for MemoryFilesystem {
             .with_context(|| format!("Creating file: {}", path))
     }
 
-    fn create_symlink(&self, path: &str, target: String) -> Result<()> {
+    fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
         let mut inner = self.inner.borrow_mut();
         inner
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_exists() {
-        let fs = MemoryFilesystem::new();
+        let mut fs = MemoryFilesystem::new();
         assert!(fs.exists("/"));
         assert!(!fs.exists("/entry"));
         fs.create_directory("/entry").unwrap();
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_symlink_make_sub_directory() {
-        let fs = MemoryFilesystem::new();
+        let mut fs = MemoryFilesystem::new();
         fs.create_directory("/primary").unwrap();
         fs.create_directory("/secondary").unwrap();
         fs.create_symlink("/primary/link", "/secondary/target".into())

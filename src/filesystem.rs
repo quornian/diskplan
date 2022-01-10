@@ -12,9 +12,9 @@ pub use physical::DiskFilesystem;
 
 /// Operations of a file system
 pub trait Filesystem {
-    fn create_directory(&self, path: &str) -> Result<()>;
+    fn create_directory(&mut self, path: &str) -> Result<()>;
 
-    fn create_directory_all(&self, path: &str) -> Result<()> {
+    fn create_directory_all(&mut self, path: &str) -> Result<()> {
         if let Some((parent, _)) = split(path) {
             if parent != "/" {
                 self.create_directory_all(parent)?;
@@ -26,9 +26,9 @@ pub trait Filesystem {
         Ok(())
     }
 
-    fn create_file(&self, path: &str, content: String) -> Result<()>;
+    fn create_file(&mut self, path: &str, content: String) -> Result<()>;
 
-    fn create_symlink(&self, path: &str, target: String) -> Result<()>;
+    fn create_symlink(&mut self, path: &str, target: String) -> Result<()>;
 
     fn exists(&self, path: &str) -> bool;
 

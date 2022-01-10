@@ -63,7 +63,7 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("{}", e))
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
-    let fs = filesystem::MemoryFilesystem::new();
+    let mut fs = filesystem::MemoryFilesystem::new();
 
     // if let Some(keyvalues) = matches.values_of("let") {
     //     let keys = keyvalues.clone().into_iter().step_by(2);
@@ -79,7 +79,7 @@ fn main() -> Result<()> {
     // }
     // let context = context;
 
-    traverse(&schema_root, &fs, target)?;
+    traverse(&schema_root, &mut fs, target)?;
 
     print_tree("/", &fs, 0)?;
 

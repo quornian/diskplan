@@ -14,7 +14,7 @@ pub fn verify_trees(
     out_tree: &str,
     target: &str,
 ) -> Result<()> {
-    let fs = MemoryFilesystem::new();
+    let mut fs = MemoryFilesystem::new();
 
     // Create initial filesystem from input tree
     for entry in parse_tree(in_tree)? {
@@ -30,7 +30,7 @@ pub fn verify_trees(
     }
 
     // Apply schema
-    traverse(&schema_root, &fs, target)?;
+    traverse(&schema_root, &mut fs, target)?;
 
     // Check tree matches expected output tree
     for entry in parse_tree(out_tree)? {

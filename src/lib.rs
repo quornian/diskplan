@@ -105,11 +105,11 @@
 //! let target = "/local";
 //!
 //! // Construct the initial filesystem
-//! let fs = MemoryFilesystem::new();
+//! let mut fs = MemoryFilesystem::new();
 //!
 //! // Run the traversal to apply the tree to the filesystem
 //! fs.create_directory(target);
-//! traverse(&schema_root, &fs, target)?;
+//! traverse(&schema_root, &mut fs, target)?;
 //!
 //! assert!(fs.is_directory("/local/directory"));
 //! #

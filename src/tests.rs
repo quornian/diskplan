@@ -31,7 +31,7 @@ macro_rules! assert_effect_of {
         // applying:
         let node = parse_schema($text)?;
         // onto:
-        let fs = MemoryFilesystem::new();
+        let mut fs = MemoryFilesystem::new();
         let root = $root;
         // containing:
         let mut expected_paths: HashSet<String> = HashSet::new();
@@ -48,7 +48,7 @@ macro_rules! assert_effect_of {
             expected_paths.insert($in_link.to_owned());
         )+)?
         // yields:
-        traverse(&node, &fs, root)?;
+        traverse(&node, &mut fs, root)?;
         expected_paths.insert("/".to_owned());
         expected_paths.insert(root.to_owned());
         $($(

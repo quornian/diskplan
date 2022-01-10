@@ -13,7 +13,7 @@ use crate::{
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
 
-pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &FS, target: &str) -> Result<()>
+pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &str) -> Result<()>
 where
     FS: Filesystem,
 {
@@ -44,7 +44,7 @@ impl<'a> Scope<'a> {
 fn traverse_over<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: Option<&'a Stack<'a>>,
-    filesystem: &FS,
+    filesystem: &mut FS,
     path: &SplitPath,
 ) -> Result<()>
 where
@@ -76,7 +76,7 @@ fn summarize_schema_node(node: &SchemaNode) -> String {
 fn traverse_into<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: Option<&'a Stack<'a>>,
-    filesystem: &FS,
+    filesystem: &mut FS,
     path: &SplitPath,
 ) -> Result<()>
 where
@@ -143,7 +143,7 @@ where
 fn create<FS>(
     node: &SchemaNode,
     stack: Option<&Stack>,
-    filesystem: &FS,
+    filesystem: &mut FS,
     path: &SplitPath,
 ) -> Result<()>
 where
