@@ -170,15 +170,15 @@ pub enum Schema<'t> {
     File(FileSchema<'t>),
 }
 
-impl Schema<'_> {
-    pub fn as_directory(&self) -> Option<&DirectorySchema> {
+impl<'t> Schema<'t> {
+    pub fn as_directory(&self) -> Option<&DirectorySchema<'t>> {
         match self {
             Schema::Directory(directory) => Some(directory),
             _ => None,
         }
     }
 
-    pub fn as_file(&self) -> Option<&FileSchema> {
+    pub fn as_file(&self) -> Option<&FileSchema<'t>> {
         match self {
             Schema::File(file) => Some(file),
             _ => None,
@@ -213,7 +213,7 @@ impl<'t> DirectorySchema<'t> {
             entries,
         }
     }
-    pub fn vars(&self) -> &HashMap<Identifier, Expression> {
+    pub fn vars(&self) -> &HashMap<Identifier<'t>, Expression<'t>> {
         &self.vars
     }
     pub fn get_var<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a Expression<'t>> {
@@ -225,7 +225,7 @@ impl<'t> DirectorySchema<'t> {
     pub fn get_def<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a SchemaNode<'t>> {
         self.defs.get(id)
     }
-    pub fn entries(&self) -> &[(Binding, SchemaNode)] {
+    pub fn entries(&self) -> &[(Binding<'t>, SchemaNode<'t>)] {
         &self.entries[..]
     }
 }

@@ -117,7 +117,7 @@ impl<'a> SplitPath<'a> {
         }
     }
 
-    pub fn root(&self) -> &str {
+    pub fn root(&self) -> &'a str {
         self.root
     }
 

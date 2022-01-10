@@ -32,8 +32,8 @@ pub struct Stack<'a> {
     scope: Scope<'a>,
 }
 
-impl Scope<'_> {
-    pub fn as_binding(&self) -> Option<(&Identifier, &String)> {
+impl<'a> Scope<'a> {
+    pub fn as_binding(&self) -> Option<(&Identifier<'a>, &String)> {
         match self {
             Scope::Binding(id, value) => Some((id, value)),
             _ => None,

@@ -11,11 +11,11 @@ impl<'t> Expression<'t> {
         Expression(expr, tokens)
     }
 
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &'t str {
         self.0
     }
 
-    pub fn tokens(&self) -> &[Token] {
+    pub fn tokens(&self) -> &[Token<'t>] {
         &self.1[..]
     }
 }
