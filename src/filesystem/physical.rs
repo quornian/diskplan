@@ -2,17 +2,19 @@ use std::{fs, io::Write};
 
 use anyhow::Result;
 
-use super::Filesystem;
+use super::{Attrs, Filesystem, SetAttrs};
 
 /// Access to a real file system
-pub struct DiskFilesystem;
+pub struct DiskFilesystem {}
 
 impl Filesystem for DiskFilesystem {
-    fn create_directory(&mut self, path: &str) -> Result<()> {
+    fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
+        todo!("attrs");
         fs::create_dir(path).map_err(Into::into)
     }
 
-    fn create_file(&mut self, path: &str, content: String) -> Result<()> {
+    fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
+        todo!("attrs");
         let mut file = fs::File::create(path)?;
         file.write_all(content.as_bytes())?;
         Ok(())
@@ -54,11 +56,29 @@ impl Filesystem for DiskFilesystem {
         Ok(listing)
     }
 
+    fn attributes(&self, path: &str) -> Result<Attrs> {
+        todo!();
+    }
+
     fn read_file(&self, path: &str) -> Result<String> {
         fs::read_to_string(path).map_err(Into::into)
     }
 
     fn read_link(&self, path: &str) -> Result<String> {
         Ok(fs::read_link(path)?.to_string_lossy().into_owned())
+    }
+
+    fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>
+    where
+        I: Iterator<Item = &'i str>,
+    {
+        todo!();
+    }
+
+    fn prefetch_gids<'i, I>(&mut self, groups: I) -> Result<()>
+    where
+        I: Iterator<Item = &'i str>,
+    {
+        todo!();
     }
 }

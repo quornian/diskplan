@@ -3,7 +3,7 @@ use anyhow::Result;
 use regex::Regex;
 
 use diskplan::{
-    filesystem::{Filesystem, MemoryFilesystem},
+    filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
     schema::SchemaNode,
     traversal::traverse,
 };
@@ -22,10 +22,10 @@ pub fn verify_trees(
             fs.create_symlink(&entry.path, target)?;
         } else if entry.is_dir {
             if !fs.exists(&entry.path) {
-                fs.create_directory(&entry.path)?;
+                fs.create_directory(&entry.path, SetAttrs::default())?;
             }
         } else {
-            fs.create_file(&entry.path, "".to_owned())?;
+            fs.create_file(&entry.path, SetAttrs::default(), "".to_owned())?;
         }
     }
 

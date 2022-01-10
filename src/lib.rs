@@ -89,7 +89,7 @@
 //! We can use the in-memory filesystem to test:
 //! ```
 //! use diskplan::{
-//!     filesystem::{Filesystem, MemoryFilesystem},
+//!     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
 //!     traversal::traverse,
 //!     schema::parse_schema
 //! };
@@ -108,7 +108,7 @@
 //! let mut fs = MemoryFilesystem::new();
 //!
 //! // Run the traversal to apply the tree to the filesystem
-//! fs.create_directory(target);
+//! fs.create_directory(target, SetAttrs::default());
 //! traverse(&schema_root, &mut fs, target)?;
 //!
 //! assert!(fs.is_directory("/local/directory"));

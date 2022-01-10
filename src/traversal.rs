@@ -1,14 +1,13 @@
-use std::borrow::Cow;
-use std::fmt::Write;
+use std::{borrow::Cow, collections::HashSet, fmt::Write};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result};
 
 mod eval;
 mod pattern;
 mod reuse;
 
 use crate::{
-    filesystem::{self, Filesystem, SplitPath},
+    filesystem::{self, Filesystem, SetAttrs, SplitPath},
     schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
@@ -17,6 +16,10 @@ pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &
 where
     FS: Filesystem,
 {
+    let (owners, groups) = owners_and_groups(root);
+    filesystem.prefetch_uids(owners.into_iter())?;
+    filesystem.prefetch_gids(groups.into_iter())?;
+
     traverse_over(root, None, filesystem, &SplitPath::new(target)?)
 }
 
@@ -149,6 +152,12 @@ fn create<FS>(
 where
     FS: Filesystem,
 {
+    let attrs = SetAttrs {
+        owner: node.attributes.owner,
+        group: node.attributes.group,
+        mode: node.attributes.mode,
+    };
+
     // References held to data within by `to_create`, but only in the symlink branch
     let link_str;
     let link_target;
@@ -170,7 +179,7 @@ where
                     link_target.absolute()
                 );
                 filesystem
-                    .create_directory_all(parent)
+                    .create_directory_all(parent, attrs.clone())
                     .context("Creating parent directories")?;
             }
         }
@@ -189,7 +198,7 @@ where
         Schema::Directory(_) => {
             if !filesystem.is_directory(to_create) {
                 filesystem
-                    .create_directory(to_create)
+                    .create_directory(to_create, attrs)
                     .context("As directory")?;
             }
         }
@@ -198,7 +207,7 @@ where
                 let source = evaluate(file.source(), stack, path)?;
                 let content = filesystem.read_file(&source)?;
                 filesystem
-                    .create_file(to_create, content)
+                    .create_file(to_create, attrs, content)
                     .context("As file")?;
             }
         }
@@ -229,4 +238,24 @@ fn marked_matches<'a>(
         }
     };
     matched.into_iter()
+}
+
+fn owners_and_groups<'a>(root: &SchemaNode<'a>) -> (HashSet<&'a str>, HashSet<&'a str>) {
+    fn walk<'a>(node: &SchemaNode<'a>, o: &mut HashSet<&'a str>, g: &mut HashSet<&'a str>) {
+        if let Some(owner) = node.attributes.owner {
+            o.insert(owner);
+        }
+        if let Some(group) = node.attributes.group {
+            g.insert(group);
+        }
+        if let Some(dir) = node.schema.as_directory() {
+            for (_, child) in dir.entries() {
+                walk(child, o, g);
+            }
+        }
+    }
+    let mut owners = HashSet::new();
+    let mut groups = HashSet::new();
+    walk(root, &mut owners, &mut groups);
+    (owners, groups)
 }

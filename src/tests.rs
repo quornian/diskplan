@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 
 use crate::{
-    filesystem::{Filesystem, MemoryFilesystem},
+    filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
     schema::parse_schema,
     traversal::traverse,
 };
@@ -36,11 +36,11 @@ macro_rules! assert_effect_of {
         // containing:
         let mut expected_paths: HashSet<String> = HashSet::new();
         $($(
-            fs.create_directory($in_directory)?;
+            fs.create_directory($in_directory, SetAttrs::default())?;
             expected_paths.insert($in_directory.to_owned());
         )+)?
         $($(
-            fs.create_file($in_file, $in_content.to_owned())?;
+            fs.create_file($in_file, SetAttrs::default(), $in_content.to_owned())?;
             expected_paths.insert($in_file.to_owned());
         )+)?
         $($(

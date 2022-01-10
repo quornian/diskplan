@@ -10,23 +10,37 @@ mod physical;
 pub use memory::MemoryFilesystem;
 pub use physical::DiskFilesystem;
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct SetAttrs<'a> {
+    pub owner: Option<&'a str>,
+    pub group: Option<&'a str>,
+    pub mode: Option<u16>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Attrs<'a> {
+    pub owner: &'a str,
+    pub group: &'a str,
+    pub mode: u16,
+}
+
 /// Operations of a file system
 pub trait Filesystem {
-    fn create_directory(&mut self, path: &str) -> Result<()>;
+    fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
 
-    fn create_directory_all(&mut self, path: &str) -> Result<()> {
+    fn create_directory_all(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
         if let Some((parent, _)) = split(path) {
             if parent != "/" {
-                self.create_directory_all(parent)?;
+                self.create_directory_all(parent, attrs.clone())?;
             }
         }
         if !self.is_directory(path) {
-            self.create_directory(path)?;
+            self.create_directory(path, attrs)?;
         }
         Ok(())
     }
 
-    fn create_file(&mut self, path: &str, content: String) -> Result<()>;
+    fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()>;
 
     fn create_symlink(&mut self, path: &str, target: String) -> Result<()>;
 
@@ -39,6 +53,8 @@ pub trait Filesystem {
     fn is_link(&self, path: &str) -> bool;
 
     fn list_directory(&self, path: &str) -> Result<Vec<String>>;
+
+    fn attributes(&self, path: &str) -> Result<Attrs>;
 
     fn read_file(&self, path: &str) -> Result<String>;
 
@@ -60,6 +76,14 @@ pub trait Filesystem {
         }
         Ok(canon)
     }
+
+    fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>
+    where
+        I: Iterator<Item = &'i str>;
+
+    fn prefetch_gids<'i, I>(&mut self, groups: I) -> Result<()>
+    where
+        I: Iterator<Item = &'i str>;
 }
 
 pub fn name(path: &str) -> &str {
