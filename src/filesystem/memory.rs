@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Context, Result};
 
@@ -10,11 +7,6 @@ use super::Filesystem;
 /// An in-memory representation of a file system
 #[derive(Debug)]
 pub struct MemoryFilesystem {
-    inner: RefCell<Inner>,
-}
-
-#[derive(Debug)]
-struct Inner {
     map: HashMap<String, Node>,
 }
 
@@ -29,21 +21,11 @@ impl MemoryFilesystem {
     pub fn new() -> Self {
         let mut map = HashMap::new();
         map.insert("/".into(), Node::Directory { children: vec![] });
-
-        MemoryFilesystem {
-            inner: RefCell::new(Inner { map }),
-        }
+        MemoryFilesystem { map }
     }
 
     pub fn to_path_set<'a>(&'a self) -> HashSet<String> {
-        self.inner.borrow().map.keys().cloned().collect()
-    }
-
-    fn canonical_split<'s>(&self, path: &'s str) -> Result<(String, &'s str)> {
-        match super::split(path) {
-            None => Err(anyhow!("Cannot create {}", path)),
-            Some((parent, name)) => Ok((self.canonicalize(parent)?, name)),
-        }
+        self.map.keys().cloned().collect()
     }
 }
 
@@ -52,31 +34,25 @@ impl Filesystem for MemoryFilesystem {
         let (parent, name) = self
             .canonical_split(path)
             .with_context(|| format!("Splitting {}", path))?;
-        let mut inner = self.inner.borrow_mut();
-        inner
-            .insert_node(&parent, name, Node::Directory { children: vec![] })
+        self.insert_node(&parent, name, Node::Directory { children: vec![] })
             .with_context(|| format!("Creating directory: {}", path))
     }
 
     fn create_file(&mut self, path: &str, content: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
-        let mut inner = self.inner.borrow_mut();
-        inner
-            .insert_node(&parent, name, Node::File { content })
+        self.insert_node(&parent, name, Node::File { content })
             .with_context(|| format!("Creating file: {}", path))
     }
 
     fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
-        let mut inner = self.inner.borrow_mut();
-        inner
-            .insert_node(&parent, name, Node::Symlink { target })
+        self.insert_node(&parent, name, Node::Symlink { target })
             .with_context(|| format!("Creating symlink: {}", path))
     }
 
     fn exists(&self, path: &str) -> bool {
         match self.canonicalize(path) {
-            Ok(path) => self.inner.borrow().map.contains_key(&path),
+            Ok(path) => self.map.contains_key(&path),
             _ => false,
         }
     }
@@ -84,7 +60,7 @@ impl Filesystem for MemoryFilesystem {
     fn is_directory(&self, path: &str) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
-            Ok(path) => match self.inner.borrow().map.get(&path) {
+            Ok(path) => match self.map.get(&path) {
                 Some(Node::Directory { .. }) => true,
                 _ => false,
             },
@@ -94,7 +70,7 @@ impl Filesystem for MemoryFilesystem {
     fn is_file(&self, path: &str) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
-            Ok(path) => match self.inner.borrow().map.get(&path) {
+            Ok(path) => match self.map.get(&path) {
                 Some(Node::File { .. }) => true,
                 _ => false,
             },
@@ -102,7 +78,7 @@ impl Filesystem for MemoryFilesystem {
     }
 
     fn is_link(&self, path: &str) -> bool {
-        match self.inner.borrow().map.get(path) {
+        match self.map.get(path) {
             Some(Node::Symlink { .. }) => true,
             _ => false,
         }
@@ -110,7 +86,7 @@ impl Filesystem for MemoryFilesystem {
 
     fn list_directory(&self, path: &str) -> Result<Vec<String>> {
         let path = self.canonicalize(path)?;
-        match self.inner.borrow().map.get(&path) {
+        match self.map.get(&path) {
             None => Err(anyhow!("No such file or directory: {}", path)),
             Some(Node::Directory { children }) => Ok(children.clone()),
             Some(Node::File { .. }) => Err(anyhow!("Tried to list directory of a file")),
@@ -121,7 +97,7 @@ impl Filesystem for MemoryFilesystem {
 
     fn read_file(&self, path: &str) -> Result<String> {
         let path = self.canonicalize(path)?;
-        match self.inner.borrow().map.get(&path) {
+        match self.map.get(&path) {
             None => Err(anyhow!("No such file or directory: {}", path)),
             Some(Node::File { content }) => Ok(content.clone()),
             Some(Node::Directory { .. }) => Err(anyhow!("Tried to read a directory")),
@@ -130,8 +106,7 @@ impl Filesystem for MemoryFilesystem {
     }
 
     fn read_link(&self, path: &str) -> Result<String> {
-        let inner = self.inner.borrow();
-        match inner.map.get(path) {
+        match self.map.get(path) {
             None => Err(anyhow!("No such file or directory: {}", path)),
             Some(Node::Symlink { target }) => Ok(target.clone()),
             Some(_) => Err(anyhow!("Not a symlink: {}", path)),
@@ -139,7 +114,14 @@ impl Filesystem for MemoryFilesystem {
     }
 }
 
-impl Inner {
+impl MemoryFilesystem {
+    fn canonical_split<'s>(&self, path: &'s str) -> Result<(String, &'s str)> {
+        match super::split(path) {
+            None => Err(anyhow!("Cannot create {}", path)),
+            Some((parent, name)) => Ok((self.canonicalize(parent)?, name)),
+        }
+    }
+
     /// Inserts a new entry into the filesystem, under the given *canonical* parent
     ///
     /// # Arguments
@@ -148,7 +130,7 @@ impl Inner {
     /// * `name` - The name to give to the new entry
     /// * `node` - The entry itself
     ///
-    pub fn insert_node(&mut self, parent: &str, name: &str, node: Node) -> Result<()> {
+    fn insert_node(&mut self, parent: &str, name: &str, node: Node) -> Result<()> {
         // Check it doesn't already exist
         let path = super::join(parent, name);
         if self.map.contains_key(&path) {
