@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Context, Result};
 
-use super::{Attrs, Filesystem, SetAttrs};
+use super::{Filesystem, SetAttrs};
 
 /// An in-memory representation of a file system
 #[derive(Debug)]
@@ -44,8 +44,6 @@ impl MemoryFilesystem {
 
     const DEFAULT_OWNER: u32 = Self::ROOT;
     const DEFAULT_GROUP: u32 = Self::ROOT;
-    const DEFAULT_DIRECTORY_MODE: u16 = 0o755;
-    const DEFAULT_FILE_MODE: u16 = 0o644;
 
     pub fn new() -> Self {
         let mut map = HashMap::new();
@@ -61,7 +59,7 @@ impl MemoryFilesystem {
                 attrs: FSAttrs {
                     uid: Self::ROOT,
                     gid: Self::ROOT,
-                    mode: Self::DEFAULT_DIRECTORY_MODE,
+                    mode: super::DEFAULT_DIRECTORY_MODE,
                 },
                 children: vec![],
             },
@@ -79,7 +77,7 @@ impl Filesystem for MemoryFilesystem {
         let (parent, name) = self
             .canonical_split(path)
             .with_context(|| format!("Splitting {}", path))?;
-        let attrs = self.internal_attrs(attrs, Self::DEFAULT_DIRECTORY_MODE)?;
+        let attrs = self.internal_attrs(attrs, super::DEFAULT_DIRECTORY_MODE)?;
         let children = vec![];
         self.insert_node(&parent, name, Node::Directory { attrs, children })
             .with_context(|| format!("Creating directory: {}", path))
@@ -87,7 +85,7 @@ impl Filesystem for MemoryFilesystem {
 
     fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
-        let attrs = self.internal_attrs(attrs, Self::DEFAULT_FILE_MODE)?;
+        let attrs = self.internal_attrs(attrs, super::DEFAULT_FILE_MODE)?;
         self.insert_node(&parent, name, Node::File { attrs, content })
             .with_context(|| format!("Creating file: {}", path))
     }
@@ -141,32 +139,6 @@ impl Filesystem for MemoryFilesystem {
             Some(Node::Symlink { .. }) => unreachable!("Canonical"),
         }
         .with_context(|| format!("Listing directory: {}", path))
-    }
-
-    fn attributes(&self, path: &str) -> Result<Attrs> {
-        let path = self.canonicalize(path)?;
-        let node = self
-            .map
-            .get(&path)
-            .ok_or_else(|| anyhow!("No such file or directory: {}", path))?;
-        let attrs = match node {
-            Node::Directory { attrs, .. } | Node::File { attrs, .. } => attrs,
-            Node::Symlink { .. } => panic!("Non-canonical path: {}", path),
-        };
-        // Slow inverse lookup
-        Ok(Attrs {
-            owner: self
-                .uids
-                .iter()
-                .find_map(|(user, &uid)| if uid == attrs.uid { Some(user) } else { None })
-                .ok_or_else(|| anyhow!("UID not found: {}", attrs.uid))?,
-            group: self
-                .gids
-                .iter()
-                .find_map(|(group, &gid)| if gid == attrs.gid { Some(group) } else { None })
-                .ok_or_else(|| anyhow!("GID not found: {}", attrs.gid))?,
-            mode: attrs.mode,
-        })
     }
 
     fn read_file(&self, path: &str) -> Result<String> {

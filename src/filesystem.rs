@@ -17,12 +17,8 @@ pub struct SetAttrs<'a> {
     pub mode: Option<u16>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Attrs<'a> {
-    pub owner: &'a str,
-    pub group: &'a str,
-    pub mode: u16,
-}
+pub const DEFAULT_DIRECTORY_MODE: u16 = 0o755;
+pub const DEFAULT_FILE_MODE: u16 = 0o644;
 
 /// Operations of a file system
 pub trait Filesystem {
@@ -53,8 +49,6 @@ pub trait Filesystem {
     fn is_link(&self, path: &str) -> bool;
 
     fn list_directory(&self, path: &str) -> Result<Vec<String>>;
-
-    fn attributes(&self, path: &str) -> Result<Attrs>;
 
     fn read_file(&self, path: &str) -> Result<String>;
 

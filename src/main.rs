@@ -27,10 +27,17 @@ fn main() -> Result<()> {
                 .takes_value(true)
                 .required(true),
         )
+        .arg(
+            Arg::with_name("apply")
+                .long("--apply")
+                .help("Apply the changes")
+                .takes_value(false),
+        )
         .get_matches();
 
     let schema = matches.value_of("schema").unwrap();
     let target = matches.value_of("target").unwrap();
+    let apply = matches.is_present("apply");
 
     let content = std::fs::read_to_string(schema)
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
@@ -39,26 +46,14 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("{}", e))
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
-    let mut fs = filesystem::MemoryFilesystem::new();
-
-    // if let Some(keyvalues) = matches.values_of("let") {
-    //     let keys = keyvalues.clone().into_iter().step_by(2);
-    //     let values = keyvalues.into_iter().skip(1).step_by(2);
-    //     for (key, value) in keys.zip(values) {
-    //         println!("{} = {}", key, value);
-    //         //FIXME: Parse this! and Identifier
-    //         assert!(!key.contains("$"));
-    //         assert!(!value.contains("$"));
-    //         let key = Identifier::new(key);
-    //         context.bind(key, value.into());
-    //     }
-    // }
-    // let context = context;
-
-    traverse(&schema_root, &mut fs, target)?;
-
-    print_tree("/", &fs, 0)?;
-
+    if apply {
+        let mut fs = filesystem::DiskFilesystem::new();
+        traverse(&schema_root, &mut fs, target)?;
+    } else {
+        let mut fs = filesystem::MemoryFilesystem::new();
+        traverse(&schema_root, &mut fs, target)?;
+        print_tree("/", &fs, 0)?;
+    }
     Ok(())
 }
 
@@ -68,13 +63,14 @@ where
 {
     let (_, name) = filesystem::split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
     let dir = fs.is_directory(path);
-    let attrs = fs.attributes(path)?;
-    print_perms(dir, attrs.mode);
+    // let attrs = fs.attributes(path)?;
+    // print_perms(dir, attrs.mode);
     print!(
-        " {owner:10} {group:10} {0:indent$}{name}{symbol}",
+        "{0:indent$}{name}{symbol}",
+        // " {owner:10} {group:10} {0:indent$}{name}{symbol}",
         "",
-        owner = attrs.owner,
-        group = attrs.group,
+        // owner = attrs.owner,
+        // group = attrs.group,
         indent = depth * 2,
         name = name,
         symbol = if dir { "/" } else { "" }
