@@ -22,11 +22,18 @@ macro_rules! assert_effect_of {
                 $($in_link:literal -> $in_target:literal)+ )?
         yields:
             $(directories:
-                $($out_directory:literal)+ )?
+                $($directory:literal $([
+                    $(owner = $d_owner:literal)?
+                    $(group = $d_group:literal)?
+                    $(mode = $d_mode:expr)? ])? )+ )?
             $(files:
-                $($out_file:literal [ $out_content:literal ])+ )?
+                $($file:literal [
+                    $content:literal
+                    $(owner = $f_owner:literal)?
+                    $(group = $f_group:literal)?
+                    $(mode = $f_mode:expr)? ])+ )?
             $(symlinks:
-                $($out_link:literal -> $out_target:literal)+ )?
+                $($link:literal -> $target:literal)+ )?
     } => {{
         // applying:
         let node = parse_schema($text)?;
@@ -52,24 +59,37 @@ macro_rules! assert_effect_of {
         expected_paths.insert("/".to_owned());
         expected_paths.insert(root.to_owned());
         $($(
-            assert!(fs.is_directory($out_directory));
-            expected_paths.insert($out_directory.to_owned());
+            assert!(fs.is_directory($directory));
+            $(
+                let attrs = fs.attributes($directory)?;
+                $(assert_eq!(attrs.owner.as_ref(), $d_owner);)?
+                $(assert_eq!(attrs.group.as_ref(), $d_group);)?
+                $(assert_eq!(attrs.mode, $d_mode);)?
+            )?
+            expected_paths.insert($directory.to_owned());
         )+)?
         $($(
-            assert!(fs.is_file($out_file));
-            assert_eq!(&fs.read_file($out_file)?, $out_content);
-            expected_paths.insert($out_file.to_owned());
+            assert!(fs.is_file($file));
+            $(
+                let attrs = fs.attributes($file)?;
+                $(assert_eq!(attrs.owner.as_ref(), $f_owner);)?
+                $(assert_eq!(attrs.group.as_ref(), $f_group);)?
+                $(assert_eq!(attrs.mode, $f_mode);)?
+            )?
+            assert_eq!(&fs.read_file($file)?, $content);
+            expected_paths.insert($file.to_owned());
         )+)?
         $($(
-            assert!(fs.is_link($out_link));
-            assert_eq!(&fs.read_link($out_link)?, $out_target);
-            expected_paths.insert($out_link.to_owned());
+            assert!(fs.is_link($link));
+            assert_eq!(&fs.read_link($link)?, $target);
+            expected_paths.insert($link.to_owned());
         )+)?
         let actual_paths = fs.to_path_set();
         let unaccounted: Vec<_> = actual_paths.difference(&expected_paths).collect();
         if !unaccounted.is_empty() {
             panic!("Paths unaccounted for: {:?}", unaccounted);
         }
+        Ok(())
     }};
 }
 
@@ -87,8 +107,7 @@ fn test_create_directory() -> Result<()> {
                 "/primary"
                 "/primary/subdir"
                 "/primary/subdir/subsubdir"
-    };
-    Ok(())
+    }
 }
 
 #[test]
@@ -113,8 +132,7 @@ fn test_create_file() -> Result<()> {
             files:
                 "/primary/subdir/subsubfile" ["FILE CONTENT 1"]
                 "/primary/subfile" ["FILE CONTENT 2"]
-    };
-    Ok(())
+    }
 }
 
 #[test]
@@ -138,12 +156,11 @@ fn test_create_symlink() -> Result<()> {
                 "/secondary/subdirlink/subfile" ["FILE CONTENT"]
             symlinks:
                 "/primary/subdirlink" -> "/secondary/subdirlink"
-    };
-    Ok(())
+    }
 }
 
 #[test]
-fn test_use_simple() -> Result<()> {
+fn test_def_use_simple() -> Result<()> {
     assert_effect_of! {
         applying: "
             #def some_def/
@@ -157,12 +174,11 @@ fn test_use_simple() -> Result<()> {
             directories:
                 "/inner"
                 "/inner/sub"
-    };
-    Ok(())
+    }
 }
 
 #[test]
-fn test_use_at_top_level() -> Result<()> {
+fn test_def_use_at_top_level() -> Result<()> {
     assert_effect_of! {
         applying: "
             #use has_sub
@@ -179,12 +195,11 @@ fn test_use_at_top_level() -> Result<()> {
                 "/sub"
                 "/inner"
                 "/inner/sub"
-    };
-    Ok(())
+    }
 }
 
 #[test]
-fn use_multiple() -> Result<()> {
+fn test_def_use_multiple() -> Result<()> {
     assert_effect_of! {
         applying: "
             #def def_a/
@@ -204,6 +219,70 @@ fn use_multiple() -> Result<()> {
                 "/inner/sub_a"
                 "/inner/sub_b"
                 "/inner/sub_c"
-    };
-    Ok(())
+    }
+}
+
+#[test]
+#[should_panic]
+fn test_incorrect_attribute_assertion() {
+    (|| -> Result<()> {
+        assert_effect_of! {
+            applying: "
+                dir/
+                    #mode 640
+                "
+            onto: "/target"
+            yields:
+                directories:
+                    "/target/dir" [mode = 640] // This is incorrectly decimal
+        }
+    })()
+    .unwrap_or_default();
+}
+
+#[test]
+fn test_attributes() -> Result<()> {
+    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
+    assert_effect_of! {
+        applying: "
+            dir/
+                #mode 640
+            another/
+                #owner example_user
+                #group example_group
+            "
+        onto: "/target"
+        yields:
+            directories:
+                "/target" [mode = DEFAULT_DIRECTORY_MODE]
+                "/target/dir" [mode = 0o640]
+                "/target/another" [
+                    owner = "example_user"
+                    group = "example_group"
+                    mode = DEFAULT_DIRECTORY_MODE]
+    }
+}
+
+#[test]
+fn test_top_level_attributes() -> Result<()> {
+    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
+    assert_effect_of! {
+        applying: "
+            #mode 640
+            #owner example_user
+            #group example_group
+            sub/
+            "
+        onto: "/target"
+        yields:
+            directories:
+                "/target" [
+                    owner = "example_user"
+                    group = "example_group"
+                    mode = 0o640]
+                "/target/sub" [
+                    owner = "root"
+                    group = "root"
+                    mode = DEFAULT_DIRECTORY_MODE]
+    }
 }
