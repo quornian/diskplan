@@ -286,3 +286,92 @@ fn test_top_level_attributes() -> Result<()> {
                     mode = DEFAULT_DIRECTORY_MODE]
     }
 }
+
+#[test]
+fn test_winner_fixed_then_variable() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            fixed/
+                MATCHED_FIXED/
+            $variable/
+                #match .*
+                MATCHED_VARIABLE/
+            "
+        onto: "/"
+            directories:
+                "/fixed"
+        yields:
+            directories:
+                "/fixed/MATCHED_FIXED"
+    }
+}
+
+#[test]
+fn test_winner_variable_then_fixed() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $variable/
+                #match .*
+                MATCHED_VARIABLE/
+            fixed/
+                MATCHED_FIXED/
+            "
+        onto: "/"
+            directories:
+                "/fixed"
+        yields:
+            directories:
+                "/fixed/MATCHED_VARIABLE"
+    }
+}
+
+#[test]
+fn test_winner_variable_then_variable() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $variable_a/
+                #match .*
+                MATCHED_VARIABLE_A/
+            $variable_b/
+                #match .*
+                MATCHED_VARIABLE_B/
+            "
+        onto: "/"
+            directories:
+                "/fixed"
+        yields:
+            directories:
+                "/fixed/MATCHED_VARIABLE_A"
+    }
+}
+
+#[test]
+fn test_match() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $a/
+                #match x.*
+                starts
+                    #source /src/empty
+            $b/
+                #match .*x
+                ends
+                    #source /src/empty
+            "
+        onto: "/target"
+            directories:
+                "/src"
+                "/target"
+                "/target/has_an_x_in_it"
+                "/target/x_at_the_beginning"
+                "/target/ends_with_an_x"
+                "/target/x_here_and_here_x" // Only first pattern will match...
+            files:
+                "/src/empty" [""]
+        yields:
+            files:
+                "/target/x_at_the_beginning/starts" [""]
+                "/target/ends_with_an_x/ends" [""]
+                "/target/x_here_and_here_x/starts" [""]  // ...as seen here
+    }
+}
