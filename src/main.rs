@@ -1,5 +1,3 @@
-use std::{fs::File, io::Read};
-
 use anyhow::{anyhow, Context as _, Result};
 use clap::{App, Arg};
 
@@ -63,14 +61,13 @@ where
 {
     let (_, name) = filesystem::split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
     let dir = fs.is_directory(path);
-    // let attrs = fs.attributes(path)?;
-    // print_perms(dir, attrs.mode);
+    let attrs = fs.attributes(path)?;
+    print_perms(dir, attrs.mode);
     print!(
-        "{0:indent$}{name}{symbol}",
-        // " {owner:10} {group:10} {0:indent$}{name}{symbol}",
+        " {owner:10} {group:10} {0:indent$}{name}{symbol}",
         "",
-        // owner = attrs.owner,
-        // group = attrs.group,
+        owner = attrs.owner,
+        group = attrs.group,
         indent = depth * 2,
         name = name,
         symbol = if dir { "/" } else { "" }

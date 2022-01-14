@@ -1,8 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 use anyhow::{anyhow, Context, Result};
 
-use super::{Filesystem, SetAttrs};
+use super::{Attrs, Filesystem, SetAttrs};
 
 /// An in-memory representation of a file system
 #[derive(Debug)]
@@ -157,6 +160,34 @@ impl Filesystem for MemoryFilesystem {
             Some(Node::Symlink { target }) => Ok(target.clone()),
             Some(_) => Err(anyhow!("Not a symlink: {}", path)),
         }
+    }
+
+    fn attributes(&self, path: &str) -> Result<Attrs> {
+        let path = self.canonicalize(path)?;
+        let node = self
+            .map
+            .get(&path)
+            .ok_or_else(|| anyhow!("No such file or directory: {}", path))?;
+        let attrs = match node {
+            Node::Directory { attrs, .. } | Node::File { attrs, .. } => attrs,
+            Node::Symlink { .. } => panic!("Non-canonical path: {}", path),
+        };
+        // Slow inverse lookup
+        Ok(Attrs {
+            owner: Cow::Borrowed(
+                self.uids
+                    .iter()
+                    .find_map(|(user, &uid)| if uid == attrs.uid { Some(user) } else { None })
+                    .ok_or_else(|| anyhow!("UID not found: {}", attrs.uid))?,
+            ),
+            group: Cow::Borrowed(
+                self.gids
+                    .iter()
+                    .find_map(|(group, &gid)| if gid == attrs.gid { Some(group) } else { None })
+                    .ok_or_else(|| anyhow!("GID not found: {}", attrs.gid))?,
+            ),
+            mode: attrs.mode,
+        })
     }
 
     fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>

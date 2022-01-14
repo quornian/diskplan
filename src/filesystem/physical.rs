@@ -1,10 +1,13 @@
-use std::{fs, io::Write, os::unix::fs::PermissionsExt};
+use std::{borrow::Cow, fs, io::Write, os::unix::fs::PermissionsExt};
 
 use anyhow::{anyhow, Result};
-use nix::unistd::{Gid, Uid};
+use nix::{
+    sys::stat,
+    unistd::{Gid, Uid},
+};
 use users::{Groups, Users, UsersCache};
 
-use super::{Filesystem, SetAttrs};
+use super::{Attrs, Filesystem, SetAttrs};
 
 /// Access to a real file system
 pub struct DiskFilesystem {
@@ -65,6 +68,28 @@ impl Filesystem for DiskFilesystem {
 
     fn read_link(&self, path: &str) -> Result<String> {
         Ok(fs::read_link(path)?.to_string_lossy().into_owned())
+    }
+
+    fn attributes(&self, path: &str) -> Result<Attrs> {
+        let stat = stat::stat(path)?;
+        let owner = Cow::Owned(
+            self.users
+                .get_user_by_uid(stat.st_uid)
+                .ok_or_else(|| anyhow!("Failed to get user from UID: {}", stat.st_uid))?
+                .name()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let group = Cow::Owned(
+            self.users
+                .get_group_by_gid(stat.st_gid)
+                .ok_or_else(|| anyhow!("Failed to get group from GID: {}", stat.st_gid))?
+                .name()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let mode = stat.st_mode as u16;
+        Ok(Attrs { owner, group, mode })
     }
 
     fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>

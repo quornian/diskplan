@@ -20,6 +20,13 @@ pub struct SetAttrs<'a> {
 pub const DEFAULT_DIRECTORY_MODE: u16 = 0o755;
 pub const DEFAULT_FILE_MODE: u16 = 0o644;
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Attrs<'a> {
+    pub owner: Cow<'a, str>,
+    pub group: Cow<'a, str>,
+    pub mode: u16,
+}
+
 /// Operations of a file system
 pub trait Filesystem {
     fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
@@ -53,6 +60,8 @@ pub trait Filesystem {
     fn read_file(&self, path: &str) -> Result<String>;
 
     fn read_link(&self, path: &str) -> Result<String>;
+
+    fn attributes(&self, path: &str) -> Result<Attrs>;
 
     fn canonicalize(&self, path: &str) -> Result<String> {
         let path = normalize(path);
@@ -129,7 +138,7 @@ impl<'a> SplitPath<'a> {
         match root.starts_with("/") {
             false => Err(anyhow!("Root must be an absolute path")),
             true => Ok(SplitPath {
-                root: root,
+                root,
                 full: root.to_owned(),
             }),
         }
