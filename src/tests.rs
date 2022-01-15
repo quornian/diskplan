@@ -309,7 +309,7 @@ fn test_attribute_expressions() -> Result<()> {
 }
 
 #[test]
-fn test_winner_fixed_then_variable() -> Result<()> {
+fn test_binding_static_beats_dynamic() -> Result<()> {
     assert_effect_of! {
         applying: "
             fixed/
@@ -328,7 +328,7 @@ fn test_winner_fixed_then_variable() -> Result<()> {
 }
 
 #[test]
-fn test_winner_variable_then_fixed() -> Result<()> {
+fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
     assert_effect_of! {
         applying: "
             $variable/
@@ -342,14 +342,18 @@ fn test_winner_variable_then_fixed() -> Result<()> {
                 "/fixed"
         yields:
             directories:
-                "/fixed/MATCHED_VARIABLE"
+                "/fixed/MATCHED_FIXED"
     }
 }
 
 #[test]
-fn test_winner_variable_then_variable() -> Result<()> {
-    assert_effect_of! {
-        applying: "
+#[should_panic(
+    expected = "'fixed' matches multiple dynamic bindings '$variable_a' and '$variable_b'"
+)]
+fn test_binding_multiple_variable_error() {
+    (|| -> Result<()> {
+        assert_effect_of! {
+            applying: "
             $variable_a/
                 #match .*
                 MATCHED_VARIABLE_A/
@@ -357,17 +361,37 @@ fn test_winner_variable_then_variable() -> Result<()> {
                 #match .*
                 MATCHED_VARIABLE_B/
             "
-        onto: "/"
-            directories:
-                "/fixed"
-        yields:
-            directories:
-                "/fixed/MATCHED_VARIABLE_A"
-    }
+            onto: "/"
+                directories:
+                    "/fixed"
+            yields:
+                directories:
+                    "/fixed/MATCHED_VARIABLE_A"
+        }
+    })()
+    .unwrap();
 }
 
 #[test]
-fn test_match() -> Result<()> {
+#[should_panic(
+    expected = "'duplicate' matches multiple static bindings 'duplicate' and 'duplicate'"
+)]
+fn test_binding_multiple_static_error() {
+    (|| -> Result<()> {
+        assert_effect_of! {
+            applying: "
+            duplicate/
+            duplicate/
+            "
+            onto: "/"
+            yields:
+        }
+    })()
+    .unwrap();
+}
+
+#[test]
+fn test_match_variable() -> Result<()> {
     assert_effect_of! {
         applying: "
             $a/
@@ -386,13 +410,11 @@ fn test_match() -> Result<()> {
                 "/target/has_an_x_in_it"
                 "/target/x_at_the_beginning"
                 "/target/ends_with_an_x"
-                "/target/x_here_and_here_x" // Only first pattern will match...
             files:
                 "/src/empty" [""]
         yields:
             files:
                 "/target/x_at_the_beginning/starts" [""]
                 "/target/ends_with_an_x/ends" [""]
-                "/target/x_here_and_here_x/starts" [""]  // ...as seen here
     }
 }

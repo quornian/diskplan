@@ -97,7 +97,7 @@ where
             .unwrap_or_else(|_| vec![]);
         let existing = listing.iter().map(AsRef::as_ref).map(Cow::Borrowed);
 
-        // Collect names of fixed or bound-variable schema entries
+        // Collect names of fixed and variable schema entries (fixed are sorted first)
         let bound = directory_schema
             .entries()
             .iter()
@@ -123,16 +123,27 @@ where
                     // Static binding produces a match for that name only
                     &Binding::Static(bound_name) if bound_name == name => match have_match {
                         None => Ok(*have_match = Some((binding, child_node))),
-                        Some((bound, _)) => Err(bound),
+                        Some((bound, _)) => Err((*bound, "static")), // Error: multiple static matches
                     },
                     // Dynamic bindings must match their inner schema pattern
                     &Binding::Dynamic(_) if pattern.matches(name) => match have_match {
                         None => Ok(*have_match = Some((binding, child_node))),
-                        Some((bound, _)) => Err(bound),
+                        Some((bound, _)) => match bound {
+                            Binding::Static(_) => Ok(()), // Keep previous static binding
+                            Binding::Dynamic(_) => Err((*bound, "dynamic")), // Error: multiple dynamic matches
+                        },
                     },
                     _ => Ok(()),
                 }
-                .map_err(|bound| anyhow!("{} matches multiple: {:?} {:?}", name, bound, binding))?;
+                .map_err(|(bound, bind_type)| {
+                    anyhow!(
+                        "'{}' matches multiple {} bindings '{}' and '{}'",
+                        name,
+                        bind_type,
+                        bound,
+                        binding
+                    )
+                })?;
             }
         }
 
