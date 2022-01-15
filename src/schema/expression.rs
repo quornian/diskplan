@@ -18,6 +18,14 @@ impl<'t> Expression<'t> {
     pub fn tokens(&self) -> &[Token<'t>] {
         &self.1[..]
     }
+
+    pub fn from_text(s: &'t str) -> Result<Expression<'t>, String> {
+        if s.contains('$') {
+            Err(format!("Not a text-only expression: {}", s))
+        } else {
+            Ok(Expression::from_parsed(s, vec![Token::Text(s)]))
+        }
+    }
 }
 
 impl PartialEq for Expression<'_> {
@@ -100,12 +108,12 @@ impl<'a> From<&'a str> for Identifier<'a> {
 
 impl<'a> From<Identifier<'a>> for Expression<'a> {
     fn from(i: Identifier<'a>) -> Self {
-        Expression(i.value(), vec![Token::Text(i.value())])
+        Expression(i.value(), vec![Token::Variable(i)])
     }
 }
 
 impl<'a> From<&Identifier<'a>> for Expression<'a> {
     fn from(i: &Identifier<'a>) -> Self {
-        Expression(i.value(), vec![Token::Text(i.value())])
+        Expression(i.value(), vec![Token::Variable(i.clone())])
     }
 }

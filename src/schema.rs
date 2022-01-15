@@ -37,8 +37,8 @@
 //! ")?;
 //!
 //! assert!(matches!(schema_root.schema, Schema::Directory(_)));
-//! assert_eq!(schema_root.attributes.owner, Some("person"));
-//! assert_eq!(schema_root.attributes.group, Some("user"));
+//! assert_eq!(schema_root.attributes.owner, Expression::from_text("person").ok());
+//! assert_eq!(schema_root.attributes.group, Expression::from_text("user").ok());
 //! assert_eq!(schema_root.attributes.mode, Some(0o777));
 //! # Ok::<(), anyhow::Error>(())
 //! ```
