@@ -1,4 +1,6 @@
-use super::parse_schema;
+use std::collections::HashMap;
+
+use super::{parse_schema, Attributes, Binding, DirectorySchema, Identifier, Schema, SchemaNode};
 
 #[test]
 fn test_def_is_recorded() {
@@ -33,4 +35,40 @@ fn test_def_and_use_compare_equal() {
     assert_eq!(defs.next(), None);
     assert!(root_directory.get_def(&"empty".into()).is_some());
     assert!(root_directory.get_def(&"none".into()).is_none());
+}
+
+#[test]
+fn test_directory_binding_sort_order() {
+    let empty_subdirectory = Schema::Directory(DirectorySchema::default());
+    let empty_directory_node = SchemaNode {
+        schema: empty_subdirectory,
+        pattern: None,
+        attributes: Attributes::default(),
+        symlink: None,
+        uses: vec![],
+    };
+
+    // Variable then static should re-order (so static is first)
+    let mut entries = Vec::new();
+    entries.push((
+        Binding::Dynamic(Identifier::new("var")),
+        empty_directory_node.clone(),
+    ));
+    entries.push((Binding::Static("fixed"), empty_directory_node.clone()));
+    let directory = DirectorySchema::new(HashMap::new(), HashMap::new(), entries);
+    let entries = directory.entries();
+    assert!(matches!(entries[0].0, Binding::Static(_)));
+    assert!(matches!(entries[1].0, Binding::Dynamic(_)));
+
+    // Static then variable should keep order (static first)
+    let mut entries = Vec::new();
+    entries.push((Binding::Static("fixed"), empty_directory_node.clone()));
+    entries.push((
+        Binding::Dynamic(Identifier::new("var")),
+        empty_directory_node.clone(),
+    ));
+    let directory = DirectorySchema::new(HashMap::new(), HashMap::new(), entries);
+    let entries = directory.entries();
+    assert!(matches!(entries[0].0, Binding::Static(_)));
+    assert!(matches!(entries[1].0, Binding::Dynamic(_)));
 }

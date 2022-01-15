@@ -168,14 +168,10 @@ impl<'t> SchemaNodeBuilder<'t> {
                 vars,
                 defs,
                 entries,
-            } => Schema::Directory(DirectorySchema {
-                vars,
-                defs,
-                entries,
-            }),
+            } => Schema::Directory(DirectorySchema::new(vars, defs, entries)),
             TypeSpecific::File { source } => {
                 let source = source.ok_or_else(|| anyhow!("File must have a #source"))?;
-                Schema::File(FileSchema { source })
+                Schema::File(FileSchema::new(source))
             }
         };
         Ok(SchemaNode {
