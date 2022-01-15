@@ -79,14 +79,6 @@ pub trait Filesystem {
         }
         Ok(canon)
     }
-
-    fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>
-    where
-        I: Iterator<Item = &'i str>;
-
-    fn prefetch_gids<'i, I>(&mut self, groups: I) -> Result<()>
-    where
-        I: Iterator<Item = &'i str>;
 }
 
 pub fn name(path: &str) -> &str {

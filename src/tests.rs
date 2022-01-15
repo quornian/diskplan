@@ -248,8 +248,8 @@ fn test_attributes() -> Result<()> {
             dir/
                 #mode 640
             another/
-                #owner example_user
-                #group example_group
+                #owner daemon
+                #group sys
             "
         onto: "/target"
         yields:
@@ -257,8 +257,8 @@ fn test_attributes() -> Result<()> {
                 "/target" [mode = DEFAULT_DIRECTORY_MODE]
                 "/target/dir" [mode = 0o640]
                 "/target/another" [
-                    owner = "example_user"
-                    group = "example_group"
+                    owner = "daemon"
+                    group = "sys"
                     mode = DEFAULT_DIRECTORY_MODE]
     }
 }
@@ -269,16 +269,16 @@ fn test_top_level_attributes() -> Result<()> {
     assert_effect_of! {
         applying: "
             #mode 640
-            #owner example_user
-            #group example_group
+            #owner daemon
+            #group sys
             sub/
             "
         onto: "/target"
         yields:
             directories:
                 "/target" [
-                    owner = "example_user"
-                    group = "example_group"
+                    owner = "daemon"
+                    group = "sys"
                     mode = 0o640]
                 "/target/sub" [
                     owner = "root"

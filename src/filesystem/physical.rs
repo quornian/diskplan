@@ -91,30 +91,6 @@ impl Filesystem for DiskFilesystem {
         let mode = stat.st_mode as u16;
         Ok(Attrs { owner, group, mode })
     }
-
-    fn prefetch_uids<'i, I>(&mut self, users: I) -> Result<()>
-    where
-        I: Iterator<Item = &'i str>,
-    {
-        for user in users {
-            self.users
-                .get_user_by_name(user)
-                .ok_or_else(|| anyhow!("No such user: {}", user))?;
-        }
-        Ok(())
-    }
-
-    fn prefetch_gids<'i, I>(&mut self, groups: I) -> Result<()>
-    where
-        I: Iterator<Item = &'i str>,
-    {
-        for group in groups {
-            self.users
-                .get_group_by_name(group)
-                .ok_or_else(|| anyhow!("No such group: {}", group))?;
-        }
-        Ok(())
-    }
 }
 
 impl DiskFilesystem {

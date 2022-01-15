@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    fmt::Write,
-};
+use std::{borrow::Cow, collections::HashMap, fmt::Write};
 
 use anyhow::{anyhow, Context as _, Result};
 
@@ -20,10 +16,6 @@ pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &
 where
     FS: Filesystem,
 {
-    let (owners, groups) = owners_and_groups(root);
-    filesystem.prefetch_uids(owners.into_iter())?;
-    filesystem.prefetch_gids(groups.into_iter())?;
-
     traverse_over(root, None, filesystem, &SplitPath::new(target)?)
 }
 
@@ -248,24 +240,4 @@ where
         }
     }
     Ok(())
-}
-
-fn owners_and_groups<'a>(root: &SchemaNode<'a>) -> (HashSet<&'a str>, HashSet<&'a str>) {
-    fn walk<'a>(node: &SchemaNode<'a>, o: &mut HashSet<&'a str>, g: &mut HashSet<&'a str>) {
-        if let Some(owner) = node.attributes.owner {
-            o.insert(owner);
-        }
-        if let Some(group) = node.attributes.group {
-            g.insert(group);
-        }
-        if let Some(dir) = node.schema.as_directory() {
-            for (_, child) in dir.entries() {
-                walk(child, o, g);
-            }
-        }
-    }
-    let mut owners = HashSet::new();
-    let mut groups = HashSet::new();
-    walk(root, &mut owners, &mut groups);
-    (owners, groups)
 }
