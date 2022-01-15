@@ -1,6 +1,10 @@
-use std::{borrow::Cow, collections::HashSet, fmt::Write};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    fmt::Write,
+};
 
-use anyhow::{Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 
 mod eval;
 mod pattern;
@@ -53,7 +57,6 @@ fn traverse_over<'a, FS>(
 where
     FS: Filesystem,
 {
-    println!("Path: {}", path.absolute());
     for node in reuse::expand_uses(node, stack)? {
         traverse_into(node, stack, filesystem, path).with_context(|| {
             format!("Into {}\n{}", path.absolute(), summarize_schema_node(node))
@@ -90,27 +93,59 @@ where
         .with_context(|| format!("Create {}", path.absolute()))?;
 
     // Traverse over children
-    if let Schema::Directory(ref directory) = node.schema {
-        let mut listing = filesystem
-            .list_directory(path.absolute())
-            .unwrap_or_else(|_| vec![])
-            .into_iter()
-            .map(Some)
-            .collect();
-
+    if let Schema::Directory(ref directory_schema) = node.schema {
         let stack = Stack {
             parent: stack,
-            scope: Scope::Directory(directory),
+            scope: Scope::Directory(directory_schema),
         };
 
-        for (binding, child_node) in directory.entries() {
+        // Collect names of what's on disk
+        let listing = filesystem
+            .list_directory(path.absolute())
+            .unwrap_or_else(|_| vec![]);
+        let existing = listing.iter().map(AsRef::as_ref).map(Cow::Borrowed);
+
+        // Collect names of fixed or bound-variable schema entries
+        let bound = directory_schema
+            .entries()
+            .iter()
+            .filter_map(|(binding, _)| match binding {
+                Binding::Static(name) => Some(Cow::Borrowed(*name)),
+                Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), path)
+                    .ok()
+                    .map(Cow::Owned),
+            });
+
+        // Use these to build unique mappings, and error if not unique
+        let mut mapped: HashMap<Cow<str>, Option<(&Binding, &SchemaNode)>> =
+            existing.chain(bound).map(|name| (name, None)).collect();
+        for (binding, child_node) in directory_schema.entries() {
             // Note: Since we don't know the name of the thing we're matching yet, any path
             // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
             // using the parent directory
             let pattern =
                 CompiledPattern::compile(child_node.pattern.as_ref(), Some(&stack), &path)?;
 
-            for name in marked_matches(&mut listing, binding, pattern) {
+            for (name, have_match) in mapped.iter_mut() {
+                match binding {
+                    // Static binding produces a match for that name only
+                    &Binding::Static(bound_name) if bound_name == name => match have_match {
+                        None => Ok(*have_match = Some((binding, child_node))),
+                        Some((bound, _)) => Err(bound),
+                    },
+                    // Dynamic bindings must match their inner schema pattern
+                    &Binding::Dynamic(_) if pattern.matches(name) => match have_match {
+                        None => Ok(*have_match = Some((binding, child_node))),
+                        Some((bound, _)) => Err(bound),
+                    },
+                    _ => Ok(()),
+                }
+                .map_err(|bound| anyhow!("{} matches multiple: {:?} {:?}", name, bound, binding))?;
+            }
+        }
+
+        for (name, matched) in mapped {
+            if let Some((binding, child_node)) = matched {
                 let child_path = path.join(name.as_ref());
 
                 match binding {
@@ -213,31 +248,6 @@ where
         }
     }
     Ok(())
-}
-
-fn marked_matches<'a>(
-    listing: &mut Vec<Option<String>>,
-    binding: &Binding<'a>,
-    pattern: CompiledPattern,
-) -> impl Iterator<Item = Cow<'a, str>> {
-    let mut matched = Vec::new();
-
-    match binding {
-        // Static binding produces a match for that name only and always
-        &Binding::Static(name) => matched.push(Cow::Borrowed(name)),
-        // Dynamic bindings remove items from the listing pool that match
-        &Binding::Dynamic(_) => {
-            for entry in listing {
-                if let Some(name) = entry {
-                    if pattern.matches(name) {
-                        let name: String = entry.take().unwrap();
-                        matched.push(Cow::Owned(name))
-                    }
-                }
-            }
-        }
-    };
-    matched.into_iter()
 }
 
 fn owners_and_groups<'a>(root: &SchemaNode<'a>) -> (HashSet<&'a str>, HashSet<&'a str>) {

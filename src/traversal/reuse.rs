@@ -22,13 +22,10 @@ pub fn expand_uses<'a>(
         _ => None,
     };
     for used in &node.uses {
-        use_schemas.push(find_definition(used, stack.as_ref()).ok_or_else(|| {
-            anyhow!(
-                "No definition (#def) found for {}. Stack:\n{:#?}",
-                used,
-                stack
-            )
-        })?);
+        use_schemas.push(
+            find_definition(used, stack.as_ref())
+                .ok_or_else(|| anyhow!("No definition (#def) found for {}", used))?,
+        );
     }
     Ok(use_schemas)
 }

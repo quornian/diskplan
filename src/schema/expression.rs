@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, vec};
 
 #[derive(Debug, Clone, Eq)]
 pub struct Expression<'t>(&'t str, Vec<Token<'t>>);
@@ -95,5 +95,17 @@ impl Display for Identifier<'_> {
 impl<'a> From<&'a str> for Identifier<'a> {
     fn from(s: &'a str) -> Self {
         Identifier::new(s)
+    }
+}
+
+impl<'a> From<Identifier<'a>> for Expression<'a> {
+    fn from(i: Identifier<'a>) -> Self {
+        Expression(i.value(), vec![Token::Text(i.value())])
+    }
+}
+
+impl<'a> From<&Identifier<'a>> for Expression<'a> {
+    fn from(i: &Identifier<'a>) -> Self {
+        Expression(i.value(), vec![Token::Text(i.value())])
     }
 }
