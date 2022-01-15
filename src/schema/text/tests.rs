@@ -326,15 +326,17 @@ fn test_multiline_meta_ops() {
     let pos = s.find(line).unwrap();
     let end = pos + line.len();
     let u = &s[end..];
+    let owner_expr = Expression::from_parsed("usr-1", vec![Token::Text("usr-1")]);
+    let group_expr = Expression::from_parsed("grpX", vec![Token::Text("grpX")]);
     assert_eq!(
         operator(2)(t),
-        Ok((u, (&s[pos..end], Operator::Owner("usr-1"))))
+        Ok((u, (&s[pos..end], Operator::Owner(owner_expr))))
     );
     let line = "        #group grpX\n";
     let pos = s.find(line).unwrap();
     assert_eq!(
         operator(2)(u),
-        Ok(("", (&s[pos..], Operator::Group("grpX"))))
+        Ok(("", (&s[pos..], Operator::Group(group_expr))))
     );
 }
 

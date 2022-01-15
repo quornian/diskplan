@@ -179,9 +179,17 @@ fn create<FS>(
 where
     FS: Filesystem,
 {
+    let owner = match &node.attributes.owner {
+        Some(expr) => Some(evaluate(&expr, stack, path)?),
+        None => None,
+    };
+    let group = match &node.attributes.group {
+        Some(expr) => Some(evaluate(&expr, stack, path)?),
+        None => None,
+    };
     let attrs = SetAttrs {
-        owner: node.attributes.owner,
-        group: node.attributes.group,
+        owner: owner.as_deref(),
+        group: group.as_deref(),
         mode: node.attributes.mode,
     };
 

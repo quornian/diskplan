@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 
+use super::Expression;
+
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Attributes<'t> {
-    pub owner: Option<&'t str>,
-    pub group: Option<&'t str>,
+    pub owner: Option<Expression<'t>>,
+    pub group: Option<Expression<'t>>,
     pub mode: Option<u16>,
 }
 

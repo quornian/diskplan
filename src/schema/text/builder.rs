@@ -98,7 +98,7 @@ impl<'t> SchemaNodeBuilder<'t> {
         Ok(())
     }
 
-    pub fn owner(&mut self, owner: &'t str) -> Result<()> {
+    pub fn owner(&mut self, owner: Expression<'t>) -> Result<()> {
         if self.attributes.owner.is_some() {
             return Err(anyhow!("#owner occurs twice"));
         }
@@ -106,7 +106,7 @@ impl<'t> SchemaNodeBuilder<'t> {
         Ok(())
     }
 
-    pub fn group(&mut self, group: &'t str) -> Result<()> {
+    pub fn group(&mut self, group: Expression<'t>) -> Result<()> {
         if self.attributes.group.is_some() {
             return Err(anyhow!("#group occurs twice"));
         }

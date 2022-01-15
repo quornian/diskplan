@@ -15,8 +15,8 @@
 //!
 //! | Tag                       | Types     | Description
 //! |---------------------------|-----------|---------------------------
-//! |`#owner` _str_             | All       | Sets the owner of this file/directory/symlink target
-//! |`#group` _str_             | All       | Sets the group of this file, directory or symlink target
+//! |`#owner` _expr_            | All       | Sets the owner of this file/directory/symlink target
+//! |`#group` _expr_            | All       | Sets the group of this file, directory or symlink target
 //! |`#mode` _octal_            | All       | Sets the permissions of this file/directory/symlink target
 //! |`#source` _expr_           | File      | Copy content into this file from the path given by _expr_
 //! |`#let` _ident_ `=` _expr_  | Directory | Set a variable at this level to be used by deeper levels

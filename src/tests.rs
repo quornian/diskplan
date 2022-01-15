@@ -288,6 +288,27 @@ fn test_top_level_attributes() -> Result<()> {
 }
 
 #[test]
+fn test_attribute_expressions() -> Result<()> {
+    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
+    assert_effect_of! {
+        applying: "
+            #let x = dae
+            #let y = s
+            attrs/
+                #owner ${x}mon
+                #group ${y}y${y}
+            "
+        onto: "/target"
+        yields:
+            directories:
+                "/target/attrs" [
+                    owner = "daemon"
+                    group = "sys"
+                    mode = DEFAULT_DIRECTORY_MODE]
+    }
+}
+
+#[test]
 fn test_winner_fixed_then_variable() -> Result<()> {
     assert_effect_of! {
         applying: "

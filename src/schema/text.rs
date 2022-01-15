@@ -190,8 +190,8 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
         let use_op = op("use", identifier);
         let match_op = op("match", expression);
         let mode_op = op("mode", octal);
-        let owner_op = op("owner", username);
-        let group_op = op("group", username);
+        let owner_op = op("owner", expression);
+        let group_op = op("group", expression);
         let source_op = op("source", expression);
 
         consumed(alt((
@@ -261,8 +261,8 @@ enum Operator<'t> {
     },
     Match(Expression<'t>),
     Mode(u16),
-    Owner(&'t str),
-    Group(&'t str),
+    Owner(Expression<'t>),
+    Group(Expression<'t>),
     Source(Expression<'t>),
 }
 
@@ -313,10 +313,6 @@ fn octal(s: &str) -> Res<&str, u16> {
     map(is_a("01234567"), |mode| {
         u16::from_str_radix(mode, 8).unwrap()
     })(s)
-}
-
-fn username(s: &str) -> Res<&str, &str> {
-    recognize(many1(alt((alphanumeric1, tag("-"), tag("_")))))(s)
 }
 
 fn identifier(s: &str) -> Res<&str, Identifier> {
