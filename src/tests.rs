@@ -348,7 +348,7 @@ fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
 
 #[test]
 #[should_panic(
-    expected = "'fixed' matches multiple dynamic bindings '$variable_a' and '$variable_b'"
+    expected = "'existing' matches multiple dynamic bindings '$variable_a' and '$variable_b'"
 )]
 fn test_binding_multiple_variable_error() {
     (|| -> Result<()> {
@@ -363,10 +363,10 @@ fn test_binding_multiple_variable_error() {
             "
             onto: "/"
                 directories:
-                    "/fixed"
+                    "/existing"
             yields:
                 directories:
-                    "/fixed/MATCHED_VARIABLE_A"
+                    "/existing/MATCHED_VARIABLE_A"
         }
     })()
     .unwrap();
@@ -388,6 +388,43 @@ fn test_binding_multiple_static_error() {
         }
     })()
     .unwrap();
+}
+
+#[test]
+fn test_match_let_variable() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            #let var = xxx
+            $var/
+                #match .*
+                variable/
+            "
+        onto: "/target"
+        yields:
+            directories:
+                "/target/xxx"
+                "/target/xxx/variable"
+    }
+}
+
+#[test]
+fn test_match_let_variable_overridden_by_static() -> Result<()> {
+    // TODO: Consider if this should fail
+    assert_effect_of! {
+        applying: "
+            #let var = xxx
+            $var/
+                #match .*
+                variable/
+            xxx/
+                static/
+            "
+        onto: "/target"
+        yields:
+            directories:
+                "/target/xxx"
+                "/target/xxx/static"
+    }
 }
 
 #[test]
@@ -416,5 +453,27 @@ fn test_match_variable() -> Result<()> {
             files:
                 "/target/x_at_the_beginning/starts" [""]
                 "/target/ends_with_an_x/ends" [""]
+    }
+}
+
+#[test]
+fn test_match_variable_inherited() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $var/
+                #match .*
+                $var/
+                sub/
+                    $var/
+            "
+        onto: "/target"
+            directories:
+                "/target"
+                "/target/VALUE"
+        yields:
+            directories:
+                "/target/VALUE/VALUE"
+                "/target/VALUE/sub"
+                "/target/VALUE/sub/VALUE"
     }
 }
