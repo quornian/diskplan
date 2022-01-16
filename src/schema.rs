@@ -3,6 +3,7 @@
 //! The language of the text form uses significant whitespace (four spaces) for each level. It
 //! distinguishes between files and directories by the lack or presence of a `/`, and whether
 //! it's a symlink by the lack or presence of `->` (followed by its target path expression).
+//! That is, each indented node of the directory tree takes one of the following forms:
 //!
 //! | Syntax                | Description
 //! |-----------------------|---------------------------
@@ -11,7 +12,7 @@
 //! | _str_ `->` _expr_     | A symlink to a file
 //! | _str_/ `->` _expr_    | A symlink to a directory
 //!
-//! Properties of a node in the schema can be set using one of the following tags:
+//! Properties of a node are set using one of the following tags:
 //!
 //! | Tag                       | Types     | Description
 //! |---------------------------|-----------|---------------------------
@@ -43,7 +44,7 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! A [DirectorySchema] may contain sub-directories, files...
+//! A [DirectorySchema] may contain sub-directories and files:
 //! ```
 //! # use diskplan::schema::*;
 //! #
@@ -69,7 +70,8 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! ...and symlinks to directories and files (with its sub-schema applied to the target):
+//! It may also contain symlinks to directories and files, whose own schemas will apply to the
+//! target:
 //!
 //! ```
 //! # use diskplan::schema::*;
@@ -107,10 +109,6 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! ## Pattern Matching
-//!
-//! **TODO**: Document `#match` and `$variable` named entries
-//!
 //! ## Variable Substitution
 //!
 //! Variables can be used to drive construction, for example:
@@ -127,6 +125,10 @@
 //! "
 //! # ;
 //! ```
+//!
+//! ## Pattern Matching
+//!
+//! **TODO**: Document `#match` and `$variable` named entries
 //!
 //! ## Schema Reuse
 //!
