@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Debug};
 
 use anyhow::Result;
 
@@ -15,23 +15,30 @@ macro_rules! assert_effect_of {
         onto:
             $root:literal
             $(directories:
-                $($in_directory:literal)+ )?
+                $($in_d_path:literal $([
+                    $(owner = $in_d_owner:literal)?
+                    $(group = $in_d_group:literal)?
+                    $(mode = $in_d_mode:expr)? ])? )+ )?
             $(files:
-                $($in_file:literal [ $in_content:literal ])+ )?
+                $($in_f_path:literal [
+                    $in_content:literal
+                    $(owner = $in_f_owner:literal)?
+                    $(group = $in_f_group:literal)?
+                    $(mode = $in_f_mode:expr)? ])+ )?
             $(symlinks:
-                $($in_link:literal -> $in_target:literal)+ )?
+                $($in_l_path:literal -> $in_l_target:literal)+ )?
         yields:
             $(directories:
-                $($directory:literal $([
-                    $(owner = $d_owner:literal)?
-                    $(group = $d_group:literal)?
-                    $(mode = $d_mode:expr)? ])? )+ )?
+                $($out_d_path:literal $([
+                    $(owner = $out_d_owner:literal)?
+                    $(group = $out_d_group:literal)?
+                    $(mode = $out_d_mode:expr)? ])? )+ )?
             $(files:
-                $($file:literal [
+                $($out_f_path:literal [
                     $content:literal
-                    $(owner = $f_owner:literal)?
-                    $(group = $f_group:literal)?
-                    $(mode = $f_mode:expr)? ])+ )?
+                    $(owner = $out_f_owner:literal)?
+                    $(group = $out_f_group:literal)?
+                    $(mode = $out_f_mode:expr)? ])+ )?
             $(symlinks:
                 $($link:literal -> $target:literal)+ )?
     } => {{
@@ -43,41 +50,55 @@ macro_rules! assert_effect_of {
         // containing:
         let mut expected_paths: HashSet<String> = HashSet::new();
         $($(
-            fs.create_directory($in_directory, SetAttrs::default())?;
-            expected_paths.insert($in_directory.to_owned());
+            #[allow(unused_mut)]
+            let mut attrs = SetAttrs::default();
+            $(
+                $(attrs.owner = Some($in_d_owner);)?
+                $(attrs.group = Some($in_d_group);)?
+                $(attrs.mode = Some($in_d_mode);)?
+            )?
+            fs.create_directory($in_d_path, attrs)?;
+            expected_paths.insert($in_d_path.to_owned());
         )+)?
         $($(
-            fs.create_file($in_file, SetAttrs::default(), $in_content.to_owned())?;
-            expected_paths.insert($in_file.to_owned());
+            #[allow(unused_mut)]
+            let mut attrs = SetAttrs::default();
+            $(
+                $(attrs.owner = Some($in_f_owner);)?
+                $(attrs.group = Some($in_f_group);)?
+                $(attrs.mode = Some($in_f_mode);)?
+            )?
+            fs.create_file($in_f_path, attrs, $in_content.to_owned())?;
+            expected_paths.insert($in_f_path.to_owned());
         )+)?
         $($(
-            fs.create_symlink($in_link, $in_target.to_owned())?;
-            expected_paths.insert($in_link.to_owned());
+            fs.create_symlink($in_l_path, $in_l_target.to_owned())?;
+            expected_paths.insert($in_l_path.to_owned());
         )+)?
         // yields:
         traverse(&node, &mut fs, root)?;
         expected_paths.insert("/".to_owned());
         expected_paths.insert(root.to_owned());
         $($(
-            assert!(fs.is_directory($directory));
+            assert!(fs.is_directory($out_d_path));
             $(
-                let attrs = fs.attributes($directory)?;
-                $(assert_eq!(attrs.owner.as_ref(), $d_owner);)?
-                $(assert_eq!(attrs.group.as_ref(), $d_group);)?
-                $(assert_eq!(attrs.mode, $d_mode);)?
+                let attrs = fs.attributes($out_d_path)?;
+                $(assert_eq!(attrs.owner.as_ref(), $out_d_owner);)?
+                $(assert_eq!(attrs.group.as_ref(), $out_d_group);)?
+                $(assert_eq!(Mode(attrs.mode), Mode($out_d_mode));)?
             )?
-            expected_paths.insert($directory.to_owned());
+            expected_paths.insert($out_d_path.to_owned());
         )+)?
         $($(
-            assert!(fs.is_file($file));
+            assert!(fs.is_file($out_f_path));
             $(
-                let attrs = fs.attributes($file)?;
-                $(assert_eq!(attrs.owner.as_ref(), $f_owner);)?
-                $(assert_eq!(attrs.group.as_ref(), $f_group);)?
-                $(assert_eq!(attrs.mode, $f_mode);)?
+                let attrs = fs.attributes($out_f_path)?;
+                $(assert_eq!(attrs.owner.as_ref(), $out_f_owner);)?
+                $(assert_eq!(attrs.group.as_ref(), $out_f_group);)?
+                $(assert_eq!(Mode(attrs.mode), Mode($out_f_mode));)?
             )?
-            assert_eq!(&fs.read_file($file)?, $content);
-            expected_paths.insert($file.to_owned());
+            assert_eq!(&fs.read_file($out_f_path)?, $content);
+            expected_paths.insert($out_f_path.to_owned());
         )+)?
         $($(
             assert!(fs.is_link($link));
@@ -91,6 +112,15 @@ macro_rules! assert_effect_of {
         }
         Ok(())
     }};
+}
+
+#[derive(PartialEq)]
+struct Mode(u16);
+
+impl Debug for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Mode(0o{:03o})", self.0)
+    }
 }
 
 #[test]
@@ -305,6 +335,26 @@ fn test_attribute_expressions() -> Result<()> {
                     owner = "daemon"
                     group = "sys"
                     mode = DEFAULT_DIRECTORY_MODE]
+    }
+}
+
+#[test]
+fn test_changing_attributes() -> Result<()> {
+    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
+    assert_effect_of! {
+        applying: "
+            dir/
+                #mode 750
+            "
+        onto: "/target"
+            directories:
+                "/target"
+                "/target/control" [mode = 0o555]
+                "/target/dir" [mode = 0o555]
+        yields:
+            directories:
+                "/target/control" [mode = 0o555]
+                "/target/dir" [mode = 0o750]
     }
 }
 
