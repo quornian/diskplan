@@ -10,7 +10,8 @@ use super::NodeType;
 
 #[derive(Debug)]
 pub struct SchemaNodeBuilder<'t> {
-    pattern: Option<Expression<'t>>,
+    match_pattern: Option<Expression<'t>>,
+    avoid_pattern: Option<Expression<'t>>,
     symlink: Option<Expression<'t>>,
     uses: Vec<Identifier<'t>>,
     attributes: Attributes<'t>,
@@ -32,7 +33,8 @@ enum TypeSpecific<'t> {
 impl<'t> SchemaNodeBuilder<'t> {
     pub fn new(node_type: NodeType, symlink: Option<Expression<'t>>) -> Self {
         SchemaNodeBuilder {
-            pattern: None,
+            match_pattern: None,
+            avoid_pattern: None,
             symlink,
             uses: Vec::new(),
             attributes: Attributes::default(),
@@ -49,10 +51,18 @@ impl<'t> SchemaNodeBuilder<'t> {
     }
 
     pub fn match_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
-        if self.pattern.is_some() {
+        if self.match_pattern.is_some() {
             return Err(anyhow!("#match occurs twice"));
         }
-        self.pattern = Some(pattern);
+        self.match_pattern = Some(pattern);
+        Ok(())
+    }
+
+    pub fn avoid_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
+        if self.avoid_pattern.is_some() {
+            return Err(anyhow!("#avoid occurs twice"));
+        }
+        self.avoid_pattern = Some(pattern);
         Ok(())
     }
 
@@ -157,7 +167,8 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn build(self) -> Result<SchemaNode<'t>> {
         let SchemaNodeBuilder {
-            pattern,
+            match_pattern,
+            avoid_pattern,
             symlink,
             uses,
             attributes,
@@ -175,7 +186,8 @@ impl<'t> SchemaNodeBuilder<'t> {
             }
         };
         Ok(SchemaNode {
-            pattern,
+            match_pattern,
+            avoid_pattern,
             symlink,
             uses,
             attributes,

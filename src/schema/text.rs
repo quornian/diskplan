@@ -61,9 +61,10 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
     })?;
     let ops = ops.unwrap_or_else(Vec::new);
     let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
-    if schema_node.pattern.is_some() {
+    if schema_node.match_pattern.is_some() {
         return Err(ParseError::new(
             "Top level #match is not allowed".into(),
+            // TODO: Or is it?
             text,
             text.find("\n#match")
                 .map(|pos| &text[pos + 1..pos + 7])
@@ -93,6 +94,7 @@ fn schema_node<'t, 'p>(
         match op {
             // Operators that affect the parent (when looking up this item)
             Operator::Match(expr) => builder.match_pattern(expr),
+            Operator::Avoid(expr) => builder.avoid_pattern(expr),
 
             // Operators that apply to this item
             Operator::Use { name } => builder.use_definition(name),
@@ -189,6 +191,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
         let let_op = tuple((op("let", identifier), sep('=', expression)));
         let use_op = op("use", identifier);
         let match_op = op("match", expression);
+        let avoid_op = op("avoid", expression);
         let mode_op = op("mode", octal);
         let owner_op = op("owner", expression);
         let group_op = op("group", expression);
@@ -201,6 +204,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
                     map(let_op, |(name, expr)| Operator::Let { name, expr }),
                     map(use_op, |name| Operator::Use { name }),
                     map(match_op, Operator::Match),
+                    map(avoid_op, Operator::Avoid),
                     map(mode_op, Operator::Mode),
                     map(owner_op, Operator::Owner),
                     map(group_op, Operator::Group),
@@ -260,6 +264,7 @@ enum Operator<'t> {
         name: Identifier<'t>,
     },
     Match(Expression<'t>),
+    Avoid(Expression<'t>),
     Mode(u16),
     Owner(Expression<'t>),
     Group(Expression<'t>),

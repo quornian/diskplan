@@ -42,7 +42,8 @@ fn test_directory_binding_sort_order() {
     let empty_subdirectory = Schema::Directory(DirectorySchema::default());
     let empty_directory_node = SchemaNode {
         schema: empty_subdirectory,
-        pattern: None,
+        match_pattern: None,
+        avoid_pattern: None,
         attributes: Attributes::default(),
         symlink: None,
         uses: vec![],

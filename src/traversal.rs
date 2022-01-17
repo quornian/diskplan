@@ -65,8 +65,11 @@ fn summarize_schema_node(node: &SchemaNode) -> String {
         }
         Schema::File(fs) => write!(f, "Schema: file (source: {})", fs.source()).unwrap(),
     }
-    if let Some(pattern) = &node.pattern {
+    if let Some(pattern) = &node.match_pattern {
         write!(f, "(matching: {})", pattern).unwrap()
+    }
+    if let Some(pattern) = &node.avoid_pattern {
+        write!(f, "(avoiding: {})", pattern).unwrap()
     }
     f
 }
@@ -115,35 +118,43 @@ where
             // Note: Since we don't know the name of the thing we're matching yet, any path
             // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
             // using the parent directory
-            let pattern =
-                CompiledPattern::compile(child_node.pattern.as_ref(), Some(&stack), &path)?;
+            let pattern = CompiledPattern::compile(
+                child_node.match_pattern.as_ref(),
+                child_node.avoid_pattern.as_ref(),
+                Some(&stack),
+                &path,
+            )?;
 
             for (name, have_match) in mapped.iter_mut() {
                 match binding {
                     // Static binding produces a match for that name only
                     &Binding::Static(bound_name) if bound_name == name => match have_match {
                         None => Ok(*have_match = Some((binding, child_node))),
-                        Some((bound, _)) => Err((*bound, "static")), // Error: multiple static matches
+                        Some((bound, _)) => Err(anyhow!(
+                            "'{}' matches multiple static bindings '{}' and '{}'",
+                            name,
+                            bound,
+                            binding
+                        )),
                     },
                     // Dynamic bindings must match their inner schema pattern
-                    &Binding::Dynamic(_) if pattern.matches(name) => match have_match {
-                        None => Ok(*have_match = Some((binding, child_node))),
-                        Some((bound, _)) => match bound {
-                            Binding::Static(_) => Ok(()), // Keep previous static binding
-                            Binding::Dynamic(_) => Err((*bound, "dynamic")), // Error: multiple dynamic matches
-                        },
-                    },
+                    &Binding::Dynamic(_) if pattern.matches(name) => {
+                        match have_match {
+                            None => Ok(*have_match = Some((binding, child_node))),
+                            Some((bound, _)) => match bound {
+                                Binding::Static(_) => Ok(()), // Keep previous static binding
+                                Binding::Dynamic(_) => Err(anyhow!(
+                                    "'{}' matches multiple dynamic bindings '{}' and '{}' {:?}",
+                                    name,
+                                    bound,
+                                    binding,
+                                    pattern,
+                                )),
+                            },
+                        }
+                    }
                     _ => Ok(()),
-                }
-                .map_err(|(bound, bind_type)| {
-                    anyhow!(
-                        "'{}' matches multiple {} bindings '{}' and '{}'",
-                        name,
-                        bind_type,
-                        bound,
-                        binding
-                    )
-                })?;
+                }?;
             }
         }
 

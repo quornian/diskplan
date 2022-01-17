@@ -150,7 +150,10 @@ pub use text::{parse_schema, ParseError};
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaNode<'t> {
     /// Condition against which to match file/directory names
-    pub pattern: Option<Expression<'t>>,
+    pub match_pattern: Option<Expression<'t>>,
+
+    /// Condition against which file/directory names must not match
+    pub avoid_pattern: Option<Expression<'t>>,
 
     /// Symlink target - if this produces a symbolic link. Operates on the target end.
     pub symlink: Option<Expression<'t>>,

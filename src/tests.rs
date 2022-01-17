@@ -477,3 +477,31 @@ fn test_match_variable_inherited() -> Result<()> {
                 "/target/VALUE/sub/VALUE"
     }
 }
+
+#[test]
+fn test_match_categories() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $building/
+                #match .*shed
+                BUILDING/
+            $animal/
+                #match .*
+                #avoid .*shed
+                ANIMAL/
+            "
+        onto: "/target"
+            directories:
+                "/target"
+                "/target/cow"
+                "/target/shed"
+                "/target/cow_shed"
+                "/target/chicken"
+        yields:
+            directories:
+                "/target/cow/ANIMAL"
+                "/target/shed/BUILDING"
+                "/target/cow_shed/BUILDING"
+                "/target/chicken/ANIMAL"
+    }
+}

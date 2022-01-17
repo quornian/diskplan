@@ -5,23 +5,42 @@ use crate::{filesystem::SplitPath, schema::Expression};
 
 use super::{eval::evaluate, Stack};
 
+#[derive(Debug)]
 pub(super) enum CompiledPattern {
     Any,
     Regex(regex::Regex),
+    RegexWithExclusions(regex::Regex, regex::Regex),
 }
 
 impl CompiledPattern {
     pub fn compile(
-        pattern: Option<&Expression>,
+        match_pattern: Option<&Expression>,
+        avoid_pattern: Option<&Expression>,
         stack: Option<&Stack>,
         path: &SplitPath,
     ) -> Result<CompiledPattern> {
-        Ok(match pattern {
-            None => CompiledPattern::Any,
-            Some(expr) => {
-                let pattern = evaluate(expr, stack, path)?;
+        let match_pattern = match match_pattern {
+            Some(expr) => Some(evaluate(expr, stack, path)?),
+            None => None,
+        };
+        let avoid_pattern = match avoid_pattern {
+            Some(expr) => Some(evaluate(expr, stack, path)?),
+            None => None,
+        };
+        Ok(match (&match_pattern, &avoid_pattern) {
+            (None, None) => CompiledPattern::Any,
+            (Some(pattern), None) => {
                 Regex::new(&pattern)?; // Ensure it's valid before encasing to avoid injection
                 CompiledPattern::Regex(Regex::new(&format!("^(?:{})$", pattern))?)
+            }
+            (_, Some(avoiding)) => {
+                let pattern = match_pattern.as_deref().unwrap_or(".*");
+                Regex::new(&pattern)?;
+                Regex::new(&avoiding)?;
+                CompiledPattern::RegexWithExclusions(
+                    Regex::new(&format!("^(?:{})$", pattern))?,
+                    Regex::new(&format!("^(?:{})$", avoiding))?,
+                )
             }
         })
     }
@@ -30,6 +49,9 @@ impl CompiledPattern {
         match self {
             &Self::Any => true,
             &Self::Regex(ref regex) => regex.is_match(text),
+            &Self::RegexWithExclusions(ref regex, ref excl) => {
+                regex.is_match(text) && !excl.is_match(text)
+            }
         }
     }
 }
