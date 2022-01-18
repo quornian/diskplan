@@ -6,7 +6,9 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use users::{Groups, Users, UsersCache};
 
-use super::{Attrs, Filesystem, SetAttrs};
+use super::{
+    attributes::Mode, Attrs, Filesystem, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE,
+};
 
 /// An in-memory representation of a file system
 pub struct MemoryFilesystem {
@@ -49,7 +51,7 @@ impl MemoryFilesystem {
                 attrs: FSAttrs {
                     uid: Self::DEFAULT_OWNER,
                     gid: Self::DEFAULT_GROUP,
-                    mode: super::DEFAULT_DIRECTORY_MODE,
+                    mode: DEFAULT_DIRECTORY_MODE.into(),
                 },
                 children: vec![],
             },
@@ -68,7 +70,7 @@ impl Filesystem for MemoryFilesystem {
         let (parent, name) = self
             .canonical_split(path)
             .with_context(|| format!("Splitting {}", path))?;
-        let attrs = self.internal_attrs(attrs, super::DEFAULT_DIRECTORY_MODE)?;
+        let attrs = self.internal_attrs(attrs, DEFAULT_DIRECTORY_MODE)?;
         let children = vec![];
         self.insert_node(&parent, name, Node::Directory { attrs, children })
             .with_context(|| format!("Creating directory: {}", path))
@@ -76,7 +78,7 @@ impl Filesystem for MemoryFilesystem {
 
     fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
         let (parent, name) = self.canonical_split(path)?;
-        let attrs = self.internal_attrs(attrs, super::DEFAULT_FILE_MODE)?;
+        let attrs = self.internal_attrs(attrs, DEFAULT_FILE_MODE)?;
         self.insert_node(&parent, name, Node::File { attrs, content })
             .with_context(|| format!("Creating file: {}", path))
     }
@@ -170,7 +172,7 @@ impl Filesystem for MemoryFilesystem {
                 .to_string_lossy()
                 .into_owned(),
         );
-        let mode = attrs.mode;
+        let mode = attrs.mode.into();
         Ok(Attrs { owner, group, mode })
     }
 }
@@ -183,7 +185,7 @@ impl MemoryFilesystem {
         }
     }
 
-    fn internal_attrs(&self, attrs: SetAttrs, default_mode: u16) -> Result<FSAttrs> {
+    fn internal_attrs(&self, attrs: SetAttrs, default_mode: Mode) -> Result<FSAttrs> {
         let uid = match attrs.owner {
             Some(owner) => self
                 .users
@@ -200,7 +202,7 @@ impl MemoryFilesystem {
                 .gid(),
             None => Self::DEFAULT_GROUP,
         };
-        let mode = attrs.mode.unwrap_or(default_mode);
+        let mode = attrs.mode.unwrap_or(default_mode).into();
         Ok(FSAttrs { uid, gid, mode })
     }
 

@@ -7,7 +7,9 @@ use nix::{
 };
 use users::{Groups, Users, UsersCache};
 
-use super::{Attrs, Filesystem, SetAttrs};
+use super::{
+    attributes::Mode, Attrs, Filesystem, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE,
+};
 
 /// Access to a real file system
 pub struct DiskFilesystem {
@@ -17,13 +19,13 @@ pub struct DiskFilesystem {
 impl Filesystem for DiskFilesystem {
     fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
         fs::create_dir(path)?;
-        self.apply_attrs(path, attrs, super::DEFAULT_DIRECTORY_MODE)
+        self.apply_attrs(path, attrs, DEFAULT_DIRECTORY_MODE)
     }
 
     fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
         let mut file = fs::File::create(path)?;
         file.write_all(content.as_bytes())?;
-        self.apply_attrs(path, attrs, super::DEFAULT_FILE_MODE)
+        self.apply_attrs(path, attrs, DEFAULT_FILE_MODE)
     }
 
     fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
@@ -88,7 +90,7 @@ impl Filesystem for DiskFilesystem {
                 .to_string_lossy()
                 .into_owned(),
         );
-        let mode = stat.st_mode as u16;
+        let mode = (stat.st_mode as u16).into();
         Ok(Attrs { owner, group, mode })
     }
 }
@@ -100,7 +102,7 @@ impl DiskFilesystem {
         }
     }
 
-    fn apply_attrs(&self, path: &str, attrs: SetAttrs, default_mode: u16) -> Result<()> {
+    fn apply_attrs(&self, path: &str, attrs: SetAttrs, default_mode: Mode) -> Result<()> {
         let uid = match attrs.owner {
             Some(owner) => Some(Uid::from_raw(
                 self.users
@@ -119,7 +121,7 @@ impl DiskFilesystem {
             )),
             None => None,
         };
-        let mode = PermissionsExt::from_mode(attrs.mode.unwrap_or(default_mode) as u32);
+        let mode = PermissionsExt::from_mode(attrs.mode.unwrap_or(default_mode).into());
 
         nix::unistd::chown(path, uid, gid)?;
         fs::set_permissions(path, mode)?;

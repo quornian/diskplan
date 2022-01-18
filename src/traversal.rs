@@ -212,7 +212,7 @@ where
     let attrs = SetAttrs {
         owner: owner.as_deref(),
         group: group.as_deref(),
-        mode: node.attributes.mode,
+        mode: node.attributes.mode.map(Into::into),
     };
 
     // References held to data within by `to_create`, but only in the symlink branch

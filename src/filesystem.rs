@@ -4,28 +4,15 @@ use std::borrow::Cow;
 
 use anyhow::{anyhow, Result};
 
+mod attributes;
 mod memory;
 mod physical;
 
-pub use memory::MemoryFilesystem;
-pub use physical::DiskFilesystem;
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct SetAttrs<'a> {
-    pub owner: Option<&'a str>,
-    pub group: Option<&'a str>,
-    pub mode: Option<u16>,
-}
-
-pub const DEFAULT_DIRECTORY_MODE: u16 = 0o755;
-pub const DEFAULT_FILE_MODE: u16 = 0o644;
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Attrs<'a> {
-    pub owner: Cow<'a, str>,
-    pub group: Cow<'a, str>,
-    pub mode: u16,
-}
+pub use self::{
+    attributes::{Attrs, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},
+    memory::MemoryFilesystem,
+    physical::DiskFilesystem,
+};
 
 /// Operations of a file system
 pub trait Filesystem {

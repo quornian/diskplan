@@ -62,7 +62,7 @@ where
     let (_, name) = filesystem::split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
     let dir = fs.is_directory(path);
     let attrs = fs.attributes(path)?;
-    print_perms(dir, attrs.mode);
+    print_perms(dir, attrs.mode.value());
     print!(
         " {owner:10} {group:10} {0:indent$}{name}{symbol}",
         "",

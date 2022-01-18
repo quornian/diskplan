@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 macro_rules! assert_effect_of {
     {
         applying:
@@ -40,7 +38,6 @@ macro_rules! assert_effect_of {
         use crate::{
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
             schema::parse_schema,
-            tests::Mode,
             traversal::traverse,
         };
 
@@ -57,7 +54,7 @@ macro_rules! assert_effect_of {
             $(
                 $(attrs.owner = Some($in_d_owner);)?
                 $(attrs.group = Some($in_d_group);)?
-                $(attrs.mode = Some($in_d_mode);)?
+                $(attrs.mode = Some($in_d_mode.into());)?
             )?
             fs.create_directory($in_d_path, attrs)?;
             expected_paths.insert($in_d_path.to_owned());
@@ -68,7 +65,7 @@ macro_rules! assert_effect_of {
             $(
                 $(attrs.owner = Some($in_f_owner);)?
                 $(attrs.group = Some($in_f_group);)?
-                $(attrs.mode = Some($in_f_mode);)?
+                $(attrs.mode = Some($in_f_mode.into());)?
             )?
             fs.create_file($in_f_path, attrs, $in_content.to_owned())?;
             expected_paths.insert($in_f_path.to_owned());
@@ -87,7 +84,7 @@ macro_rules! assert_effect_of {
                 let attrs = fs.attributes($out_d_path)?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_d_owner);)?
                 $(assert_eq!(attrs.group.as_ref(), $out_d_group);)?
-                $(assert_eq!(Mode(attrs.mode), Mode($out_d_mode));)?
+                $(assert_eq!(attrs.mode, $out_d_mode.into());)?
             )?
             expected_paths.insert($out_d_path.to_owned());
         )+)?
@@ -97,7 +94,7 @@ macro_rules! assert_effect_of {
                 let attrs = fs.attributes($out_f_path)?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_f_owner);)?
                 $(assert_eq!(attrs.group.as_ref(), $out_f_group);)?
-                $(assert_eq!(Mode(attrs.mode), Mode($out_f_mode));)?
+                $(assert_eq!(attrs.mode, $out_f_mode.into());)?
             )?
             assert_eq!(&fs.read_file($out_f_path)?, $content);
             expected_paths.insert($out_f_path.to_owned());
@@ -114,15 +111,6 @@ macro_rules! assert_effect_of {
         }
         Ok(())
     }};
-}
-
-#[derive(PartialEq)]
-struct Mode(u16);
-
-impl Debug for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Mode(0o{:03o})", self.0)
-    }
 }
 
 mod attributes;
