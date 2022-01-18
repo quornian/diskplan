@@ -60,13 +60,15 @@
 //! "
 //! # ;
 //! // ...
-//! # match parse_schema(text)?.schema {
-//! #     Schema::Directory(directory) => {
-//! assert_eq!(directory.entries().len(), 2);
-//! #     }
-//! #     _ => panic!("Expected directory schema")
-//! # }
-//! #
+//! assert_eq!(
+//!     parse_schema(text)?
+//!         .schema
+//!         .as_directory()
+//!         .expect("Not a directory")
+//!         .entries()
+//!         .len(),
+//!     2
+//! );
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!

@@ -3,8 +3,8 @@
 #mode 777
 
 #def admin_directory/
-    #owner admin
-    #group admin
+    #owner root
+    #group root
     #mode 750
 
 $zone/
