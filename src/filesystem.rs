@@ -14,6 +14,15 @@ pub use self::{
     physical::DiskFilesystem,
 };
 
+impl SetAttrs<'_> {
+    pub fn matches(&self, attrs: &Attrs) -> bool {
+        let SetAttrs { owner, group, mode } = self;
+        owner.map(|owner| owner == attrs.owner).unwrap_or(true)
+            && group.map(|group| group == attrs.group).unwrap_or(true)
+            && mode.map(|mode| mode == attrs.mode).unwrap_or(true)
+    }
+}
+
 /// Operations of a file system
 pub trait Filesystem {
     fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
@@ -49,6 +58,8 @@ pub trait Filesystem {
     fn read_link(&self, path: &str) -> Result<String>;
 
     fn attributes(&self, path: &str) -> Result<Attrs>;
+
+    fn set_attributes(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
 
     fn canonicalize(&self, path: &str) -> Result<String> {
         let path = normalize(path);

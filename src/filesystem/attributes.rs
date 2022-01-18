@@ -17,7 +17,7 @@ pub struct Attrs<'a> {
     pub mode: Mode,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Mode(u16);
 
 impl Mode {

@@ -175,6 +175,31 @@ impl Filesystem for MemoryFilesystem {
         let mode = attrs.mode.into();
         Ok(Attrs { owner, group, mode })
     }
+
+    fn set_attributes(&mut self, path: &str, set_attrs: SetAttrs) -> Result<()> {
+        let use_default = set_attrs.mode.is_none();
+        let mut fs_attrs = self.internal_attrs(set_attrs, 0.into())?;
+        let path = self.canonicalize(path)?;
+        let node = self
+            .map
+            .get_mut(&path)
+            .ok_or_else(|| anyhow!("No such file or directory: {}", path))?;
+        match node {
+            Node::Directory { attrs, .. } => {
+                if use_default {
+                    fs_attrs.mode = DEFAULT_DIRECTORY_MODE.into();
+                }
+                Ok(*attrs = fs_attrs)
+            }
+            Node::File { attrs, .. } => {
+                if use_default {
+                    fs_attrs.mode = DEFAULT_FILE_MODE.into();
+                }
+                Ok(*attrs = fs_attrs)
+            }
+            Node::Symlink { .. } => Err(anyhow!("Non-canonical path: {}", path)),
+        }
+    }
 }
 
 impl MemoryFilesystem {

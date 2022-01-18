@@ -93,6 +93,18 @@ impl Filesystem for DiskFilesystem {
         let mode = (stat.st_mode as u16).into();
         Ok(Attrs { owner, group, mode })
     }
+
+    fn set_attributes(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
+        self.apply_attrs(
+            path,
+            attrs,
+            if self.is_directory(path) {
+                DEFAULT_DIRECTORY_MODE
+            } else {
+                DEFAULT_FILE_MODE
+            },
+        )
+    }
 }
 
 impl DiskFilesystem {

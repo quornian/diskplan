@@ -257,6 +257,11 @@ where
                 filesystem
                     .create_directory(to_create, attrs)
                     .context("As directory")?;
+            } else {
+                let dir_attrs = filesystem.attributes(to_create)?;
+                if !attrs.matches(&dir_attrs) {
+                    filesystem.set_attributes(to_create, attrs)?;
+                }
             }
         }
         Schema::File(file) => {
