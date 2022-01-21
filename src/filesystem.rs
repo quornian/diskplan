@@ -107,8 +107,16 @@ pub fn split(path: &str) -> Option<(&str, &str)> {
     })
 }
 
+pub fn is_normalized(path: &str) -> bool {
+    !((path.ends_with('/') && path != "/") || path.contains("//") || path.contains("/./"))
+}
+
 pub fn normalize(path: &str) -> Cow<'_, str> {
-    let mut path = Cow::Borrowed(path);
+    let mut path = Cow::Borrowed(if path == "/" {
+        path
+    } else {
+        path.trim_end_matches('/')
+    });
     while path.contains("//") {
         path = Cow::Owned(path.replace("//", "/"));
     }
@@ -118,24 +126,27 @@ pub fn normalize(path: &str) -> Cow<'_, str> {
     path
 }
 
-pub struct SplitPath<'a> {
-    root: &'a str,
+pub struct SplitPath {
+    root_len: usize,
     full: String,
 }
 
-impl<'a> SplitPath<'a> {
-    pub fn new(root: &'a str) -> Result<Self> {
-        match root.starts_with("/") {
-            false => Err(anyhow!("Root must be an absolute path")),
-            true => Ok(SplitPath {
-                root,
-                full: root.to_owned(),
-            }),
+impl SplitPath {
+    pub fn new(root: &str) -> Result<Self> {
+        if !is_normalized(root) {
+            return Err(anyhow!("Root must be a normalized path: {}", root));
         }
+        if !root.starts_with("/") {
+            return Err(anyhow!("Root must be an absolute path"));
+        }
+        Ok(SplitPath {
+            root_len: root.len(),
+            full: root.to_owned(),
+        })
     }
 
-    pub fn root(&self) -> &'a str {
-        self.root
+    pub fn root(&self) -> &str {
+        &self.full[..self.root_len]
     }
 
     pub fn absolute(&self) -> &str {
@@ -143,14 +154,25 @@ impl<'a> SplitPath<'a> {
     }
 
     pub fn relative(&self) -> &str {
-        self.full.strip_prefix(self.root).unwrap()
+        self.full[self.root_len..].trim_start_matches('/')
     }
 
     pub fn join(&self, path: &str) -> Self {
         let path = normalize(path);
         SplitPath {
-            root: self.root,
+            root_len: self.root_len,
             full: join(&self.full, &path),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_relative() {
+        let path = SplitPath::new("/example/path").unwrap();
+        assert!(!path.relative().starts_with('/'));
     }
 }
