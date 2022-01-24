@@ -114,6 +114,7 @@ macro_rules! assert_effect_of {
 }
 
 mod attributes;
+mod comments;
 mod creation;
 mod matching;
 mod reuse;

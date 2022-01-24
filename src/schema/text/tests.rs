@@ -2,15 +2,18 @@ use std::vec;
 
 use nom::{
     branch::alt,
-    character::complete::{alphanumeric1, line_ending},
+    character::complete::{alphanumeric1, line_ending, space0},
     combinator::{eof, recognize},
-    multi::many0,
-    sequence::{preceded, terminated},
+    multi::{many0, many1},
+    sequence::{preceded, terminated, tuple},
 };
 
 use crate::schema::{
     expression::{Expression, Identifier, Token},
-    text::{blank_line, def_header, end_of_lines, indentation, operator, parse_schema, Operator},
+    text::{
+        blank_line, comment, def_header, end_of_lines, indentation, operator, parse_schema,
+        Operator,
+    },
     Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
 };
 
@@ -40,6 +43,22 @@ fn test_line_endings() {
     assert_eq!(ws, "\n");
     assert_eq!(rem, "");
 }
+
+#[test]
+fn test_comment_parse() {
+    assert_eq!(comment("# Comment").unwrap(), ("", "# Comment"));
+    assert_eq!(comment("# Comment\n").unwrap(), ("\n", "# Comment"));
+    assert_eq!(comment("# Comment\nx").unwrap(), ("\nx", "# Comment"));
+    assert_eq!(blank_line("# Comment").unwrap(), ("", "# Comment"));
+    assert_eq!(blank_line("# Comment\n").unwrap(), ("", "# Comment\n"));
+    assert_eq!(blank_line("# Comment\nx").unwrap(), ("x", "# Comment\n"));
+
+    let text = "# Comment\nline2\n";
+    let (rem, ws) = recognize(many1(blank_line))(text).unwrap();
+    assert_eq!(ws, "# Comment\n");
+    assert_eq!(rem, "line2\n");
+}
+
 #[test]
 fn test_extraneous_whitespace() {
     // Baseline

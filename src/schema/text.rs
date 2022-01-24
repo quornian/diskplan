@@ -5,7 +5,7 @@ use nom::{
     combinator::{all_consuming, consumed, eof, map, opt, recognize, value},
     error::{context, VerboseError, VerboseErrorKind},
     multi::{count, many0, many1},
-    sequence::{delimited, pair, preceded, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
 };
 
@@ -272,12 +272,24 @@ enum Operator<'t> {
 }
 
 fn blank_line(s: &str) -> Res<&str, &str> {
-    recognize(alt((tuple((space0, line_ending)), tuple((space1, eof)))))(s)
+    alt((
+        recognize(tuple((space0, line_ending))),
+        recognize(tuple((space1, eof))),
+        recognize(tuple((space0, comment, line_ending))),
+        recognize(tuple((space0, comment, eof))),
+    ))(s)
+}
+
+fn comment(s: &str) -> Res<&str, &str> {
+    alt((
+        recognize(tuple((tag("# "), is_not("\r\n")))),
+        terminated(tag("#"), eof),
+    ))(s)
 }
 
 /// Match and consume line endings and any following blank lines, or EOF
 fn end_of_lines(s: &str) -> Res<&str, &str> {
-    recognize(tuple((alt((line_ending, eof)), many0(blank_line))))(s)
+    alt((recognize(tuple((line_ending, many0(blank_line)))), eof))(s)
 }
 
 fn binding(s: &str) -> Res<&str, Binding<'_>> {
