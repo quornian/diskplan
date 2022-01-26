@@ -54,9 +54,9 @@ fn commented_out_has_no_effect() -> Result<()> {
     assert_effect_of! {
         applying: "
             dir_a/
-                #mode 123
+                :mode 123
             dir_b/
-                # #mode 123
+                # :mode 123
             "
         onto: "/target"
         yields:

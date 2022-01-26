@@ -13,7 +13,7 @@
 //!     ...
 //! # */, "
 //!     file
-//! #         #source /src/example
+//! #         :source /src/example
 //! # " /*
 //!         ...
 //! # */, "
@@ -22,7 +22,7 @@
 //!         ...
 //! # */, "
 //!         symlink_file -> ...
-//! #             #source /src/example
+//! #             :source /src/example
 //! # " /*
 //!             ...
 //! # */, "
@@ -37,14 +37,14 @@
 //! ```
 //! Directory entries are named, sub-directories are signfied by a slash, symlinks by an arrow.
 //!
-//! Tags (prefixed by a `#`) are used to set properties of a node. Variables are used to
+//! Tags (prefixed by a `:`) are used to set properties of a node. Variables are used to
 //!
 //! Further to the above skeleton:
-//! * Files must specify a `#source` with a local path to the file's content
-//! * Properties of any level can be set using `#owner`, `#group` and `#mode` tags
-//! * Entries in the tree can be given names with `#def` and reused elsewhere with `#use`
-//! * Variables can be set with `#let` and used in path expressions
-//! * Entries can be dynamic (e.g. `$somename`), with `#match` used to set the pattern
+//! * Files must specify a `:source` with a local path to the file's content
+//! * Properties of any level can be set using `:owner`, `:group` and `:mode` tags
+//! * Entries in the tree can be given names with `:def` and reused elsewhere with `:use`
+//! * Variables can be set with `:let` and used in path expressions
+//! * Entries can be dynamic (e.g. `$somename`), with `:match` used to set the pattern
 //!
 //! For full details, see the [`schema`] module. For now, here is a more complete example
 //! using all of the above features:
@@ -98,7 +98,7 @@
 //! // Construct a schema
 //! let schema_root = parse_schema("
 //! directory/
-//!     #mode 777
+//!     :mode 777
 //! ")?;
 //!
 //! // Define the target location to apply it

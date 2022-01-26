@@ -52,7 +52,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn match_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.match_pattern.is_some() {
-            return Err(anyhow!("#match occurs twice"));
+            return Err(anyhow!(":match occurs twice"));
         }
         self.match_pattern = Some(pattern);
         Ok(())
@@ -60,7 +60,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn avoid_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.avoid_pattern.is_some() {
-            return Err(anyhow!("#avoid occurs twice"));
+            return Err(anyhow!(":avoid occurs twice"));
         }
         self.avoid_pattern = Some(pattern);
         Ok(())
@@ -69,11 +69,11 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn let_var(&mut self, id: Identifier<'t>, expr: Expression<'t>) -> Result<()> {
         match &mut self.type_specific {
             TypeSpecific::File { .. } => Err(anyhow!(
-                "Cannot use #let to set variables inside files (add a '/' to make it a directory)"
+                "Cannot use :let to set variables inside files (add a '/' to make it a directory)"
             )),
             TypeSpecific::Directory { vars, .. } => {
                 if vars.contains_key(&id) {
-                    Err(anyhow!("#let {} occurs twice", id))
+                    Err(anyhow!(":let {} occurs twice", id))
                 } else {
                     vars.insert(id, expr);
                     Ok(())
@@ -85,11 +85,11 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn define(&mut self, id: Identifier<'t>, definition: SchemaNode<'t>) -> Result<()> {
         match &mut self.type_specific {
             TypeSpecific::File { .. } => Err(anyhow!(
-                "Cannot #define sub-trees inside files (add a '/' to make it a directory)"
+                "Cannot :define sub-trees inside files (add a '/' to make it a directory)"
             )),
             TypeSpecific::Directory { defs, .. } => {
                 if defs.contains_key(&id) {
-                    Err(anyhow!("#def {} occurs twice", id))
+                    Err(anyhow!(":def {} occurs twice", id))
                 } else {
                     defs.insert(id, definition);
                     Ok(())
@@ -101,7 +101,7 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn use_definition(&mut self, id: Identifier<'t>) -> Result<()> {
         if let TypeSpecific::File { source, .. } = &self.type_specific {
             if source.is_some() {
-                return Err(anyhow!("#use cannot be used in conjunction with #source"));
+                return Err(anyhow!(":use cannot be used in conjunction with :source"));
             }
         }
         self.uses.push(id);
@@ -110,7 +110,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn owner(&mut self, owner: Expression<'t>) -> Result<()> {
         if self.attributes.owner.is_some() {
-            return Err(anyhow!("#owner occurs twice"));
+            return Err(anyhow!(":owner occurs twice"));
         }
         self.attributes.owner = Some(owner);
         Ok(())
@@ -118,7 +118,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn group(&mut self, group: Expression<'t>) -> Result<()> {
         if self.attributes.group.is_some() {
-            return Err(anyhow!("#group occurs twice"));
+            return Err(anyhow!(":group occurs twice"));
         }
         self.attributes.group = Some(group);
         Ok(())
@@ -126,7 +126,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn mode(&mut self, mode: u16) -> Result<()> {
         if self.attributes.mode.is_some() {
-            return Err(anyhow!("#mode occurs twice"));
+            return Err(anyhow!(":mode occurs twice"));
         }
         self.attributes.mode = Some(mode);
         Ok(())
@@ -135,15 +135,15 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn source(&mut self, source: Expression<'t>) -> Result<()> {
         match self.type_specific {
             TypeSpecific::Directory { .. } => Err(anyhow!(
-                "#source can only be used for files, not directories"
+                ":source can only be used for files, not directories"
             )),
             TypeSpecific::File {
                 source: ref mut src,
             } => {
                 if !self.uses.is_empty() {
-                    Err(anyhow!("#source cannot be used in conjunction with #use"))
+                    Err(anyhow!(":source cannot be used in conjunction with :use"))
                 } else if src.is_some() {
-                    Err(anyhow!("#source occurs twice"))
+                    Err(anyhow!(":source occurs twice"))
                 } else {
                     *src = Some(source);
                     Ok(())
@@ -181,7 +181,7 @@ impl<'t> SchemaNodeBuilder<'t> {
                 entries,
             } => Schema::Directory(DirectorySchema::new(vars, defs, entries)),
             TypeSpecific::File { source } => {
-                let source = source.ok_or_else(|| anyhow!("File must have a #source"))?;
+                let source = source.ok_or_else(|| anyhow!("File must have a :source"))?;
                 Schema::File(FileSchema::new(source))
             }
         };

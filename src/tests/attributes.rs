@@ -7,7 +7,7 @@ fn test_incorrect_attribute_assertion() {
         assert_effect_of! {
             applying: "
                 dir/
-                    #mode 640
+                    :mode 640
                 "
             onto: "/target"
             yields:
@@ -24,10 +24,10 @@ fn test_attributes() -> Result<()> {
     assert_effect_of! {
         applying: "
             dir/
-                #mode 640
+                :mode 640
             another/
-                #owner daemon
-                #group sys
+                :owner daemon
+                :group sys
             "
         onto: "/target"
         yields:
@@ -46,9 +46,9 @@ fn test_top_level_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         applying: "
-            #mode 640
-            #owner daemon
-            #group sys
+            :mode 640
+            :owner daemon
+            :group sys
             sub/
             "
         onto: "/target"
@@ -70,11 +70,11 @@ fn test_attribute_expressions() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         applying: "
-            #let x = dae
-            #let y = s
+            :let x = dae
+            :let y = s
             attrs/
-                #owner ${x}mon
-                #group ${y}y${y}
+                :owner ${x}mon
+                :group ${y}y${y}
             "
         onto: "/target"
         yields:
@@ -91,7 +91,7 @@ fn test_changing_attributes() -> Result<()> {
     assert_effect_of! {
         applying: "
             dir/
-                #mode 750
+                :mode 750
             "
         onto: "/target"
             directories:

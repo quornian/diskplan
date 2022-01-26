@@ -63,10 +63,10 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
     let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
     if schema_node.match_pattern.is_some() {
         return Err(ParseError::new(
-            "Top level #match is not allowed".into(),
+            "Top level :match is not allowed".into(),
             // TODO: Or is it?
             text,
-            text.find("\n#match")
+            text.find("\n:match")
                 .map(|pos| &text[pos + 1..pos + 7])
                 .unwrap_or(text),
             None,
@@ -157,7 +157,7 @@ fn schema_node<'t, 'p>(
                 // TODO: Consider if this is an issue
                 // if properties.match_expr.is_some() {
                 //     return Err(ParseError::new(
-                //         format!("#def has own #match"),
+                //         format!(":def has own :match"),
                 //         whole,
                 //         span,
                 //         None,
@@ -199,7 +199,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
 
         consumed(alt((
             delimited(
-                tuple((indentation(level), char('#'))),
+                tuple((indentation(level), char(':'))),
                 alt((
                     map(let_op, |(name, expr)| Operator::Let { name, expr }),
                     map(use_op, |name| Operator::Use { name }),
@@ -313,11 +313,11 @@ fn item_header(s: &str) -> Res<&str, (Binding, bool, Option<Expression>)> {
     ))(s)
 }
 
-// #def name/
-// #def name -> link
+// :def name/
+// :def name -> link
 fn def_header(s: &str) -> Res<&str, (Identifier, bool, Option<Expression>)> {
     preceded(
-        tuple((tag("#def"), space1)),
+        tuple((tag(":def"), space1)),
         tuple((
             identifier,
             map(opt(char('/')), |o| o.is_some()),

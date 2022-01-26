@@ -7,10 +7,10 @@ pub fn expand_uses<'a>(
     node: &'a SchemaNode,
     stack: Option<&'a Stack>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
-    // Expand `node` to itself and any `#use`s within
+    // Expand `node` to itself and any `:use`s within
     let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
     use_schemas.push(node);
-    // Include node itself and its #defs in the scope
+    // Include node itself and its :defs in the scope
     let stack: Option<Stack> = match node {
         SchemaNode {
             schema: Schema::Directory(d),
@@ -24,7 +24,7 @@ pub fn expand_uses<'a>(
     for used in &node.uses {
         use_schemas.push(
             find_definition(used, stack.as_ref())
-                .ok_or_else(|| anyhow!("No definition (#def) found for {}", used))?,
+                .ok_or_else(|| anyhow!("No definition (:def) found for {}", used))?,
         );
     }
     Ok(use_schemas)

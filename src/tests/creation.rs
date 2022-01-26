@@ -23,9 +23,9 @@ fn test_create_file() -> Result<()> {
         applying: "
             subdir/
                 subsubfile
-                    #source /resource/file1
+                    :source /resource/file1
             subfile
-                #source /resource/file2
+                :source /resource/file2
             "
         onto: "/primary"
             directories:
@@ -48,7 +48,7 @@ fn test_create_symlink() -> Result<()> {
         applying: "
             subdirlink/ -> /secondary/${NAME}
                 subfile
-                    #source /resource/file
+                    :source /resource/file
             "
         onto: "/primary"
             directories:

@@ -16,25 +16,25 @@
 //!
 //! | Tag                       | Types     | Description
 //! |---------------------------|-----------|---------------------------
-//! |`#owner` _expr_            | All       | Sets the owner of this file/directory/symlink target
-//! |`#group` _expr_            | All       | Sets the group of this file, directory or symlink target
-//! |`#mode` _octal_            | All       | Sets the permissions of this file/directory/symlink target
-//! |`#source` _expr_           | File      | Copy content into this file from the path given by _expr_
-//! |`#let` _ident_ `=` _expr_  | Directory | Set a variable at this level to be used by deeper levels
-//! |`#def` _ident_             | Directory | Define a sub-schema that can be reused by `#use`
-//! |`#use` _ident_             | Directory | Reuse a sub-schema defined by `#def`
+//! |`:owner` _expr_            | All       | Sets the owner of this file/directory/symlink target
+//! |`:group` _expr_            | All       | Sets the group of this file, directory or symlink target
+//! |`:mode` _octal_            | All       | Sets the permissions of this file/directory/symlink target
+//! |`:source` _expr_           | File      | Copy content into this file from the path given by _expr_
+//! |`:let` _ident_ `=` _expr_  | Directory | Set a variable at this level to be used by deeper levels
+//! |`:def` _ident_             | Directory | Define a sub-schema that can be reused by `:use`
+//! |`:use` _ident_             | Directory | Reuse a sub-schema defined by `:def`
 //!
 //!
 //! # Simple Schema
 //!
-//! The top level of a schema describes a directory, whose [attributes][Attributes] may be set by `#owner`, `#group` and `#mode` tags:
+//! The top level of a schema describes a directory, whose [attributes][Attributes] may be set by `:owner`, `:group` and `:mode` tags:
 //! ```
 //! use diskplan::schema::*;
 //!
 //! let schema_root = parse_schema("
-//!     #owner person
-//!     #group user
-//!     #mode 777
+//!     :owner person
+//!     :group user
+//!     :mode 777
 //! ")?;
 //!
 //! assert!(matches!(schema_root.schema, Schema::Directory(_)));
@@ -52,11 +52,11 @@
 //! # let text =
 //! "
 //!     subdirectory/
-//!         #owner admin
-//!         #mode 700
+//!         :owner admin
+//!         :mode 700
 //!
 //!     file_name
-//!         #source content/example_file
+//!         :source content/example_file
 //! "
 //! # ;
 //! // ...
@@ -82,11 +82,11 @@
 //! # let text =
 //! "
 //!     example_link/ -> /another/disk/example_target/
-//!         #owner admin
-//!         #mode 700
+//!         :owner admin
+//!         :mode 700
 //!
 //!         file_to_create_at_target_end
-//!             #source content/example_file
+//!             :source content/example_file
 //! "
 //! # ;
 //! // ...
@@ -117,8 +117,8 @@
 //! ```
 //! # let text =
 //! "
-//!     #let asset_type = character
-//!     #let asset_name = Monkey
+//!     :let asset_type = character
+//!     :let asset_name = Monkey
 //!
 //!     assets/
 //!         $asset_type/
@@ -130,11 +130,11 @@
 //!
 //! ## Pattern Matching
 //!
-//! **TODO**: Document `#match` and `$variable` named entries
+//! **TODO**: Document `:match` and `$variable` named entries
 //!
 //! ## Schema Reuse
 //!
-//! **TODO**: Document `#def` and `#use`
+//! **TODO**: Document `:def` and `:use`
 //!
 
 use std::{collections::HashMap, fmt::Display};
@@ -160,7 +160,7 @@ pub struct SchemaNode<'t> {
     /// Symlink target - if this produces a symbolic link. Operates on the target end.
     pub symlink: Option<Expression<'t>>,
 
-    /// Links to other schemas `#use`d by this one (found in parent [`DirectorySchema`] definitions)
+    /// Links to other schemas `:use`d by this one (found in parent [`DirectorySchema`] definitions)
     pub uses: Vec<Identifier<'t>>,
 
     /// Properties of this file/directory

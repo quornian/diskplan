@@ -7,7 +7,7 @@ fn test_binding_static_beats_dynamic() -> Result<()> {
             fixed/
                 MATCHED_FIXED/
             $variable/
-                #match .*
+                :match .*
                 MATCHED_VARIABLE/
             "
         onto: "/"
@@ -24,7 +24,7 @@ fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
     assert_effect_of! {
         applying: "
             $variable/
-                #match .*
+                :match .*
                 MATCHED_VARIABLE/
             fixed/
                 MATCHED_FIXED/
@@ -47,10 +47,10 @@ fn test_binding_multiple_variable_error() {
         assert_effect_of! {
             applying: "
             $variable_a/
-                #match .*
+                :match .*
                 MATCHED_VARIABLE_A/
             $variable_b/
-                #match .*
+                :match .*
                 MATCHED_VARIABLE_B/
             "
             onto: "/"
@@ -86,9 +86,9 @@ fn test_binding_multiple_static_error() {
 fn test_match_let_variable() -> Result<()> {
     assert_effect_of! {
         applying: "
-            #let var = xxx
+            :let var = xxx
             $var/
-                #match .*
+                :match .*
                 variable/
             "
         onto: "/target"
@@ -104,9 +104,9 @@ fn test_match_let_variable_overridden_by_static() -> Result<()> {
     // TODO: Consider if this should fail
     assert_effect_of! {
         applying: "
-            #let var = xxx
+            :let var = xxx
             $var/
-                #match .*
+                :match .*
                 variable/
             xxx/
                 static/
@@ -124,13 +124,13 @@ fn test_match_variable() -> Result<()> {
     assert_effect_of! {
         applying: "
             $a/
-                #match x.*
+                :match x.*
                 starts
-                    #source /src/empty
+                    :source /src/empty
             $b/
-                #match .*x
+                :match .*x
                 ends
-                    #source /src/empty
+                    :source /src/empty
             "
         onto: "/target"
             directories:
@@ -153,7 +153,7 @@ fn test_match_variable_inherited() -> Result<()> {
     assert_effect_of! {
         applying: "
             $var/
-                #match .*
+                :match .*
                 $var/
                 sub/
                     $var/
@@ -175,11 +175,11 @@ fn test_match_categories() -> Result<()> {
     assert_effect_of! {
         applying: "
             $building/
-                #match .*shed
+                :match .*shed
                 BUILDING/
             $animal/
-                #match .*
-                #avoid .*shed
+                :match .*
+                :avoid .*shed
                 ANIMAL/
             "
         onto: "/target"

@@ -2,10 +2,10 @@ use std::vec;
 
 use nom::{
     branch::alt,
-    character::complete::{alphanumeric1, line_ending, space0},
+    character::complete::{alphanumeric1, line_ending},
     combinator::{eof, recognize},
     multi::{many0, many1},
-    sequence::{preceded, terminated, tuple},
+    sequence::{preceded, terminated},
 };
 
 use crate::schema::{
@@ -117,7 +117,7 @@ fn test_invalid_child() {
     parse_schema(
         "
         okay_entry
-            #source /tmp
+            :source /tmp
         ",
     )
     .unwrap();
@@ -125,7 +125,7 @@ fn test_invalid_child() {
         "
         okay_entry/
             child
-                #source /tmp
+                :source /tmp
         ",
     )
     .unwrap();
@@ -133,7 +133,7 @@ fn test_invalid_child() {
         "
         okay_entry
             child
-                #source /tmp
+                :source /tmp
         "
     )
     .is_err());
@@ -141,7 +141,7 @@ fn test_invalid_child() {
 
 #[test]
 fn test_let() {
-    let s = "#let something = expr";
+    let s = ":let something = expr";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -155,7 +155,7 @@ fn test_let() {
             )
         ))
     );
-    let s = "#let with_underscores = expr";
+    let s = ":let with_underscores = expr";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -169,7 +169,7 @@ fn test_let() {
             )
         ))
     );
-    let s = "#let _with_underscores_ = expr";
+    let s = ":let _with_underscores_ = expr";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -188,18 +188,18 @@ fn test_let() {
 #[test]
 fn test_def_header() {
     assert_eq!(
-        def_header("#def something"),
+        def_header(":def something"),
         Ok(("", (Identifier::new("something"), false, None)))
     );
     assert_eq!(
-        def_header("#def something/"),
+        def_header(":def something/"),
         Ok(("", (Identifier::new("something"), true, None,)))
     );
 }
 
 #[test]
 fn test_def_op_no_children() {
-    let s0 = "#def something_";
+    let s0 = ":def something_";
     let level = 0;
     let (s1, o1) = terminated(
         preceded(indentation(level), def_header),
@@ -211,7 +211,7 @@ fn test_def_op_no_children() {
     assert_eq!(o2, vec![]);
     assert_eq!(s2, "");
 
-    let s = "#def something_";
+    let s = ":def something_";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -227,13 +227,13 @@ fn test_def_op_no_children() {
             )
         ))
     );
-    let s = "#def something/-";
+    let s = ":def something/-";
     assert!(operator(0)(s).is_err());
-    let s = "#def something/->";
+    let s = ":def something/->";
     assert!(operator(0)(s).is_err());
-    let s = "#def something/->x";
+    let s = ":def something/->x";
     assert!(operator(0)(s).is_ok());
-    let s = "#def something -> /somewhere/else";
+    let s = ":def something -> /somewhere/else";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -256,7 +256,7 @@ fn test_def_op_no_children() {
 
 #[test]
 fn test_def_op_with_children() {
-    let s = "#def something -> /some$where/else";
+    let s = ":def something -> /some$where/else";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -299,18 +299,18 @@ fn test_no_trailing_whitespace() {
 
 #[test]
 fn test_single_line_mode_op() {
-    let s = "#mode 777";
+    let s = ":mode 777";
     assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
 }
 
 #[test]
 fn test_single_line_mode_trailing() {
-    assert!(operator(0)("#mode 777#owner x").is_err());
-    assert!(operator(0)("#mode 777-").is_err());
-    assert!(operator(0)("#mode 777").is_ok());
-    assert!(operator(0)("#mode 777 ").is_err());
-    assert!(operator(0)("#mode 777 #owner x").is_err());
-    assert!(operator(0)("#mode 777\n#owner x").is_ok());
+    assert!(operator(0)(":mode 777:owner x").is_err());
+    assert!(operator(0)(":mode 777-").is_err());
+    assert!(operator(0)(":mode 777").is_ok());
+    assert!(operator(0)(":mode 777 ").is_err());
+    assert!(operator(0)(":mode 777 :owner x").is_err());
+    assert!(operator(0)(":mode 777\n:owner x").is_ok());
 }
 
 #[test]
@@ -325,14 +325,14 @@ fn test_trailing_whitespace() {
 #[test]
 fn test_multiline_meta_ops() {
     let s = "
-        #mode 777
-        #owner usr-1
-        #group grpX
+        :mode 777
+        :owner usr-1
+        :group grpX
         "
     .strip_prefix("\n")
     .unwrap();
 
-    let line = "        #mode 777\n";
+    let line = "        :mode 777\n";
     let pos = s.find(line).unwrap();
     let end = pos + line.len();
     let t = &s[end..];
@@ -341,7 +341,7 @@ fn test_multiline_meta_ops() {
         Ok((t, (&s[pos..end], Operator::Mode(0o777))))
     );
 
-    let line = "        #owner usr-1\n";
+    let line = "        :owner usr-1\n";
     let pos = s.find(line).unwrap();
     let end = pos + line.len();
     let u = &s[end..];
@@ -351,7 +351,7 @@ fn test_multiline_meta_ops() {
         operator(2)(t),
         Ok((u, (&s[pos..end], Operator::Owner(owner_expr))))
     );
-    let line = "        #group grpX\n";
+    let line = "        :group grpX\n";
     let pos = s.find(line).unwrap();
     assert_eq!(
         operator(2)(u),
@@ -361,7 +361,7 @@ fn test_multiline_meta_ops() {
 
 #[test]
 fn test_match_pattern() {
-    let s = "#match [A-Z][A-Za-z]+";
+    let s = ":match [A-Z][A-Za-z]+";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -379,7 +379,7 @@ fn test_match_pattern() {
 
 #[test]
 fn test_source_pattern() {
-    let s = "#source /a/file/path";
+    let s = ":source /a/file/path";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -397,7 +397,7 @@ fn test_source_pattern() {
 
 #[test]
 fn test_def_with_newline() {
-    let s = "#def defined/\n";
+    let s = ":def defined/\n";
     assert_eq!(
         operator(0)(s),
         Ok((
@@ -418,7 +418,7 @@ fn test_def_with_newline() {
 #[test]
 fn test_def_with_block() {
     let s = "
-        #def defined/
+        :def defined/
             file
             dir/
     ";
@@ -462,18 +462,18 @@ fn test_def_with_block() {
 #[test]
 fn test_usage() {
     let s = "
-        #def defined/
+        :def defined/
             file
-                #source $emptyfile
+                :source $emptyfile
         usage/
-            #use defined
+            :use defined
         ";
     // Some important positions
-    let def_pos = s.find("        #def").unwrap();
+    let def_pos = s.find("        :def").unwrap();
     let file_pos = s.find("            file").unwrap();
-    let source_pos = s.find("                #source").unwrap();
+    let source_pos = s.find("                :source").unwrap();
     let usage_pos = s.find("        usage").unwrap();
-    let use_pos = s.find("            #use").unwrap();
+    let use_pos = s.find("            :use").unwrap();
 
     // Test raw operators parsed from the "file"
     let ops = preceded(many0(blank_line), many0(operator(2)))(s);
@@ -528,14 +528,14 @@ fn test_usage() {
 fn test_duplicate() {
     let schema = "
         directory/
-            #owner admin
+            :owner admin
 
             subdirectory/
-                #owner admin
-                #mode 777
-                #owner admin
+                :owner admin
+                :mode 777
+                :owner admin
         ";
-    let pos = schema.rfind("#owner").unwrap();
+    let pos = schema.rfind(":owner").unwrap();
     parse_schema(&schema[..pos]).unwrap();
 
     let err = match parse_schema(schema) {
@@ -585,7 +585,7 @@ fn test_symlink_file() {
     let schema = parse_schema(
         "
         file -> /another/place
-            #source xxx
+            :source xxx
         ",
     )
     .unwrap();
