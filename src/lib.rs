@@ -52,32 +52,82 @@
 //! ```
 //! let schema_root = diskplan::schema::parse_schema(
 //! "
-#![doc = include_str!("doc/fragments/schema")]
+//! :let remote_disk = /net/remote
+//!
+//! :mode 777
+//!
+//! :def admin_directory/
+//!     :owner root
+//!     :group root
+//!     :mode 750
+//!
+//! $zone/
+//!     :match zone_[a-z]
+//!
+//!     description.md
+//!         :source ${remote_disk}/resources/common_zone_description.md
+//!
+//!     admin/
+//!         :use admin_directory
+//!
+//!         zone_image.img
+//!             :source ${remote_disk}/resources/${zone}.img
+//!
+//!         storage/ -> ${remote_disk}/storage_pool/${zone}
+//!             database.db
+//!                 :source ${remote_disk}/resources/empty_database.db
+//!
 //! "
 //! )?;
-//! # Ok::<(), anyhow::Error>(())
-//! ```
 //!
-//! Given this existing structure in the filesystem:
-//! ```
+//! // Given this existing structure in the filesystem:
 //! let input_tree = "
-#![doc = include_str!("doc/fragments/input_tree")]
+//! /
+//! ├── net/
+//! │   └── remote/
+//! │       └── resources/
+//! │           ├── common_zone_description.md
+//! │           ├── empty_database.db
+//! │           ├── zone_a.img
+//! │           └── zone_b.img
+//! └── local/
+//!     ├── non_zone/
+//!     ├── zone_a/
+//!     └── zone_b/
 //! ";
-//! ```
 //!
-//! This output structure is produced:
-//! ```
+//! // This output structure is produced:
 //! let output_tree = "
-#![doc = include_str!("doc/fragments/output_tree")]
+//! /
+//! ├── net/
+//! │   └── remote/
+//! │       ├── resources/
+//! │       │   ├── common_zone_description.md
+//! │       │   ├── empty_database.db
+//! │       │   ├── zone_a.img
+//! │       │   └── zone_b.img
+//! │       └── storage_pool/
+//! │           ├── zone_a/
+//! │           │   └── database.db
+//! │           └── zone_b/
+//! │               └── database.db
+//! └── local/
+//!     ├── non_zone/
+//!     ├── zone_a/
+//!     │   ├── admin/
+//!     │   │   ├── storage -> /net/remote/storage_pool/zone_a
+//!     │   │   └── zone_image.img
+//!     │   └── description.md
+//!     └── zone_b/
+//!         ├── admin/
+//!         │   ├── storage -> /net/remote/storage_pool/zone_b
+//!         │   └── zone_image.img
+//!         └── description.md
 //! ";
 //! #
 //! # // Now verify it so our docs are always correct
 //! # mod doctests { include!{"doctests.rs"} }
-//! # use diskplan::schema::parse_schema;
-//! # let target = "/local";
-//! # let schema_root = parse_schema(include_str!("doc/fragments/schema"))?;
-//! # let input_tree = include_str!("doc/fragments/input_tree");
-//! # doctests::verify_trees(&schema_root, input_tree, output_tree, target)?;
+//! # doctests::verify_trees(&schema_root, input_tree, output_tree, "/local")?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
