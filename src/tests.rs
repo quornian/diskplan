@@ -79,7 +79,7 @@ macro_rules! assert_effect_of {
         expected_paths.insert("/".to_owned());
         expected_paths.insert(root.to_owned());
         $($(
-            assert!(fs.is_directory($out_d_path));
+            assert!(fs.is_directory($out_d_path), "Expected directory was not produced: {}", $out_d_path);
             $(
                 let attrs = fs.attributes($out_d_path)?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_d_owner);)?
@@ -89,7 +89,7 @@ macro_rules! assert_effect_of {
             expected_paths.insert($out_d_path.to_owned());
         )+)?
         $($(
-            assert!(fs.is_file($out_f_path));
+            assert!(fs.is_file($out_f_path), "Expected file at: {}", $out_f_path);
             $(
                 let attrs = fs.attributes($out_f_path)?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_f_owner);)?
@@ -100,8 +100,8 @@ macro_rules! assert_effect_of {
             expected_paths.insert($out_f_path.to_owned());
         )+)?
         $($(
-            assert!(fs.is_link($link));
-            assert_eq!(&fs.read_link($link)?, $target);
+            assert!(fs.is_link($link), "Expected symlink at: {}", $link);
+            assert_eq!(&fs.read_link($link)?, $target, "Expected symlink: {} -> {}", $link, $target);
             expected_paths.insert($link.to_owned());
         )+)?
         let actual_paths = fs.to_path_set();
