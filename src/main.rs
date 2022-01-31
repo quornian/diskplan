@@ -12,21 +12,21 @@ fn main() -> Result<()> {
     let matches = App::new("diskplan")
         .version("1.0")
         .about("Describe and apply filesystem structure")
-        .set_term_width(72)
+        .term_width(72)
         .arg(
-            Arg::with_name("schema")
+            Arg::new("schema")
                 .help("The path of the schema to apply")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
-            Arg::with_name("target")
+            Arg::new("target")
                 .help("The root directory on which to apply the schema")
                 .takes_value(true)
                 .required(true),
         )
         .arg(
-            Arg::with_name("apply")
+            Arg::new("apply")
                 .long("--apply")
                 .help("Apply the changes")
                 .takes_value(false),
