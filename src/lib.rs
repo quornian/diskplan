@@ -37,7 +37,7 @@
 //! ```
 //! Directory entries are named, sub-directories are signfied by a slash, symlinks by an arrow.
 //!
-//! Tags (prefixed by a `:`) are used to set properties of a node. Variables are used to
+//! Tags, prefixed by a colon (`:`), can be used to set properties of an entry.
 //!
 //! Further to the above skeleton:
 //! * Files must specify a `:source` with a local path to the file's content
