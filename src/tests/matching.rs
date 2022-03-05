@@ -171,6 +171,69 @@ fn test_match_variable_inherited() -> Result<()> {
 }
 
 #[test]
+fn test_match_let() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            :let var = xxx
+            $var/
+                created/
+            "
+        onto: "/target"
+            directories:
+                "/target"
+                "/target/yyy"
+        yields:
+            directories:
+                "/target/xxx"
+                "/target/xxx/created"
+                "/target/yyy/created"
+    }
+}
+
+#[test]
+fn inherited_variable_can_rebind() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $var/
+                $var/
+                    inner/
+            "
+        onto: "/"
+            directories:
+                "/a"
+                "/a/x"
+        yields:
+            directories:
+                "/a/a"
+                "/a/a/inner"
+                "/a/x"
+                "/a/x/inner"
+    }
+}
+
+#[test]
+fn inherited_variable_with_match_avoids_rebind() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $var/
+                $var/
+                    :match $var
+                    inner/
+            "
+        onto: "/target"
+            directories:
+                "/target"
+                "/target/a"
+                "/target/a/x"
+        yields:
+            directories:
+                "/target/a/a"
+                "/target/a/a/inner"
+                // And not: /target/a/x/inner
+    }
+}
+
+#[test]
 fn test_match_categories() -> Result<()> {
     assert_effect_of! {
         applying: "
