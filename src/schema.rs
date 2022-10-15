@@ -1,8 +1,8 @@
-//! Provides the means to constuct a tree of [SchemaNode]s from text form ([parse_schema]).
+//! Provides the means to constuct a tree of [SchemaNode]s from text form (see [parse_schema]).
 //!
-//! The language of the text form uses significant whitespace (four spaces) for each level. It
-//! distinguishes between files and directories by the lack or presence of a `/`, and whether
-//! it's a symlink by the lack or presence of `->` (followed by its target path expression).
+//! The language of the text form uses significant whitespace (four spaces) for indentation,
+//! distinguishes between files and directories by the presence of a `/`, and whether
+//! this is a symlink by presence of an `->` (followed by its target path expression).
 //! That is, each indented node of the directory tree takes one of the following forms:
 //!
 //! | Syntax                | Description
@@ -12,17 +12,17 @@
 //! | _str_ `->` _expr_     | A symlink to a file
 //! | _str_/ `->` _expr_    | A symlink to a directory
 //!
-//! Properties of a node are set using one of the following tags:
+//! Properties of a given node are set using the following tags:
 //!
 //! | Tag                       | Types     | Description
 //! |---------------------------|-----------|---------------------------
 //! |`:owner` _expr_            | All       | Sets the owner of this file/directory/symlink target
 //! |`:group` _expr_            | All       | Sets the group of this file, directory or symlink target
 //! |`:mode` _octal_            | All       | Sets the permissions of this file/directory/symlink target
-//! |`:source` _expr_           | File      | Copy content into this file from the path given by _expr_
-//! |`:let` _ident_ `=` _expr_  | Directory | Set a variable at this level to be used by deeper levels
-//! |`:def` _ident_             | Directory | Define a sub-schema that can be reused by `:use`
-//! |`:use` _ident_             | Directory | Reuse a sub-schema defined by `:def`
+//! |`:source` _expr_           | File      | Copies content into this file from the path given by _expr_
+//! |`:let` _ident_ `=` _expr_  | Directory | Sets a variable at this level to be used by deeper levels
+//! |`:def` _ident_             | Directory | Defines a sub-schema that can be reused by `:use`
+//! |`:use` _ident_             | Directory | Reuses a sub-schema defined by `:def`
 //!
 //!
 //! # Simple Schema
@@ -115,7 +115,7 @@
 //!
 //! Variables can be used to drive construction, for example:
 //! ```
-//! # let text =
+//! # diskplan::schema::parse_schema(
 //! "
 //!     :let asset_type = character
 //!     :let asset_name = Monkey
@@ -125,7 +125,7 @@
 //!             $asset/
 //!                 reference/
 //! "
-//! # ;
+//! # ).unwrap();
 //! ```
 //!
 //! ## Pattern Matching

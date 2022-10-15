@@ -3,7 +3,7 @@
 //! # Schema Tree
 //!
 //! Diskplan uses a simple language to define a tree of files, directories and symlinks.
-//! Here is the skeleton of an example schema tree:
+//! Here is the skeleton of an example schema tree definition:
 //! ```
 //! let schema_root = diskplan::schema::parse_schema(
 //! # concat!(
@@ -35,7 +35,7 @@
 //! )?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-//! Directory entries are named, sub-directories are signfied by a slash, symlinks by an arrow.
+//! Directories are signfied by a slash, symlinks by an arrow.
 //!
 //! Tags, prefixed by a colon (`:`), can be used to set properties of an entry.
 //!
@@ -44,7 +44,8 @@
 //! * Properties of any level can be set using `:owner`, `:group` and `:mode` tags
 //! * Entries in the tree can be given names with `:def` and reused elsewhere with `:use`
 //! * Variables can be set with `:let` and used in path expressions
-//! * Entries can be dynamic (e.g. `$somename`), with `:match` used to set the pattern
+//! * Entries can be static names (as above), or bound to variables (e.g. `$somename`),
+//!   with a corresponding `:match` operator used to set a pattern
 //!
 //! For full details, see the [`schema`] module. For now, here is a more complete example
 //! using all of the above features:
