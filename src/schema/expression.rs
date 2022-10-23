@@ -1,44 +1,25 @@
 use std::{fmt::Display, vec};
 
-#[derive(Debug, Clone, Eq)]
-pub struct Expression<'t>(&'t str, Vec<Token<'t>>);
+#[derive(Debug, Clone, PartialEq, Eq, Ord)]
+pub struct Expression<'t>(Vec<Token<'t>>);
 
 impl<'t> Expression<'t> {
-    pub(super) fn from_parsed(expr: &'t str, tokens: Vec<Token<'t>>) -> Expression<'t> {
-        // Note: This is pub(super) because we require the caller to provide the unparsed
-        // string and parsed tokens of the same underlying expression. Limiting this trust
-        // to the schema parsing code and its tests avoids exposing the issue publicly.
-        Expression(expr, tokens)
-    }
-
-    pub fn as_str(&self) -> &'t str {
-        self.0
-    }
-
     pub fn tokens(&self) -> &[Token<'t>] {
-        &self.1[..]
+        &self.0[..]
     }
 
     pub fn from_text(s: &'t str) -> Result<Expression<'t>, String> {
         if s.contains('$') {
             Err(format!("Not a text-only expression: {}", s))
         } else {
-            Ok(Expression::from_parsed(s, vec![Token::Text(s)]))
+            Ok(Expression(vec![Token::Text(s)]))
         }
     }
 }
 
-impl PartialEq for Expression<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        // Note: Since we require .0 and .1 to be equivalent we only need to test .0
-        self.0 == other.0
-    }
-}
-
-impl Ord for Expression<'_> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Note: Since we require .0 and .1 to be equivalent we only need to compare .0
-        self.0.cmp(other.0)
+impl<'t> From<Vec<Token<'t>>> for Expression<'t> {
+    fn from(tokens: Vec<Token<'t>>) -> Self {
+        Expression(tokens)
     }
 }
 
@@ -50,18 +31,31 @@ impl PartialOrd for Expression<'_> {
 
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        for token in self.0.iter() {
+            write!(f, "{}", token)?;
+        }
+        Ok(())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Token<'t> {
     Text(&'t str),
     Variable(Identifier<'t>),
     Special(Special),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl Display for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Text(s) => f.write_str(s),
+            Token::Variable(v) => write!(f, "${{{}}}", v),
+            Token::Special(sp) => write!(f, "{}", sp),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Special {
     PathRelative,
     PathAbsolute,
@@ -71,6 +65,7 @@ pub enum Special {
     ParentNameOnly,
     RootPath,
 }
+
 impl Special {
     pub const SAME_PATH_RELATIVE: &'static str = "PATH";
     pub const SAME_PATH_ABSOLUTE: &'static str = "FULL_PATH";
@@ -79,6 +74,20 @@ impl Special {
     pub const PARENT_PATH_ABSOLUTE: &'static str = "PARENT_FULL_PATH";
     pub const PARENT_PATH_NAME: &'static str = "PARENT_NAME";
     pub const ROOT_PATH: &'static str = "ROOT_PATH";
+}
+
+impl Display for Special {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Special::PathRelative => Special::SAME_PATH_RELATIVE,
+            Special::PathAbsolute => Special::SAME_PATH_ABSOLUTE,
+            Special::PathNameOnly => Special::SAME_PATH_NAME,
+            Special::ParentRelative => Special::PARENT_PATH_RELATIVE,
+            Special::ParentAbsolute => Special::PARENT_PATH_ABSOLUTE,
+            Special::ParentNameOnly => Special::PARENT_PATH_NAME,
+            Special::RootPath => Special::ROOT_PATH,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -103,17 +112,5 @@ impl Display for Identifier<'_> {
 impl<'a> From<&'a str> for Identifier<'a> {
     fn from(s: &'a str) -> Self {
         Identifier::new(s)
-    }
-}
-
-impl<'a> From<Identifier<'a>> for Expression<'a> {
-    fn from(i: Identifier<'a>) -> Self {
-        Expression(i.value(), vec![Token::Variable(i)])
-    }
-}
-
-impl<'a> From<&Identifier<'a>> for Expression<'a> {
-    fn from(i: &Identifier<'a>) -> Self {
-        Expression(i.value(), vec![Token::Variable(i.clone())])
     }
 }

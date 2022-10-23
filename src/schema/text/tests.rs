@@ -11,8 +11,8 @@ use nom::{
 use crate::schema::{
     expression::{Expression, Identifier, Token},
     text::{
-        blank_line, comment, def_header, end_of_lines, indentation, operator, parse_schema,
-        Operator,
+        blank_line, comment, def_header, end_of_lines, expression, indentation, operator,
+        parse_schema, Operator,
     },
     Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
 };
@@ -150,7 +150,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("something"),
-                    expr: Expression::from_parsed("expr", vec![Token::Text("expr")])
+                    expr: Expression::from(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -164,7 +164,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("with_underscores"),
-                    expr: Expression::from_parsed("expr", vec![Token::Text("expr")])
+                    expr: Expression::from(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -178,7 +178,7 @@ fn test_let() {
                 s,
                 Operator::Let {
                     name: Identifier::new("_with_underscores_"),
-                    expr: Expression::from_parsed("expr", vec![Token::Text("expr")])
+                    expr: Expression::from(vec![Token::Text("expr")])
                 }
             )
         ))
@@ -243,10 +243,7 @@ fn test_def_op_no_children() {
                 Operator::Def {
                     name: Identifier::new("something"),
                     is_directory: false,
-                    link: Some(Expression::from_parsed(
-                        "/somewhere/else",
-                        vec![Token::Text("/somewhere/else")]
-                    )),
+                    link: Some(Expression::from(vec![Token::Text("/somewhere/else")])),
                     children: vec![],
                 }
             )
@@ -266,17 +263,25 @@ fn test_def_op_with_children() {
                 Operator::Def {
                     name: Identifier::new("something"),
                     is_directory: false,
-                    link: Some(Expression::from_parsed(
-                        "/some$where/else",
-                        vec![
-                            Token::Text("/some"),
-                            Token::Variable(Identifier::new("where")),
-                            Token::Text("/else")
-                        ]
-                    )),
+                    link: Some(Expression::from(vec![
+                        Token::Text("/some"),
+                        Token::Variable(Identifier::new("where")),
+                        Token::Text("/else")
+                    ])),
                     children: vec![],
                 }
             )
+        ))
+    );
+}
+
+#[test]
+fn test_dynamic_binding() {
+    assert_eq!(
+        expression("$folder"),
+        Ok((
+            "",
+            Expression::from(vec![Token::Variable(Identifier::new("folder"))])
         ))
     );
 }
@@ -345,8 +350,8 @@ fn test_multiline_meta_ops() {
     let pos = s.find(line).unwrap();
     let end = pos + line.len();
     let u = &s[end..];
-    let owner_expr = Expression::from_parsed("usr-1", vec![Token::Text("usr-1")]);
-    let group_expr = Expression::from_parsed("grpX", vec![Token::Text("grpX")]);
+    let owner_expr = Expression::from(vec![Token::Text("usr-1")]);
+    let group_expr = Expression::from(vec![Token::Text("grpX")]);
     assert_eq!(
         operator(2)(t),
         Ok((u, (&s[pos..end], Operator::Owner(owner_expr))))
@@ -368,10 +373,7 @@ fn test_match_pattern() {
             "",
             (
                 s,
-                Operator::Match(Expression::from_parsed(
-                    "[A-Z][A-Za-z]+",
-                    vec![Token::Text("[A-Z][A-Za-z]+")]
-                ))
+                Operator::Match(Expression::from(vec![Token::Text("[A-Z][A-Za-z]+")]))
             )
         ))
     )
@@ -386,10 +388,7 @@ fn test_source_pattern() {
             "",
             (
                 s,
-                Operator::Source(Expression::from_parsed(
-                    "/a/file/path",
-                    vec![Token::Text("/a/file/path")]
-                ))
+                Operator::Source(Expression::from(vec![Token::Text("/a/file/path")]))
             )
         ))
     )
@@ -496,10 +495,9 @@ fn test_usage() {
                                 link: None,
                                 children: vec![(
                                     &s[source_pos..usage_pos],
-                                    Operator::Source(Expression::from_parsed(
-                                        "$emptyfile",
-                                        vec![Token::Variable(Identifier::new("emptyfile"))]
-                                    ))
+                                    Operator::Source(Expression::from(vec![Token::Variable(
+                                        Identifier::new("emptyfile")
+                                    )]))
                                 )],
                             }
                         )],
@@ -573,10 +571,7 @@ fn test_symlink_directory() {
     assert_eq!(entries.len(), 0);
     assert_eq!(
         symlink,
-        &Some(Expression::from_parsed(
-            "/another/place",
-            vec![Token::Text("/another/place")]
-        ))
+        &Some(Expression::from(vec![Token::Text("/another/place")]))
     );
 }
 
@@ -607,9 +602,6 @@ fn test_symlink_file() {
     };
     assert_eq!(
         symlink,
-        &Some(Expression::from_parsed(
-            "/another/place",
-            vec![Token::Text("/another/place")]
-        ))
+        &Some(Expression::from(vec![Token::Text("/another/place")]))
     );
 }
