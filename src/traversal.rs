@@ -16,11 +16,11 @@ pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &
 where
     FS: Filesystem,
 {
-    traverse_over(root, None, filesystem, &SplitPath::new(target)?)
+    traverse_node(root, None, filesystem, &SplitPath::new(target)?)
 }
 
 #[derive(Debug)]
-enum Scope<'a> {
+pub enum Scope<'a> {
     Directory(&'a DirectorySchema<'a>),
     Binding(&'a Identifier<'a>, String),
 }
@@ -29,6 +29,12 @@ enum Scope<'a> {
 pub struct Stack<'a> {
     parent: Option<&'a Stack<'a>>,
     scope: Scope<'a>,
+}
+
+impl<'a> Stack<'a> {
+    pub fn new(parent: Option<&'a Stack<'a>>, scope: Scope<'a>) -> Self {
+        Stack { parent, scope }
+    }
 }
 
 impl<'a> Scope<'a> {
@@ -40,7 +46,7 @@ impl<'a> Scope<'a> {
     }
 }
 
-fn traverse_over<'a, FS>(
+fn traverse_node<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
@@ -50,9 +56,20 @@ where
     FS: Filesystem,
 {
     for node in reuse::expand_uses(node, stack)? {
-        traverse_into(node, stack, filesystem, path).with_context(|| {
-            format!("Into {}\n{}", path.absolute(), summarize_schema_node(node))
-        })?;
+        // Create this entry, following symlinks
+        create(node, stack, filesystem, &path)
+            .with_context(|| format!("Create {}", path.absolute()))?;
+
+        // Traverse over children
+        if let Schema::Directory(ref directory_schema) = node.schema {
+            traverse_directory(directory_schema, stack, filesystem, path).with_context(|| {
+                format!(
+                    "Directory {}\n{}",
+                    path.absolute(),
+                    summarize_schema_node(node)
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -74,8 +91,8 @@ fn summarize_schema_node(node: &SchemaNode) -> String {
     f
 }
 
-fn traverse_into<'a, FS>(
-    node: &'a SchemaNode<'_>,
+fn traverse_directory<'a, FS>(
+    directory_schema: &'a DirectorySchema<'_>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
     path: &SplitPath,
@@ -83,108 +100,101 @@ fn traverse_into<'a, FS>(
 where
     FS: Filesystem,
 {
-    // Create this entry, following symlinks
-    create(node, stack, filesystem, &path)
-        .with_context(|| format!("Create {}", path.absolute()))?;
+    let stack = Stack::new(stack, Scope::Directory(directory_schema));
 
-    // Traverse over children
-    if let Schema::Directory(ref directory_schema) = node.schema {
-        let stack = Stack {
-            parent: stack,
-            scope: Scope::Directory(directory_schema),
-        };
+    // Collect names of what's on disk
+    let on_disk_filenames = filesystem
+        .list_directory(path.absolute())
+        .unwrap_or_else(|_| vec![]);
+    let on_disk_filenames = on_disk_filenames
+        .iter()
+        .map(AsRef::as_ref)
+        .map(Cow::Borrowed);
 
-        // Collect names of what's on disk
-        let listing = filesystem
-            .list_directory(path.absolute())
-            .unwrap_or_else(|_| vec![]);
-        let existing = listing.iter().map(AsRef::as_ref).map(Cow::Borrowed);
+    // Collect names of fixed and variable schema entries (fixed are sorted first)
+    let bound_child_schemas = directory_schema
+        .entries()
+        .iter()
+        .filter_map(|(binding, _)| match binding {
+            Binding::Static(name) => Some(Cow::Borrowed(*name)),
+            Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), path)
+                .ok()
+                .map(Cow::Owned),
+        });
 
-        // Collect names of fixed and variable schema entries (fixed are sorted first)
-        let bound = directory_schema
-            .entries()
-            .iter()
-            .filter_map(|(binding, _)| match binding {
-                Binding::Static(name) => Some(Cow::Borrowed(*name)),
-                Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), path)
-                    .ok()
-                    .map(Cow::Owned),
-            });
+    // Use these to build unique mappings, and error if not unique
+    let mut mapped: HashMap<Cow<str>, Option<(&Binding, &SchemaNode)>> = on_disk_filenames
+        .chain(bound_child_schemas)
+        .map(|name| (name, None))
+        .collect();
+    for (binding, child_node) in directory_schema.entries() {
+        // Note: Since we don't know the name of the thing we're matching yet, any path
+        // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
+        // using the parent directory
+        let pattern = CompiledPattern::compile(
+            child_node.match_pattern.as_ref(),
+            child_node.avoid_pattern.as_ref(),
+            Some(&stack),
+            &path,
+        )?;
 
-        // Use these to build unique mappings, and error if not unique
-        let mut mapped: HashMap<Cow<str>, Option<(&Binding, &SchemaNode)>> =
-            existing.chain(bound).map(|name| (name, None)).collect();
-        for (binding, child_node) in directory_schema.entries() {
-            // Note: Since we don't know the name of the thing we're matching yet, any path
-            // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
-            // using the parent directory
-            let pattern = CompiledPattern::compile(
-                child_node.match_pattern.as_ref(),
-                child_node.avoid_pattern.as_ref(),
-                Some(&stack),
-                &path,
-            )?;
-
-            for (name, have_match) in mapped.iter_mut() {
-                match binding {
-                    // Static binding produces a match for that name only
-                    &Binding::Static(bound_name) if bound_name == name => match have_match {
+        for (name, have_match) in mapped.iter_mut() {
+            match binding {
+                // Static binding produces a match for that name only
+                &Binding::Static(bound_name) if bound_name == name => match have_match {
+                    None => Ok(*have_match = Some((binding, child_node))),
+                    Some((bound, _)) => Err(anyhow!(
+                        "'{}' matches multiple static bindings '{}' and '{}'",
+                        name,
+                        bound,
+                        binding
+                    )),
+                },
+                // Dynamic bindings must match their inner schema pattern
+                &Binding::Dynamic(_) if pattern.matches(name) => {
+                    match have_match {
                         None => Ok(*have_match = Some((binding, child_node))),
-                        Some((bound, _)) => Err(anyhow!(
-                            "'{}' matches multiple static bindings '{}' and '{}'",
-                            name,
-                            bound,
-                            binding
-                        )),
-                    },
-                    // Dynamic bindings must match their inner schema pattern
-                    &Binding::Dynamic(_) if pattern.matches(name) => {
-                        match have_match {
-                            None => Ok(*have_match = Some((binding, child_node))),
-                            Some((bound, _)) => match bound {
-                                Binding::Static(_) => Ok(()), // Keep previous static binding
-                                Binding::Dynamic(_) => Err(anyhow!(
-                                    "'{}' matches multiple dynamic bindings '{}' and '{}' {:?}",
-                                    name,
-                                    bound,
-                                    binding,
-                                    pattern,
-                                )),
-                            },
-                        }
+                        Some((bound, _)) => match bound {
+                            Binding::Static(_) => Ok(()), // Keep previous static binding
+                            Binding::Dynamic(_) => Err(anyhow!(
+                                "'{}' matches multiple dynamic bindings '{}' and '{}' {:?}",
+                                name,
+                                bound,
+                                binding,
+                                pattern,
+                            )),
+                        },
                     }
-                    _ => Ok(()),
-                }?;
-            }
+                }
+                _ => Ok(()),
+            }?;
         }
+    }
 
-        for (name, matched) in mapped {
-            if let Some((binding, child_node)) = matched {
-                let child_path = path.join(name.as_ref());
+    for (name, matched) in mapped {
+        if let Some((binding, child_node)) = matched {
+            let child_path = path.join(name.as_ref());
 
-                match binding {
-                    Binding::Static(_) => {
-                        traverse_over(child_node, Some(&stack), filesystem, &child_path)
-                            .with_context(|| format!("Over {}", child_path.absolute()))?
-                    }
-                    Binding::Dynamic(var) => {
-                        let stack = Stack {
-                            parent: Some(&stack),
-                            scope: Scope::Binding(var, name.into()),
-                        };
-                        traverse_over(child_node, Some(&stack), filesystem, &child_path)
-                            .with_context(|| {
-                                format!(
-                                    "Over {} (with {})",
-                                    child_path.absolute(),
-                                    &stack
-                                        .scope
-                                        .as_binding()
-                                        .map(|(var, value)| format!("${} = {}", var, value))
-                                        .unwrap_or_else(|| "<no binding>".into()),
-                                )
-                            })?;
-                    }
+            match binding {
+                Binding::Static(s) => {
+                    traverse_node(child_node, Some(&stack), filesystem, &child_path)
+                        .with_context(|| format!("Node {}", child_path.absolute()))?
+                }
+                Binding::Dynamic(var) => {
+                    let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
+                    traverse_node(child_node, Some(&stack), filesystem, &child_path).with_context(
+                        || {
+                            format!(
+                                "Node {} (with {})",
+                                child_path.absolute(),
+                                &stack
+                                    .scope
+                                    .as_binding()
+                                    .map(|(var, value)| format!("${} = {}", var, value))
+                                    .unwrap_or_else(|| "<no binding>".into()),
+                            )
+                        },
+                    )?;
                 }
             }
         }
@@ -202,11 +212,11 @@ where
     FS: Filesystem,
 {
     let owner = match &node.attributes.owner {
-        Some(expr) => Some(evaluate(&expr, stack, path)?),
+        Some(expr) => Some(evaluate(expr, stack, path)?),
         None => None,
     };
     let group = match &node.attributes.group {
-        Some(expr) => Some(evaluate(&expr, stack, path)?),
+        Some(expr) => Some(evaluate(expr, stack, path)?),
         None => None,
     };
     let attrs = SetAttrs {
