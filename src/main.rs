@@ -1,41 +1,31 @@
 use anyhow::{anyhow, Context as _, Result};
-use clap::{App, Arg};
+use clap::{arg, command, Parser};
 
 use diskplan::{
-    filesystem::{self, Filesystem, SetAttrs},
+    filesystem::{self, Filesystem},
     schema::parse_schema,
     traversal::traverse,
 };
 
-fn main() -> Result<()> {
-    // Parse command line arguments
-    let matches = App::new("diskplan")
-        .version("1.0")
-        .about("Describe and apply filesystem structure")
-        .term_width(72)
-        .arg(
-            Arg::new("schema")
-                .help("The path of the schema to apply")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::new("target")
-                .help("The root directory on which to apply the schema")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::new("apply")
-                .long("--apply")
-                .help("Apply the changes")
-                .takes_value(false),
-        )
-        .get_matches();
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// The path of the schema to apply
+    schema: String,
+    /// The root directory on which to apply the schema
+    target: String,
 
-    let schema = matches.value_of("schema").unwrap();
-    let target = matches.value_of("target").unwrap();
-    let apply = matches.is_present("apply");
+    /// Whether to apply the changes (otherwise they are simulated in memory)
+    #[arg(long)]
+    apply: bool,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    let schema = &args.schema;
+    let target = &args.target;
+    let apply = args.apply;
 
     let content = std::fs::read_to_string(schema)
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
