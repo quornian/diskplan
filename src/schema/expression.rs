@@ -1,19 +1,11 @@
 use std::{fmt::Display, vec};
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Expression<'t>(Vec<Token<'t>>);
 
 impl<'t> Expression<'t> {
     pub fn tokens(&self) -> &[Token<'t>] {
         &self.0[..]
-    }
-
-    pub fn from_text(s: &'t str) -> Result<Expression<'t>, String> {
-        if s.contains('$') {
-            Err(format!("Not a text-only expression: {}", s))
-        } else {
-            Ok(Expression(vec![Token::Text(s)]))
-        }
     }
 }
 
@@ -23,9 +15,9 @@ impl<'t> From<Vec<Token<'t>>> for Expression<'t> {
     }
 }
 
-impl PartialOrd for Expression<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
+impl<'t> From<&[Token<'t>]> for Expression<'t> {
+    fn from(tokens: &[Token<'t>]) -> Self {
+        Expression(tokens.into())
     }
 }
 
@@ -112,5 +104,40 @@ impl Display for Identifier<'_> {
 impl<'a> From<&'a str> for Identifier<'a> {
     fn from(s: &'a str) -> Self {
         Identifier::new(s)
+    }
+}
+
+impl<'a> From<&Identifier<'a>> for Expression<'a> {
+    fn from(identifier: &Identifier<'a>) -> Self {
+        Expression(vec![Token::Variable(identifier.clone())])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn format_identifier() {
+        assert_eq!(&format!("{}", Identifier("something")), "something");
+    }
+
+    #[test]
+    fn format_variable() {
+        let something = Identifier("something");
+        assert_eq!(&format!("{}", Token::Variable(something)), "${something}");
+    }
+
+    #[test]
+    fn format_expression_all_types() {
+        let expr = Expression(vec![
+            Token::Text("normal text/"),
+            Token::Variable(Identifier("a_variable")),
+            Token::Text("/"),
+            Token::Special(Special::ParentRelative),
+        ]);
+        assert_eq!(
+            &format!("{}", expr),
+            "normal text/${a_variable}/PARENT_PATH"
+        );
     }
 }

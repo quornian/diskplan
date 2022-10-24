@@ -8,7 +8,7 @@ mod reuse;
 
 use crate::{
     filesystem::{self, Filesystem, SetAttrs, SplitPath},
-    schema::{Binding, DirectorySchema, Expression, Identifier, Schema, SchemaNode, Token},
+    schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
 
@@ -106,13 +106,9 @@ where
             .iter()
             .filter_map(|(binding, _)| match binding {
                 Binding::Static(name) => Some(Cow::Borrowed(*name)),
-                Binding::Dynamic(var) => evaluate(
-                    &Expression::from(vec![Token::Variable(var.clone())]),
-                    Some(&stack),
-                    path,
-                )
-                .ok()
-                .map(Cow::Owned),
+                Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), path)
+                    .ok()
+                    .map(Cow::Owned),
             });
 
         // Use these to build unique mappings, and error if not unique
