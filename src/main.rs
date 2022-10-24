@@ -18,14 +18,31 @@ struct Args {
     /// Whether to apply the changes (otherwise they are simulated in memory)
     #[arg(long)]
     apply: bool,
+
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let env = env_logger::Env::new().filter("DISKPLAN_LOG");
+    env_logger::Builder::from_env(env)
+        .filter_level(match args.verbose {
+            0 => log::LevelFilter::Warn,
+            1 => log::LevelFilter::Info,
+            2 => log::LevelFilter::Debug,
+            _ => log::LevelFilter::Trace,
+        })
+        .format_timestamp(None)
+        .init();
 
     let schema = &args.schema;
     let target = &args.target;
     let apply = args.apply;
+
+    log::debug!("Schema: {}", schema);
+    log::debug!("Target: {}", target);
+    log::debug!("Apply: {}", apply);
 
     let content = std::fs::read_to_string(schema)
         .with_context(|| format!("Failed to load schema from: {}", schema))?;

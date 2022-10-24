@@ -170,6 +170,19 @@ pub struct SchemaNode<'t> {
     pub schema: Schema<'t>,
 }
 
+impl<'t> std::fmt::Display for SchemaNode<'t> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Node")?;
+        if let Some(ref match_pattern) = self.match_pattern {
+            write!(f, " matching {}", match_pattern)?;
+        }
+        if let Some(ref avoid_pattern) = self.avoid_pattern {
+            write!(f, " avoiding {}", avoid_pattern)?;
+        }
+        Ok(())
+    }
+}
+
 /// File/directory specific aspects of a node in the tree
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema<'t> {

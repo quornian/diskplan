@@ -15,10 +15,7 @@ pub fn expand_uses<'a>(
         SchemaNode {
             schema: Schema::Directory(d),
             ..
-        } => Some(Stack {
-            parent: stack,
-            scope: Scope::Directory(d),
-        }),
+        } => Some(Stack::new(stack, Scope::Directory(d))),
         _ => None,
     };
     for used in &node.uses {

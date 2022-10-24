@@ -1,6 +1,6 @@
 //! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
 //! and virtual ([`MemoryFilesystem`]) implementation.
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use anyhow::{anyhow, Result};
 
@@ -163,6 +163,12 @@ impl SplitPath {
             root_len: self.root_len,
             full: join(&self.full, &path),
         }
+    }
+}
+
+impl Display for SplitPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.full)
     }
 }
 

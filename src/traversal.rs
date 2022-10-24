@@ -1,3 +1,6 @@
+//! A mechanism for traversing a schema and applying its nodes to an underlying
+//! filesystem structure
+//!
 use std::{borrow::Cow, collections::HashMap, fmt::Write};
 
 use anyhow::{anyhow, Context as _, Result};
@@ -12,19 +15,18 @@ use crate::{
     traversal::{eval::evaluate, pattern::CompiledPattern},
 };
 
+/// Apply a Schema tree to the given filesystem starting at the target path
+///
 pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &str) -> Result<()>
 where
     FS: Filesystem,
 {
+    log::debug!("Traversing root {} for {}", root, target);
     traverse_node(root, None, filesystem, &SplitPath::new(target)?)
 }
 
-#[derive(Debug)]
-pub enum Scope<'a> {
-    Directory(&'a DirectorySchema<'a>),
-    Binding(&'a Identifier<'a>, String),
-}
-
+/// Keeps track of variables and provides access to definitions from parent
+/// nodes
 #[derive(Debug)]
 pub struct Stack<'a> {
     parent: Option<&'a Stack<'a>>,
@@ -35,6 +37,12 @@ impl<'a> Stack<'a> {
     pub fn new(parent: Option<&'a Stack<'a>>, scope: Scope<'a>) -> Self {
         Stack { parent, scope }
     }
+}
+
+#[derive(Debug)]
+pub enum Scope<'a> {
+    Directory(&'a DirectorySchema<'a>),
+    Binding(&'a Identifier<'a>, String),
 }
 
 impl<'a> Scope<'a> {
@@ -139,6 +147,7 @@ where
         )?;
 
         for (name, have_match) in mapped.iter_mut() {
+            log::debug!("Considering {} (have match: {:?})", name, have_match);
             match binding {
                 // Static binding produces a match for that name only
                 &Binding::Static(bound_name) if bound_name == name => match have_match {
@@ -177,10 +186,23 @@ where
 
             match binding {
                 Binding::Static(s) => {
+                    log::debug!(
+                        "Directory entry {} -> {} for {}",
+                        s,
+                        child_node,
+                        &child_path
+                    );
                     traverse_node(child_node, Some(&stack), filesystem, &child_path)
                         .with_context(|| format!("Node {}", child_path.absolute()))?
                 }
                 Binding::Dynamic(var) => {
+                    log::debug!(
+                        "Directory entry '{}' (= '{}') -> {} for '{}'",
+                        var,
+                        name,
+                        child_node,
+                        &child_path
+                    );
                     let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
                     traverse_node(child_node, Some(&stack), filesystem, &child_path).with_context(
                         || {

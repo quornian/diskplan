@@ -17,6 +17,7 @@ pub(super) fn evaluate(
     stack: Option<&Stack>,
     path: &SplitPath,
 ) -> Result<String> {
+    log::trace!("Evaluating: {}", expr);
     let mut value = String::new();
     for token in expr.tokens() {
         match token {
@@ -52,6 +53,7 @@ pub(super) fn evaluate(
 
 fn lookup<'a>(var: &Identifier<'a>, stack: Option<&'a Stack>) -> Option<Value<'a>> {
     if let Some(Stack { parent, scope }) = stack {
+    log::trace!("Looking up: {}", var);
         match scope {
             &Scope::Directory(directory) => directory.get_var(var).map(Value::Expression),
             &Scope::Binding(bind, ref value) => {
