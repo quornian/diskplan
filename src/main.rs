@@ -39,6 +39,7 @@ fn main() -> Result<()> {
         traverse(&schema_root, &mut fs, target)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
+        fs.create_directory_all(target, Default::default())?;
         traverse(&schema_root, &mut fs, target)?;
         print_tree("/", &fs, 0)?;
     }
