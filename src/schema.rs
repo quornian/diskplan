@@ -38,9 +38,9 @@
 //! ")?;
 //!
 //! assert!(matches!(schema_root.schema, Schema::Directory(_)));
-//! assert_eq!(schema_root.attributes.owner, Expression::from_text("person").ok());
-//! assert_eq!(schema_root.attributes.group, Expression::from_text("user").ok());
-//! assert_eq!(schema_root.attributes.mode, Some(0o777));
+//! assert_eq!(schema_root.attributes.owner.unwrap(), "person");
+//! assert_eq!(schema_root.attributes.group.unwrap(), "user");
+//! assert_eq!(schema_root.attributes.mode.unwrap(), 0o777);
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!

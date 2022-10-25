@@ -30,6 +30,17 @@ impl Display for Expression<'_> {
     }
 }
 
+impl PartialEq<&str> for Expression<'_> {
+    fn eq(&self, other: &&str) -> bool {
+        // Expression is equal to a string only if it is a single text token
+        // with the same inner value
+        match &self.0[..] {
+            [Token::Text(text)] => *text == *other,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Token<'t> {
     Text(&'t str),
