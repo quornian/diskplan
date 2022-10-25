@@ -3,7 +3,7 @@ use regex::Regex;
 
 use crate::{filesystem::SplitPath, schema::Expression};
 
-use super::{eval::evaluate, Stack};
+use super::{eval::evaluate, stack};
 
 #[derive(Debug)]
 pub(super) enum CompiledPattern {
@@ -16,7 +16,7 @@ impl CompiledPattern {
     pub fn compile(
         match_pattern: Option<&Expression>,
         avoid_pattern: Option<&Expression>,
-        stack: Option<&Stack>,
+        stack: Option<&stack::Stack>,
         path: &SplitPath,
     ) -> Result<CompiledPattern> {
         let match_pattern = match match_pattern {

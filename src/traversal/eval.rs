@@ -2,19 +2,19 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     filesystem::{name, parent, SplitPath},
-    schema::{Expression, Identifier, Special, Token},
+    schema::{Expression, Special, Token},
 };
 
-use super::{Scope, Stack};
+use super::stack;
 
-enum Value<'a> {
+pub enum Value<'a> {
     Expression(&'a Expression<'a>),
     String(&'a str),
 }
 
 pub(super) fn evaluate(
     expr: &Expression<'_>,
-    stack: Option<&Stack>,
+    stack: Option<&stack::Stack>,
     path: &SplitPath,
 ) -> Result<String> {
     log::trace!("Evaluating: {}", expr);
@@ -23,7 +23,7 @@ pub(super) fn evaluate(
         match token {
             Token::Text(text) => value.push_str(text),
             Token::Variable(var) => {
-                let sub = lookup(var, stack).ok_or_else(|| {
+                let sub = stack::lookup(var, stack).ok_or_else(|| {
                     anyhow!("Undefined variable '{}' in expression '{}'", var, expr)
                 })?;
                 match sub {
@@ -49,23 +49,4 @@ pub(super) fn evaluate(
         }
     }
     Ok(value)
-}
-
-fn lookup<'a>(var: &Identifier<'a>, stack: Option<&'a Stack>) -> Option<Value<'a>> {
-    if let Some(Stack { parent, scope }) = stack {
-    log::trace!("Looking up: {}", var);
-        match scope {
-            &Scope::Directory(directory) => directory.get_var(var).map(Value::Expression),
-            &Scope::Binding(bind, ref value) => {
-                if bind == var {
-                    Some(Value::String(value))
-                } else {
-                    None
-                }
-            }
-        }
-        .or_else(|| lookup(var, *parent))
-    } else {
-        None
-    }
 }

@@ -5,15 +5,20 @@ use std::{borrow::Cow, collections::HashMap, fmt::Write};
 
 use anyhow::{anyhow, Context as _, Result};
 
-mod eval;
-mod pattern;
-mod reuse;
-
 use crate::{
     filesystem::{self, Filesystem, SetAttrs, SplitPath},
-    schema::{Binding, DirectorySchema, Identifier, Schema, SchemaNode},
-    traversal::{eval::evaluate, pattern::CompiledPattern},
+    schema::{Binding, DirectorySchema, Schema, SchemaNode},
 };
+
+use self::{
+    eval::evaluate,
+    pattern::CompiledPattern,
+    stack::{Scope, Stack},
+};
+
+mod eval;
+mod pattern;
+mod stack;
 
 /// Apply a Schema tree to the given filesystem starting at the target path
 ///
@@ -25,35 +30,6 @@ where
     traverse_node(root, None, filesystem, &SplitPath::new(target)?)
 }
 
-/// Keeps track of variables and provides access to definitions from parent
-/// nodes
-#[derive(Debug)]
-pub struct Stack<'a> {
-    parent: Option<&'a Stack<'a>>,
-    scope: Scope<'a>,
-}
-
-impl<'a> Stack<'a> {
-    pub fn new(parent: Option<&'a Stack<'a>>, scope: Scope<'a>) -> Self {
-        Stack { parent, scope }
-    }
-}
-
-#[derive(Debug)]
-pub enum Scope<'a> {
-    Directory(&'a DirectorySchema<'a>),
-    Binding(&'a Identifier<'a>, String),
-}
-
-impl<'a> Scope<'a> {
-    pub fn as_binding(&self) -> Option<(&Identifier<'a>, &String)> {
-        match self {
-            Scope::Binding(id, value) => Some((id, value)),
-            _ => None,
-        }
-    }
-}
-
 fn traverse_node<'a, FS>(
     node: &'a SchemaNode<'_>,
     stack: Option<&'a Stack<'a>>,
@@ -63,7 +39,7 @@ fn traverse_node<'a, FS>(
 where
     FS: Filesystem,
 {
-    for node in reuse::expand_uses(node, stack)? {
+    for node in expand_uses(node, stack)? {
         // Create this entry, following symlinks
         create(node, stack, filesystem, &path)
             .with_context(|| format!("Create {}", path.absolute()))?;
@@ -80,6 +56,30 @@ where
         }
     }
     Ok(())
+}
+
+fn expand_uses<'a>(
+    node: &'a SchemaNode,
+    stack: Option<&'a Stack>,
+) -> Result<Vec<&'a SchemaNode<'a>>> {
+    // Expand `node` to itself and any `:use`s within
+    let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
+    use_schemas.push(node);
+    // Include node itself and its :defs in the scope
+    let stack: Option<Stack> = match node {
+        SchemaNode {
+            schema: Schema::Directory(d),
+            ..
+        } => Some(Stack::new(stack, Scope::Directory(d))),
+        _ => None,
+    };
+    for used in &node.uses {
+        use_schemas.push(
+            stack::find_definition(used, stack.as_ref())
+                .ok_or_else(|| anyhow!("No definition (:def) found for {}", used))?,
+        );
+    }
+    Ok(use_schemas)
 }
 
 fn summarize_schema_node(node: &SchemaNode) -> String {
@@ -210,7 +210,7 @@ where
                                 "Node {} (with {})",
                                 child_path.absolute(),
                                 &stack
-                                    .scope
+                                    .scope()
                                     .as_binding()
                                     .map(|(var, value)| format!("${} = {}", var, value))
                                     .unwrap_or_else(|| "<no binding>".into()),
