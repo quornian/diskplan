@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{anyhow, Context as _, Result};
 use clap::{arg, command, Parser};
 
@@ -7,24 +9,87 @@ use diskplan::{
     traversal::traverse,
 };
 
+use crate::config::Config;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// The path of the schema to apply
-    schema: String,
     /// The root directory on which to apply the schema
-    target: String,
+    target: PathBuf,
+
+    /// The profile to apply
+    profile: Option<String>,
+
+    /// The path to the diskplan.toml config file
+    #[arg(short, long, default_value = "diskplan.toml")]
+    config_file: PathBuf,
 
     /// Whether to apply the changes (otherwise they are simulated in memory)
     #[arg(long)]
     apply: bool,
 
+    /// Increase verbosity level
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+mod config {
+    use std::{collections::HashMap, fmt::Debug, path::Path};
+
+    use anyhow::{anyhow, Context as _, Result};
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    pub struct Config {
+        profiles: HashMap<String, Profile>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct Profile {
+        root: String,
+        schema: String,
+    }
+
+    impl Config {
+        pub fn load<P>(path: P) -> Result<Config>
+        where
+            P: AsRef<Path> + Debug,
+        {
+            let config_context = || format!("Reading config file {:?}", path);
+            let config = std::fs::read_to_string(&path).with_context(config_context)?;
+            toml::from_str(&config).with_context(config_context)
+        }
+
+        pub fn get_profile(&self, name: &str) -> Option<&Profile> {
+            self.profiles.get(name)
+        }
+
+        pub fn profile_for_path(&self, path: &Path) -> Result<&Profile> {
+            let matched: Vec<_> = self
+                .profiles
+                .iter()
+                .filter(|(_, profile)| path.starts_with(&profile.root))
+                .collect();
+            match &matched[..] {
+                [(_, profile)] => Ok(&profile),
+                [] => Err(anyhow!("No profile has root matching path {:?}", path)),
+                _ => Err(anyhow!("Multiple profile roots match path {:?}", path)),
+            }
+        }
+    }
+
+    impl Profile {
+        pub fn schema(&self) -> &str {
+            &self.schema
+        }
+
+        pub fn root(&self) -> &str {
+            &self.root
+        }
+    }
+}
+
+fn init_logger(args: &Args) {
     let env = env_logger::Env::new().filter("DISKPLAN_LOG");
     env_logger::Builder::from_env(env)
         .filter_level(match args.verbose {
@@ -35,10 +100,24 @@ fn main() -> Result<()> {
         })
         .format_timestamp(None)
         .init();
+}
 
-    let schema = &args.schema;
-    let target = &args.target;
+fn main() -> Result<()> {
+    let args = Args::parse();
+    init_logger(&args);
+    let config = Config::load(&args.config_file)?;
+
+    let profile = match &args.profile {
+        Some(profile) => config
+            .get_profile(profile)
+            .ok_or_else(|| anyhow!("No profile has name {:?}", profile)),
+        None => config.profile_for_path(&args.target),
+    }
+    .with_context(|| anyhow!("Reading config {:?}", args.config_file))?;
+
+    let target = &args.target.to_string_lossy();
     let apply = args.apply;
+    let schema = profile.schema();
 
     log::debug!("Schema: {}", schema);
     log::debug!("Target: {}", target);
