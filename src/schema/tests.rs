@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use super::{parse_schema, Attributes, Binding, DirectorySchema, Identifier, Schema, SchemaNode};
+use super::{
+    parse_schema, Attributes, Binding, DirectorySchema, Identifier, SchemaNode, SchemaType,
+};
 
 #[test]
 fn test_def_is_recorded() {
@@ -39,7 +41,7 @@ fn test_def_and_use_compare_equal() {
 
 #[test]
 fn test_directory_binding_sort_order() {
-    let empty_subdirectory = Schema::Directory(DirectorySchema::default());
+    let empty_subdirectory = SchemaType::Directory(DirectorySchema::default());
     let empty_directory_node = SchemaNode {
         schema: empty_subdirectory,
         match_pattern: None,

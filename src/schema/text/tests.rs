@@ -14,7 +14,7 @@ use crate::schema::{
         blank_line, comment, def_header, end_of_lines, expression, indentation, operator,
         parse_schema, Operator,
     },
-    Binding, DirectorySchema, FileSchema, Schema, SchemaNode,
+    Binding, DirectorySchema, FileSchema, SchemaNode, SchemaType,
 };
 
 #[test]
@@ -65,19 +65,19 @@ fn test_extraneous_whitespace() {
     let text = "dir/";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: SchemaType::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
     // Trailing whitespace
     let text = "dir/\n\n";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: SchemaType::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
     // Preceding whitespace
     let text = "\n\ndir/";
     let schema = parse_schema(text).unwrap();
     assert!(
-        matches!(schema, SchemaNode { schema: Schema::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
+        matches!(schema, SchemaNode { schema: SchemaType::Directory(DirectorySchema { entries, .. }), ..} if entries.len() == 1)
     );
 }
 
@@ -554,7 +554,7 @@ fn test_symlink_directory() {
     .unwrap();
     let (bind, node) = match &schema {
         SchemaNode {
-            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            schema: SchemaType::Directory(DirectorySchema { entries, .. }),
             ..
         } => &entries[0],
         _ => panic!(),
@@ -563,7 +563,7 @@ fn test_symlink_directory() {
     let (symlink, entries) = match node {
         SchemaNode {
             symlink,
-            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            schema: SchemaType::Directory(DirectorySchema { entries, .. }),
             ..
         } => (symlink, entries),
         _ => panic!(),
@@ -586,7 +586,7 @@ fn test_symlink_file() {
     .unwrap();
     let (bind, node) = match &schema {
         SchemaNode {
-            schema: Schema::Directory(DirectorySchema { entries, .. }),
+            schema: SchemaType::Directory(DirectorySchema { entries, .. }),
             ..
         } => &entries[0],
         _ => panic!(),
@@ -595,7 +595,7 @@ fn test_symlink_file() {
     let symlink = match node {
         SchemaNode {
             symlink,
-            schema: Schema::File(FileSchema { .. }),
+            schema: SchemaType::File(FileSchema { .. }),
             ..
         } => symlink,
         _ => panic!(),

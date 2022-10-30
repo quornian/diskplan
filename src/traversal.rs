@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context as _, Result};
 
 use crate::{
     filesystem::{self, Filesystem, SetAttrs, SplitPath},
-    schema::{Binding, DirectorySchema, Schema, SchemaNode},
+    schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
 use self::{
@@ -45,7 +45,7 @@ where
             .with_context(|| format!("Create {}", path.absolute()))?;
 
         // Traverse over children
-        if let Schema::Directory(ref directory_schema) = node.schema {
+        if let SchemaType::Directory(ref directory_schema) = node.schema {
             traverse_directory(directory_schema, stack, filesystem, path).with_context(|| {
                 format!(
                     "Directory {}\n{}",
@@ -68,7 +68,7 @@ fn expand_uses<'a>(
     // Include node itself and its :defs in the scope
     let stack: Option<Stack> = match node {
         SchemaNode {
-            schema: Schema::Directory(d),
+            schema: SchemaType::Directory(d),
             ..
         } => Some(Stack::new(stack, Scope::Directory(d))),
         _ => None,
@@ -85,10 +85,10 @@ fn expand_uses<'a>(
 fn summarize_schema_node(node: &SchemaNode) -> String {
     let mut f = String::new();
     match &node.schema {
-        Schema::Directory(ds) => {
+        SchemaType::Directory(ds) => {
             write!(f, "Schema: directory ({} entries)", ds.entries().len()).unwrap()
         }
-        Schema::File(fs) => write!(f, "Schema: file (source: {})", fs.source()).unwrap(),
+        SchemaType::File(fs) => write!(f, "Schema: file (source: {})", fs.source()).unwrap(),
     }
     if let Some(pattern) = &node.match_pattern {
         write!(f, "(matching: {})", pattern).unwrap()
@@ -284,7 +284,7 @@ where
     }
 
     match &node.schema {
-        Schema::Directory(_) => {
+        SchemaType::Directory(_) => {
             if !filesystem.is_directory(to_create) {
                 filesystem
                     .create_directory(to_create, attrs)
@@ -296,7 +296,7 @@ where
                 }
             }
         }
-        Schema::File(file) => {
+        SchemaType::File(file) => {
             if !filesystem.is_file(to_create) {
                 let source = evaluate(file.source(), stack, path)?;
                 let content = filesystem.read_file(&source)?;

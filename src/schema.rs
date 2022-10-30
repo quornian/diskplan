@@ -37,7 +37,7 @@
 //!     :mode 777
 //! ")?;
 //!
-//! assert!(matches!(schema_root.schema, Schema::Directory(_)));
+//! assert!(matches!(schema_root.schema, SchemaType::Directory(_)));
 //! assert_eq!(schema_root.attributes.owner.unwrap(), "person");
 //! assert_eq!(schema_root.attributes.group.unwrap(), "user");
 //! assert_eq!(schema_root.attributes.mode.unwrap(), 0o777);
@@ -91,7 +91,7 @@
 //! # ;
 //! // ...
 //! # match parse_schema(text)?.schema {
-//! #     Schema::Directory(directory) => {
+//! #     SchemaType::Directory(directory) => {
 //! #
 //! let (binding, node) = directory.entries().first().unwrap();
 //! assert!(matches!(
@@ -102,7 +102,7 @@
 //!     node.symlink.as_ref().unwrap().to_string(),
 //!     String::from("/another/disk/example_target/")
 //! );
-//! assert!(matches!(node.schema, Schema::Directory(_)));
+//! assert!(matches!(node.schema, SchemaType::Directory(_)));
 //! #
 //! #     }
 //! #     _ => panic!("Expected directory schema")
@@ -167,7 +167,7 @@ pub struct SchemaNode<'t> {
     pub attributes: Attributes<'t>,
 
     /// Properties specific to the underlying (file or directory) type
-    pub schema: Schema<'t>,
+    pub schema: SchemaType<'t>,
 }
 
 impl<'t> std::fmt::Display for SchemaNode<'t> {
@@ -185,22 +185,22 @@ impl<'t> std::fmt::Display for SchemaNode<'t> {
 
 /// File/directory specific aspects of a node in the tree
 #[derive(Debug, Clone, PartialEq)]
-pub enum Schema<'t> {
+pub enum SchemaType<'t> {
     Directory(DirectorySchema<'t>),
     File(FileSchema<'t>),
 }
 
-impl<'t> Schema<'t> {
+impl<'t> SchemaType<'t> {
     pub fn as_directory(&self) -> Option<&DirectorySchema<'t>> {
         match self {
-            Schema::Directory(directory) => Some(directory),
+            SchemaType::Directory(directory) => Some(directory),
             _ => None,
         }
     }
 
     pub fn as_file(&self) -> Option<&FileSchema<'t>> {
         match self {
-            Schema::File(file) => Some(file),
+            SchemaType::File(file) => Some(file),
             _ => None,
         }
     }
