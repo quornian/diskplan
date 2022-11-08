@@ -4,9 +4,10 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Write};
 
 use anyhow::{anyhow, Context as _, Result};
+use camino::Utf8Path;
 
 use crate::{
-    filesystem::{self, Filesystem, SetAttrs, SplitPath},
+    filesystem::{Filesystem, SetAttrs, SplitPath},
     schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
@@ -22,11 +23,15 @@ mod stack;
 
 /// Apply a Schema tree to the given filesystem starting at the target path
 ///
-pub fn traverse<'a, FS>(root: &'a SchemaNode<'_>, filesystem: &mut FS, target: &str) -> Result<()>
+pub fn traverse<'a, FS>(
+    root: &'a SchemaNode<'_>,
+    filesystem: &mut FS,
+    target: impl AsRef<Utf8Path>,
+) -> Result<()>
 where
     FS: Filesystem,
 {
-    log::debug!("Traversing root {} for {}", root, target);
+    log::debug!("Traversing root {} for {}", root, target.as_ref());
     traverse_node(root, None, filesystem, &SplitPath::new(target)?)
 }
 
@@ -258,7 +263,7 @@ where
             .with_context(|| format!("Following symlink {} -> {}", path.absolute(), link_str))?;
 
         // TODO: Come up with a better way to specify parent structure when following symlinks
-        if let Some(parent) = filesystem::parent(&link_target.absolute()) {
+        if let Some(parent) = link_target.absolute().parent() {
             if !filesystem.exists(parent) {
                 eprintln!(
                     "WARNING: Parent directory for symlink target does not exist, creating: {} \

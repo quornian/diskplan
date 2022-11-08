@@ -1,6 +1,5 @@
-use std::path::PathBuf;
-
 use anyhow::{anyhow, Context as _, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::{arg, command, Parser};
 
 use diskplan::{
@@ -15,14 +14,14 @@ use crate::config::Config;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The root directory on which to apply the schema
-    target: PathBuf,
+    target: Utf8PathBuf,
 
     /// The profile to apply
     profile: Option<String>,
 
     /// The path to the diskplan.toml config file
     #[arg(short, long, default_value = "diskplan.toml")]
-    config_file: PathBuf,
+    config_file: Utf8PathBuf,
 
     /// Whether to apply the changes (otherwise they are simulated in memory)
     #[arg(long)]
@@ -34,9 +33,10 @@ struct Args {
 }
 
 mod config {
-    use std::{collections::HashMap, fmt::Debug, path::Path};
+    use std::{collections::HashMap, fmt::Debug};
 
     use anyhow::{anyhow, Context as _, Result};
+    use camino::Utf8Path;
     use serde::Deserialize;
 
     #[derive(Deserialize)]
@@ -53,10 +53,10 @@ mod config {
     impl Config {
         pub fn load<P>(path: P) -> Result<Config>
         where
-            P: AsRef<Path> + Debug,
+            P: AsRef<Utf8Path> + Debug,
         {
             let config_context = || format!("Reading config file {:?}", path);
-            let config = std::fs::read_to_string(&path).with_context(config_context)?;
+            let config = std::fs::read_to_string(path.as_ref()).with_context(config_context)?;
             toml::from_str(&config).with_context(config_context)
         }
 
@@ -64,7 +64,7 @@ mod config {
             self.profiles.get(name)
         }
 
-        pub fn profile_for_path(&self, path: &Path) -> Result<&Profile> {
+        pub fn profile_for_path(&self, path: &Utf8Path) -> Result<&Profile> {
             let matched: Vec<_> = self
                 .profiles
                 .iter()
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
     }
     .with_context(|| anyhow!("Reading config {:?}", args.config_file))?;
 
-    let target = &args.target.to_string_lossy();
+    let target = &args.target;
     let apply = args.apply;
     let schema = profile.schema();
 
@@ -142,10 +142,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_tree<FS>(path: &str, fs: &FS, depth: usize) -> Result<()>
+fn print_tree<FS>(path: impl AsRef<Utf8Path>, fs: &FS, depth: usize) -> Result<()>
 where
     FS: filesystem::Filesystem,
 {
+    let path = path.as_ref();
     let (_, name) = filesystem::split(path).ok_or_else(|| anyhow!("No parent: {}", path))?;
     let dir = fs.is_directory(path);
     let attrs = fs.attributes(path)?;
@@ -166,7 +167,7 @@ where
 
         if fs.is_directory(path) {
             for child in fs.list_directory(path)? {
-                let child = filesystem::join(path, &child);
+                let child = path.join(&child);
                 print_tree(&child, fs, depth + 1)?;
             }
         }

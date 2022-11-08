@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 
 use crate::{
-    filesystem::{name, parent, SplitPath},
+    filesystem::SplitPath,
     schema::{Expression, Special, Token},
 };
 
@@ -32,19 +32,26 @@ pub(super) fn evaluate(
                 }
             }
             Token::Special(special) => value.push_str(match special {
-                Special::PathAbsolute => path.absolute(),
-                Special::PathRelative => path.relative(),
-                Special::PathNameOnly => name(path.relative()),
-                Special::ParentAbsolute => parent(path.absolute())
-                    .ok_or_else(|| anyhow!("Path has no parent: {}", path.absolute()))?,
+                Special::PathAbsolute => path.absolute().as_str(),
+                Special::PathRelative => path.relative().as_str(),
+                Special::PathNameOnly => path.relative().file_name().unwrap(),
+                Special::ParentAbsolute => path
+                    .absolute()
+                    .parent()
+                    .ok_or_else(|| anyhow!("Path has no parent: {}", path.absolute()))?
+                    .as_str(),
 
-                Special::ParentRelative => parent(path.relative())
+                Special::ParentRelative => path
+                    .relative()
+                    .parent()
+                    .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?
+                    .as_str(),
+                Special::ParentNameOnly => path
+                    .relative()
+                    .parent()
+                    .and_then(|p| p.file_name())
                     .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?,
-                Special::ParentNameOnly => name(
-                    parent(path.relative())
-                        .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?,
-                ),
-                Special::RootPath => path.root(),
+                Special::RootPath => path.root().as_str(),
             }),
         }
     }

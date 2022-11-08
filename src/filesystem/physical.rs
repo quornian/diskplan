@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fs, io::Write, os::unix::fs::PermissionsExt};
 
 use anyhow::{anyhow, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use nix::{
     sys::stat,
     unistd::{Gid, Uid},
@@ -17,46 +18,56 @@ pub struct DiskFilesystem {
 }
 
 impl Filesystem for DiskFilesystem {
-    fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
-        fs::create_dir(path)?;
+    fn create_directory(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()> {
+        fs::create_dir(path.as_ref())?;
         self.apply_attrs(path, attrs, DEFAULT_DIRECTORY_MODE)
     }
 
-    fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
-        let mut file = fs::File::create(path)?;
+    fn create_file(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        attrs: SetAttrs,
+        content: String,
+    ) -> Result<()> {
+        let mut file = fs::File::create(path.as_ref())?;
         file.write_all(content.as_bytes())?;
         self.apply_attrs(path, attrs, DEFAULT_FILE_MODE)
     }
 
-    fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
-        Ok(std::os::unix::fs::symlink(target, path)?)
+    fn create_symlink(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        target: impl AsRef<Utf8Path>,
+    ) -> Result<()> {
+        // TODO: Not allocate
+        Ok(std::os::unix::fs::symlink(target.as_ref(), path.as_ref())?)
     }
 
-    fn exists(&self, path: &str) -> bool {
-        fs::metadata(path).is_ok()
+    fn exists(&self, path: impl AsRef<Utf8Path>) -> bool {
+        fs::metadata(path.as_ref()).is_ok()
     }
 
-    fn is_directory(&self, path: &str) -> bool {
-        fs::metadata(path)
+    fn is_directory(&self, path: impl AsRef<Utf8Path>) -> bool {
+        fs::metadata(path.as_ref())
             .map(|m| m.file_type().is_dir())
             .unwrap_or(false)
     }
 
-    fn is_file(&self, path: &str) -> bool {
-        fs::metadata(path)
+    fn is_file(&self, path: impl AsRef<Utf8Path>) -> bool {
+        fs::metadata(path.as_ref())
             .map(|m| m.file_type().is_file())
             .unwrap_or(false)
     }
 
-    fn is_link(&self, path: &str) -> bool {
-        fs::symlink_metadata(path)
+    fn is_link(&self, path: impl AsRef<Utf8Path>) -> bool {
+        fs::symlink_metadata(path.as_ref())
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false)
     }
 
-    fn list_directory(&self, path: &str) -> Result<Vec<String>> {
+    fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>> {
         let mut listing = Vec::new();
-        for entry in fs::read_dir(path)? {
+        for entry in fs::read_dir(path.as_ref())? {
             let entry = entry?;
             let file_name = entry.file_name();
             listing.push(file_name.to_string_lossy().into_owned());
@@ -64,16 +75,16 @@ impl Filesystem for DiskFilesystem {
         Ok(listing)
     }
 
-    fn read_file(&self, path: &str) -> Result<String> {
-        fs::read_to_string(path).map_err(Into::into)
+    fn read_file(&self, path: impl AsRef<Utf8Path>) -> Result<String> {
+        fs::read_to_string(path.as_ref()).map_err(Into::into)
     }
 
-    fn read_link(&self, path: &str) -> Result<String> {
-        Ok(fs::read_link(path)?.to_string_lossy().into_owned())
+    fn read_link(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
+        Ok(fs::read_link(path.as_ref())?.try_into()?)
     }
 
-    fn attributes(&self, path: &str) -> Result<Attrs> {
-        let stat = stat::stat(path)?;
+    fn attributes(&self, path: impl AsRef<Utf8Path>) -> Result<Attrs> {
+        let stat = stat::stat(path.as_ref().as_std_path())?;
         let owner = Cow::Owned(
             self.users
                 .get_user_by_uid(stat.st_uid)
@@ -94,7 +105,8 @@ impl Filesystem for DiskFilesystem {
         Ok(Attrs { owner, group, mode })
     }
 
-    fn set_attributes(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
+    fn set_attributes(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()> {
+        let path = path.as_ref();
         self.apply_attrs(
             path,
             attrs,
@@ -114,7 +126,12 @@ impl DiskFilesystem {
         }
     }
 
-    fn apply_attrs(&self, path: &str, attrs: SetAttrs, default_mode: Mode) -> Result<()> {
+    fn apply_attrs(
+        &self,
+        path: impl AsRef<Utf8Path>,
+        attrs: SetAttrs,
+        default_mode: Mode,
+    ) -> Result<()> {
         let uid = match attrs.owner {
             Some(owner) => Some(Uid::from_raw(
                 self.users
@@ -135,8 +152,8 @@ impl DiskFilesystem {
         };
         let mode = PermissionsExt::from_mode(attrs.mode.unwrap_or(default_mode).into());
 
-        nix::unistd::chown(path, uid, gid)?;
-        fs::set_permissions(path, mode)?;
+        nix::unistd::chown(path.as_ref().as_std_path(), uid, gid)?;
+        fs::set_permissions(path.as_ref(), mode)?;
         Ok(())
     }
 }

@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use users::{Groups, Users, UsersCache};
 
 use super::{
@@ -12,7 +13,7 @@ use super::{
 
 /// An in-memory representation of a file system
 pub struct MemoryFilesystem {
-    map: HashMap<String, Node>,
+    map: HashMap<Utf8PathBuf, Node>,
     users: UsersCache,
 }
 
@@ -27,7 +28,7 @@ enum Node {
         children: Vec<String>,
     },
     Symlink {
-        target: String,
+        target: Utf8PathBuf,
     },
 }
 
@@ -60,13 +61,14 @@ impl MemoryFilesystem {
         MemoryFilesystem { map, users }
     }
 
-    pub fn to_path_set<'a>(&'a self) -> HashSet<String> {
+    pub fn to_path_set<'a>(&'a self) -> HashSet<Utf8PathBuf> {
         self.map.keys().cloned().collect()
     }
 }
 
 impl Filesystem for MemoryFilesystem {
-    fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
+    fn create_directory(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()> {
+        let path = path.as_ref();
         let (parent, name) = self
             .canonical_split(path)
             .with_context(|| format!("Splitting {}", path))?;
@@ -76,27 +78,44 @@ impl Filesystem for MemoryFilesystem {
             .with_context(|| format!("Creating directory: {}", path))
     }
 
-    fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()> {
+    fn create_file(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        attrs: SetAttrs,
+        content: String,
+    ) -> Result<()> {
+        let path = path.as_ref();
         let (parent, name) = self.canonical_split(path)?;
         let attrs = self.internal_attrs(attrs, DEFAULT_FILE_MODE)?;
         self.insert_node(&parent, name, Node::File { attrs, content })
             .with_context(|| format!("Creating file: {}", path))
     }
 
-    fn create_symlink(&mut self, path: &str, target: String) -> Result<()> {
+    fn create_symlink(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        target: impl AsRef<Utf8Path>,
+    ) -> Result<()> {
+        let path = path.as_ref();
         let (parent, name) = self.canonical_split(path)?;
-        self.insert_node(&parent, name, Node::Symlink { target })
-            .with_context(|| format!("Creating symlink: {}", path))
+        self.insert_node(
+            &parent,
+            name,
+            Node::Symlink {
+                target: target.as_ref().to_owned(),
+            },
+        )
+        .with_context(|| format!("Creating symlink: {}", path))
     }
 
-    fn exists(&self, path: &str) -> bool {
+    fn exists(&self, path: impl AsRef<Utf8Path>) -> bool {
         match self.canonicalize(path) {
             Ok(path) => self.map.contains_key(&path),
             _ => false,
         }
     }
 
-    fn is_directory(&self, path: &str) -> bool {
+    fn is_directory(&self, path: impl AsRef<Utf8Path>) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
             Ok(path) => match self.map.get(&path) {
@@ -106,7 +125,7 @@ impl Filesystem for MemoryFilesystem {
         }
     }
 
-    fn is_file(&self, path: &str) -> bool {
+    fn is_file(&self, path: impl AsRef<Utf8Path>) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
             Ok(path) => match self.map.get(&path) {
@@ -116,14 +135,14 @@ impl Filesystem for MemoryFilesystem {
         }
     }
 
-    fn is_link(&self, path: &str) -> bool {
-        match self.map.get(path) {
+    fn is_link(&self, path: impl AsRef<Utf8Path>) -> bool {
+        match self.map.get(path.as_ref()) {
             Some(Node::Symlink { .. }) => true,
             _ => false,
         }
     }
 
-    fn list_directory(&self, path: &str) -> Result<Vec<String>> {
+    fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>> {
         let path = self.canonicalize(path)?;
         match self.node_from_path(&path)? {
             Node::Directory { children, .. } => Ok(children.clone()),
@@ -133,7 +152,7 @@ impl Filesystem for MemoryFilesystem {
         .with_context(|| format!("Listing directory: {}", path))
     }
 
-    fn read_file(&self, path: &str) -> Result<String> {
+    fn read_file(&self, path: impl AsRef<Utf8Path>) -> Result<String> {
         let path = self.canonicalize(path)?;
         match self.node_from_path(&path)? {
             Node::File { content, .. } => Ok(content.clone()),
@@ -142,14 +161,14 @@ impl Filesystem for MemoryFilesystem {
         }
     }
 
-    fn read_link(&self, path: &str) -> Result<String> {
+    fn read_link(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
         match self.node_from_path(&path)? {
             Node::Symlink { target } => Ok(target.clone()),
-            _ => Err(anyhow!("Not a symlink: {}", path)),
+            _ => Err(anyhow!("Not a symlink: {}", path.as_ref())),
         }
     }
 
-    fn attributes(&self, path: &str) -> Result<Attrs> {
+    fn attributes(&self, path: impl AsRef<Utf8Path>) -> Result<Attrs> {
         let path = self.canonicalize(path)?;
         let node = self.node_from_path(&path)?;
         let attrs = match node {
@@ -176,7 +195,7 @@ impl Filesystem for MemoryFilesystem {
         Ok(Attrs { owner, group, mode })
     }
 
-    fn set_attributes(&mut self, path: &str, set_attrs: SetAttrs) -> Result<()> {
+    fn set_attributes(&mut self, path: impl AsRef<Utf8Path>, set_attrs: SetAttrs) -> Result<()> {
         let use_default = set_attrs.mode.is_none();
         let mut fs_attrs = self.internal_attrs(set_attrs, 0.into())?;
         let path = self.canonicalize(path)?;
@@ -203,7 +222,7 @@ impl Filesystem for MemoryFilesystem {
 }
 
 impl MemoryFilesystem {
-    fn canonical_split<'s>(&self, path: &'s str) -> Result<(String, &'s str)> {
+    fn canonical_split<'s>(&self, path: &'s Utf8Path) -> Result<(Utf8PathBuf, &'s str)> {
         match super::split(path) {
             None => Err(anyhow!("Cannot create {}", path)),
             Some((parent, name)) => Ok((self.canonicalize(parent)?, name)),
@@ -239,9 +258,10 @@ impl MemoryFilesystem {
     /// * `name` - The name to give to the new entry
     /// * `node` - The entry itself
     ///
-    fn insert_node(&mut self, parent: &str, name: &str, node: Node) -> Result<()> {
+    fn insert_node(&mut self, parent: impl AsRef<Utf8Path>, name: &str, node: Node) -> Result<()> {
         // Check it doesn't already exist
-        let path = super::join(parent, name);
+        let parent = parent.as_ref();
+        let path = parent.join(name);
         if self.map.contains_key(&path) {
             return Err(anyhow!("File exists: {:?}", path));
         }
@@ -261,7 +281,8 @@ impl MemoryFilesystem {
         Ok(())
     }
 
-    fn node_from_path(&self, path: &str) -> Result<&Node> {
+    fn node_from_path(&self, path: impl AsRef<Utf8Path>) -> Result<&Node> {
+        let path = path.as_ref();
         self.map
             .get(path)
             .ok_or_else(|| anyhow!("No such file or directory: {}", path))
@@ -290,7 +311,7 @@ mod tests {
             .unwrap();
         fs.create_directory("/secondary", SetAttrs::default())
             .unwrap();
-        fs.create_symlink("/primary/link", "/secondary/target".into())
+        fs.create_symlink("/primary/link", "/secondary/target")
             .unwrap();
         fs.create_directory("/secondary/target", SetAttrs::default())
             .unwrap();

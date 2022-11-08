@@ -34,6 +34,8 @@ macro_rules! assert_effect_of {
     } => {{
         use std::collections::HashSet;
 
+        use camino::{Utf8Path, Utf8PathBuf};
+
         #[allow(unused_imports)]
         use crate::{
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
@@ -45,9 +47,9 @@ macro_rules! assert_effect_of {
         let node = parse_schema($text)?;
         // onto:
         let mut fs = MemoryFilesystem::new();
-        let root = $root;
+        let root = Utf8Path::new($root);
         // containing:
-        let mut expected_paths: HashSet<String> = HashSet::new();
+        let mut expected_paths: HashSet<Utf8PathBuf> = HashSet::new();
         $($(
             #[allow(unused_mut)]
             let mut attrs = SetAttrs::default();
@@ -56,8 +58,8 @@ macro_rules! assert_effect_of {
                 $(attrs.group = Some($in_d_group);)?
                 $(attrs.mode = Some($in_d_mode.into());)?
             )?
-            fs.create_directory($in_d_path, attrs)?;
-            expected_paths.insert($in_d_path.to_owned());
+            fs.create_directory(Utf8Path::new($in_d_path), attrs)?;
+            expected_paths.insert(Utf8PathBuf::from($in_d_path));
         )+)?
         $($(
             #[allow(unused_mut)]
@@ -67,42 +69,42 @@ macro_rules! assert_effect_of {
                 $(attrs.group = Some($in_f_group);)?
                 $(attrs.mode = Some($in_f_mode.into());)?
             )?
-            fs.create_file($in_f_path, attrs, $in_content.to_owned())?;
-            expected_paths.insert($in_f_path.to_owned());
+            fs.create_file(Utf8Path::new($in_f_path), attrs, String::from($in_content))?;
+            expected_paths.insert(Utf8PathBuf::from($in_f_path));
         )+)?
         $($(
-            fs.create_symlink($in_l_path, $in_l_target.to_owned())?;
-            expected_paths.insert($in_l_path.to_owned());
+            fs.create_symlink(Utf8Path::new($in_l_path), Utf8Path::new($in_l_target))?;
+            expected_paths.insert(Utf8PathBuf::from($in_l_path));
         )+)?
         // yields:
         traverse(&node, &mut fs, root)?;
-        expected_paths.insert("/".to_owned());
-        expected_paths.insert(root.to_owned());
+        expected_paths.insert(Utf8PathBuf::from("/"));
+        expected_paths.insert(Utf8PathBuf::from(root));
         $($(
-            assert!(fs.is_directory($out_d_path), "Expected directory was not produced: {}", $out_d_path);
+            assert!(fs.is_directory(Utf8Path::new($out_d_path)), "Expected directory was not produced: {}", $out_d_path);
             $(
-                let attrs = fs.attributes($out_d_path)?;
+                let attrs = fs.attributes(Utf8Path::new($out_d_path))?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_d_owner);)?
                 $(assert_eq!(attrs.group.as_ref(), $out_d_group);)?
                 $(assert_eq!(attrs.mode, $out_d_mode.into());)?
             )?
-            expected_paths.insert($out_d_path.to_owned());
+            expected_paths.insert(Utf8PathBuf::from($out_d_path));
         )+)?
         $($(
             assert!(fs.is_file($out_f_path), "Expected file at: {}", $out_f_path);
             $(
-                let attrs = fs.attributes($out_f_path)?;
+                let attrs = fs.attributes(Utf8Path::new($out_f_path))?;
                 $(assert_eq!(attrs.owner.as_ref(), $out_f_owner);)?
                 $(assert_eq!(attrs.group.as_ref(), $out_f_group);)?
                 $(assert_eq!(attrs.mode, $out_f_mode.into());)?
             )?
-            assert_eq!(&fs.read_file($out_f_path)?, $content);
-            expected_paths.insert($out_f_path.to_owned());
+            assert_eq!(&fs.read_file(Utf8Path::new($out_f_path))?, $content);
+            expected_paths.insert(Utf8PathBuf::from($out_f_path));
         )+)?
         $($(
-            assert!(fs.is_link($link), "Expected symlink at: {}", $link);
-            assert_eq!(&fs.read_link($link)?, $target, "Expected symlink: {} -> {}", $link, $target);
-            expected_paths.insert($link.to_owned());
+            assert!(fs.is_link(Utf8Path::new($link)), "Expected symlink at: {}", $link);
+            assert_eq!(&fs.read_link(Utf8Path::new($link))?, $target, "Expected symlink: {} -> {}", $link, $target);
+            expected_paths.insert(Utf8PathBuf::from($link));
         )+)?
         let actual_paths = fs.to_path_set();
         let unaccounted: Vec<_> = actual_paths.difference(&expected_paths).collect();

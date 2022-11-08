@@ -3,6 +3,7 @@
 use std::{borrow::Cow, fmt::Display};
 
 use anyhow::{anyhow, Result};
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 
 mod attributes;
 mod memory;
@@ -25,9 +26,10 @@ impl SetAttrs<'_> {
 
 /// Operations of a file system
 pub trait Filesystem {
-    fn create_directory(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
+    fn create_directory(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()>;
 
-    fn create_directory_all(&mut self, path: &str, attrs: SetAttrs) -> Result<()> {
+    fn create_directory_all(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()> {
+        let path = path.as_ref();
         if let Some((parent, _)) = split(path) {
             if parent != "/" {
                 self.create_directory_all(parent, attrs.clone())?;
@@ -39,100 +41,106 @@ pub trait Filesystem {
         Ok(())
     }
 
-    fn create_file(&mut self, path: &str, attrs: SetAttrs, content: String) -> Result<()>;
+    fn create_file(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        attrs: SetAttrs,
+        content: String,
+    ) -> Result<()>;
 
-    fn create_symlink(&mut self, path: &str, target: String) -> Result<()>;
+    fn create_symlink(
+        &mut self,
+        path: impl AsRef<Utf8Path>,
+        target: impl AsRef<Utf8Path>,
+    ) -> Result<()>;
 
-    fn exists(&self, path: &str) -> bool;
+    fn exists(&self, path: impl AsRef<Utf8Path>) -> bool;
 
-    fn is_directory(&self, path: &str) -> bool;
+    fn is_directory(&self, path: impl AsRef<Utf8Path>) -> bool;
 
-    fn is_file(&self, path: &str) -> bool;
+    fn is_file(&self, path: impl AsRef<Utf8Path>) -> bool;
 
-    fn is_link(&self, path: &str) -> bool;
+    fn is_link(&self, path: impl AsRef<Utf8Path>) -> bool;
 
-    fn list_directory(&self, path: &str) -> Result<Vec<String>>;
+    fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>>;
 
-    fn read_file(&self, path: &str) -> Result<String>;
+    fn read_file(&self, path: impl AsRef<Utf8Path>) -> Result<String>;
 
-    fn read_link(&self, path: &str) -> Result<String>;
+    fn read_link(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf>;
 
-    fn attributes(&self, path: &str) -> Result<Attrs>;
+    fn attributes(&self, path: impl AsRef<Utf8Path>) -> Result<Attrs>;
 
-    fn set_attributes(&mut self, path: &str, attrs: SetAttrs) -> Result<()>;
+    fn set_attributes(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()>;
 
-    fn canonicalize(&self, path: &str) -> Result<String> {
-        let path = normalize(path);
-        let mut canon = String::with_capacity(path.len());
-        if !path.starts_with('/') {
+    fn canonicalize<'a>(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
+        let path = path.as_ref();
+        if !path.is_absolute() {
             // TODO: Keep a current_directory to provide relative path support
             return Err(anyhow!("Only absolute paths supported"));
         }
-        for part in path[1..].split('/') {
-            canon.push('/');
-            canon.push_str(part);
-            if self.is_link(&canon) {
-                canon = self.canonicalize(&self.read_link(&canon)?)?;
+        let path = normalize(path);
+        let mut canon = Utf8PathBuf::with_capacity(path.as_str().len());
+        for part in path.components() {
+            if part == Utf8Component::ParentDir {
+                let pop = canon.pop();
+                assert!(pop);
+                continue;
+            }
+            canon.push(part);
+            if self.is_link(Utf8Path::new(&canon)) {
+                let link = self.read_link(&canon)?;
+                if link.is_absolute() {
+                    canon.clear();
+                } else {
+                    canon.pop();
+                }
+                canon.push(link);
+                canon = self.canonicalize(canon)?;
             }
         }
         Ok(canon)
     }
 }
 
-pub fn name(path: &str) -> &str {
-    path.rfind('/')
-        .map_or_else(|| path, |index| &path[index + 1..])
-}
-
-pub fn parent(path: &str) -> Option<&str> {
-    path.rfind('/').map(|index| &path[..index])
-}
-
-pub fn join(path: &str, child: &str) -> String {
-    format!(
-        "{}/{}",
-        path.trim_end_matches('/'),
-        child.trim_start_matches('/')
-    )
-}
-
-pub fn split(path: &str) -> Option<(&str, &str)> {
+pub fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
     // TODO: Consider join(parent, "/absolute/child")
-    path.rsplit_once('/').map(|(parent, child)| {
+    path.as_str().rsplit_once('/').map(|(parent, child)| {
         if parent.is_empty() {
-            ("/", child)
+            ("/".into(), child)
         } else {
-            (parent, child)
+            (parent.into(), child)
         }
     })
 }
 
-pub fn is_normalized(path: &str) -> bool {
+pub fn is_normalized(path: impl AsRef<Utf8Path>) -> bool {
+    let path = path.as_ref().as_str();
     !((path.ends_with('/') && path != "/") || path.contains("//") || path.contains("/./"))
 }
 
-pub fn normalize(path: &str) -> Cow<'_, str> {
+pub fn normalize(path: &Utf8Path) -> Cow<'_, Utf8Path> {
     let mut path = Cow::Borrowed(if path == "/" {
         path
     } else {
-        path.trim_end_matches('/')
+        path.as_str().trim_end_matches('/').into()
     });
-    while path.contains("//") {
-        path = Cow::Owned(path.replace("//", "/"));
+    while path.as_str().contains("//") {
+        path = Cow::Owned(Utf8PathBuf::from(path.to_string().replace("//", "/")));
     }
-    while path.contains("/./") {
-        path = Cow::Owned(path.replace("/./", "/"));
+    while path.as_str().contains("/./") {
+        path = Cow::Owned(Utf8PathBuf::from(path.to_string().replace("/./", "/")));
     }
     path
 }
 
 pub struct SplitPath {
     root_len: usize,
-    full: String,
+    full: Utf8PathBuf,
 }
 
 impl SplitPath {
-    pub fn new(root: &str) -> Result<Self> {
+    pub fn new(root: impl AsRef<Utf8Path>) -> Result<Self> {
+        let root = root.as_ref();
         if !is_normalized(root) {
             return Err(anyhow!("Root must be a normalized path: {}", root));
         }
@@ -140,28 +148,30 @@ impl SplitPath {
             return Err(anyhow!("Root must be an absolute path"));
         }
         Ok(SplitPath {
-            root_len: root.len(),
+            root_len: root.as_str().len(),
             full: root.to_owned(),
         })
     }
 
-    pub fn root(&self) -> &str {
-        &self.full[..self.root_len]
+    pub fn root(&self) -> &Utf8Path {
+        self.full.as_str()[..self.root_len].into()
     }
 
-    pub fn absolute(&self) -> &str {
+    pub fn absolute(&self) -> &Utf8Path {
         &self.full
     }
 
-    pub fn relative(&self) -> &str {
-        self.full[self.root_len..].trim_start_matches('/')
+    pub fn relative(&self) -> &Utf8Path {
+        self.full.as_str()[self.root_len..]
+            .trim_start_matches('/')
+            .into()
     }
 
-    pub fn join(&self, path: &str) -> Self {
-        let path = normalize(path);
+    pub fn join(&self, path: impl AsRef<Utf8Path>) -> Self {
+        let path = normalize(path.as_ref());
         SplitPath {
             root_len: self.root_len,
-            full: join(&self.full, &path),
+            full: self.full.join(&path),
         }
     }
 }
@@ -174,11 +184,48 @@ impl Display for SplitPath {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+
     use super::*;
 
     #[test]
     fn check_relative() {
         let path = SplitPath::new("/example/path").unwrap();
-        assert!(!path.relative().starts_with('/'));
+        assert!(!path.relative().is_absolute());
+    }
+
+    #[test]
+    fn canonicalize() -> Result<()> {
+        let path = Utf8Path::new("/");
+        let mut fs = MemoryFilesystem::new();
+        assert_eq!(fs.canonicalize(path).unwrap(), "/");
+
+        fs.create_directory("/dir", Default::default())?;
+        fs.create_symlink("/dir/sym", "../dir2/deeper")?;
+
+        //   /
+        //     dir/
+        //       sym -> ../dir2/deeper    (Doesn't exist so path is kept)
+
+        assert_eq!(fs.canonicalize("/dir/./sym//final")?, "/dir2/deeper/final");
+
+        fs.create_directory("/dir2", Default::default())?;
+        fs.create_directory("/dir2/deeper", Default::default())?;
+        fs.create_symlink("/dir2/deeper/final", "/end")?;
+
+        //   /
+        //     dir/
+        //       sym -> ../dir2/deeper    (Exists, so path is replaced)
+        //     dir2/
+        //       deeper/
+        //         final -> /end
+
+        assert_eq!(fs.canonicalize("/dir/./sym//final")?, "/end");
+
+        assert_eq!(fs.canonicalize("/dir/sym")?, "/dir2/deeper");
+        assert_eq!(fs.canonicalize("/dir/sym/.")?, "/dir2/deeper");
+        assert_eq!(fs.canonicalize("/dir/sym/..")?, "/dir2");
+
+        Ok(())
     }
 }
