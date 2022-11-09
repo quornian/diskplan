@@ -1,19 +1,23 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use anyhow::{anyhow, Context as _, Result};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Config {
     profiles: HashMap<String, Profile>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Profile {
-    root: String,
-    schema: String,
+    root: Root,
+    schema: Utf8PathBuf,
 }
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(try_from = "Utf8PathBuf")]
+pub struct Root(Utf8PathBuf);
 
 impl Config {
     pub fn load<P>(path: P) -> Result<Config>
@@ -33,7 +37,7 @@ impl Config {
         let matched: Vec<_> = self
             .profiles
             .iter()
-            .filter(|(_, profile)| path.starts_with(&profile.root))
+            .filter(|(_, profile)| path.starts_with(&profile.root.0))
             .collect();
         match &matched[..] {
             [(_, profile)] => Ok(&profile),
@@ -44,11 +48,60 @@ impl Config {
 }
 
 impl Profile {
-    pub fn schema(&self) -> &str {
+    pub fn schema(&self) -> &Utf8Path {
         &self.schema
     }
 
-    pub fn root(&self) -> &str {
+    pub fn root(&self) -> &Root {
         &self.root
+    }
+}
+
+impl Root {
+    pub fn path(&self) -> &Utf8Path {
+        &self.0
+    }
+}
+
+impl TryFrom<Utf8PathBuf> for Root {
+    type Error = String;
+
+    fn try_from(value: Utf8PathBuf) -> Result<Self, Self::Error> {
+        if value.is_absolute() {
+            Ok(Root(value))
+        } else {
+            Err(format!("Invalid root; path must be absolute: {}", value))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use toml::from_str;
+
+    use super::Config;
+
+    #[test]
+    fn root_absolute() {
+        let config: Result<Config, _> =
+            from_str("[profiles.one]\nschema = \"\"\nroot = \"/absolute/path\"\n");
+        assert!(config
+            .unwrap()
+            .get_profile("one")
+            .unwrap()
+            .root()
+            .path()
+            .is_absolute())
+    }
+
+    #[test]
+    fn root_relative_disallowed() {
+        let config: Result<Config, _> =
+            from_str("[profiles.one]\nschema = \"\"\nroot = \"relative/path\"\n");
+        assert!(config.is_err());
+        assert!(config
+            .unwrap_err()
+            .to_string()
+            .contains("path must be absolute"));
     }
 }
