@@ -1,17 +1,25 @@
+//! Configuration for the system
+//!
 use std::{collections::HashMap, fmt::Debug};
 
 use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
+/// Application configuration
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Config {
+    /// A map of unique profile names to their individual configurations
     profiles: HashMap<String, Profile>,
 }
 
+/// Configuration for a single profile
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Profile {
+    /// The absolute root directory on which to apply changes
     root: Root,
+    /// The path to a schema definition file that describes how files and directories under the
+    /// root should be structured
     schema: Utf8PathBuf,
 }
 
@@ -20,6 +28,7 @@ pub struct Profile {
 pub struct Root(Utf8PathBuf);
 
 impl Config {
+    /// Load a configuration from the specified file
     pub fn load<P>(path: P) -> Result<Config>
     where
         P: AsRef<Utf8Path> + Debug,
@@ -29,10 +38,12 @@ impl Config {
         toml::from_str(&config).with_context(config_context)
     }
 
+    /// Return the [`Profile`] with the given name if one exists
     pub fn get_profile(&self, name: &str) -> Option<&Profile> {
         self.profiles.get(name)
     }
 
+    /// Return the [`Profile`] whose root contains the given path, if one exists
     pub fn profile_for_path(&self, path: &Utf8Path) -> Result<&Profile> {
         let matched: Vec<_> = self
             .profiles
@@ -48,16 +59,20 @@ impl Config {
 }
 
 impl Profile {
+    /// The path to a schema definition file that describes how files and directories under the
+    /// root should be structured
     pub fn schema(&self) -> &Utf8Path {
         &self.schema
     }
 
+    /// The absolute root directory on which to apply changes
     pub fn root(&self) -> &Root {
         &self.root
     }
 }
 
 impl Root {
+    /// The absolute path of this root
     pub fn path(&self) -> &Utf8Path {
         &self.0
     }
