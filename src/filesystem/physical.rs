@@ -13,6 +13,7 @@ use super::{
 };
 
 /// Access to a real file system
+#[derive(Default)]
 pub struct DiskFilesystem {
     users: UsersCache,
 }

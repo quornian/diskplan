@@ -34,7 +34,7 @@ macro_rules! assert_effect_of {
     } => {{
         use std::collections::HashSet;
 
-        use camino::{Utf8Path, Utf8PathBuf};
+        use camino::Utf8Path;
 
         #[allow(unused_imports)]
         use crate::{
@@ -49,7 +49,7 @@ macro_rules! assert_effect_of {
         let mut fs = MemoryFilesystem::new();
         let root = Utf8Path::new($root);
         // containing:
-        let mut expected_paths: HashSet<Utf8PathBuf> = HashSet::new();
+        let mut expected_paths: HashSet<&Utf8Path> = HashSet::new();
         $($(
             #[allow(unused_mut)]
             let mut attrs = SetAttrs::default();
@@ -59,7 +59,7 @@ macro_rules! assert_effect_of {
                 $(attrs.mode = Some($in_d_mode.into());)?
             )?
             fs.create_directory(Utf8Path::new($in_d_path), attrs)?;
-            expected_paths.insert(Utf8PathBuf::from($in_d_path));
+            expected_paths.insert(Utf8Path::new($in_d_path));
         )+)?
         $($(
             #[allow(unused_mut)]
@@ -70,7 +70,7 @@ macro_rules! assert_effect_of {
                 $(attrs.mode = Some($in_f_mode.into());)?
             )?
             fs.create_file(Utf8Path::new($in_f_path), attrs, String::from($in_content))?;
-            expected_paths.insert(Utf8PathBuf::from($in_f_path));
+            expected_paths.insert(Utf8Path::new($in_f_path));
         )+)?
         $($(
             fs.create_symlink(Utf8Path::new($in_l_path), Utf8Path::new($in_l_target))?;
@@ -78,8 +78,8 @@ macro_rules! assert_effect_of {
         )+)?
         // yields:
         traverse(&node, &mut fs, root)?;
-        expected_paths.insert(Utf8PathBuf::from("/"));
-        expected_paths.insert(Utf8PathBuf::from(root));
+        expected_paths.insert(Utf8Path::new("/"));
+        expected_paths.insert(Utf8Path::new(root));
         $($(
             assert!(fs.is_directory(Utf8Path::new($out_d_path)), "Expected directory was not produced: {}", $out_d_path);
             $(
@@ -88,7 +88,7 @@ macro_rules! assert_effect_of {
                 $(assert_eq!(attrs.group.as_ref(), $out_d_group);)?
                 $(assert_eq!(attrs.mode, $out_d_mode.into());)?
             )?
-            expected_paths.insert(Utf8PathBuf::from($out_d_path));
+            expected_paths.insert(Utf8Path::new($out_d_path));
         )+)?
         $($(
             assert!(fs.is_file($out_f_path), "Expected file at: {}", $out_f_path);
@@ -99,12 +99,12 @@ macro_rules! assert_effect_of {
                 $(assert_eq!(attrs.mode, $out_f_mode.into());)?
             )?
             assert_eq!(&fs.read_file(Utf8Path::new($out_f_path))?, $content);
-            expected_paths.insert(Utf8PathBuf::from($out_f_path));
+            expected_paths.insert(Utf8Path::new($out_f_path));
         )+)?
         $($(
             assert!(fs.is_link(Utf8Path::new($link)), "Expected symlink at: {}", $link);
             assert_eq!(&fs.read_link(Utf8Path::new($link))?, $target, "Expected symlink: {} -> {}", $link, $target);
-            expected_paths.insert(Utf8PathBuf::from($link));
+            expected_paths.insert(Utf8Path::new($link));
         )+)?
         let actual_paths = fs.to_path_set();
         let unaccounted: Vec<_> = actual_paths.difference(&expected_paths).collect();

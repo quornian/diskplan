@@ -72,7 +72,7 @@ pub trait Filesystem {
 
     fn set_attributes(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()>;
 
-    fn canonicalize<'a>(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
+    fn canonicalize(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
         let path = path.as_ref();
         if !path.is_absolute() {
             // TODO: Keep a current_directory to provide relative path support

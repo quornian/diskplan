@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use anyhow::{anyhow, Result};
 
@@ -73,11 +73,11 @@ impl<'t> SchemaNodeBuilder<'t> {
                 "Cannot use :let to set variables inside files (add a '/' to make it a directory)"
             )),
             TypeSpecific::Directory { vars, .. } => {
-                if vars.contains_key(&id) {
-                    Err(anyhow!(":let {} occurs twice", id))
-                } else {
-                    vars.insert(id, expr);
+                if let Entry::Vacant(entry) = vars.entry(id) {
+                    entry.insert(expr);
                     Ok(())
+                } else {
+                    Err(anyhow!(":let {} occurs twice", id))
                 }
             }
         }
@@ -89,11 +89,11 @@ impl<'t> SchemaNodeBuilder<'t> {
                 "Cannot :define sub-trees inside files (add a '/' to make it a directory)"
             )),
             TypeSpecific::Directory { defs, .. } => {
-                if defs.contains_key(&id) {
-                    Err(anyhow!(":def {} occurs twice", id))
-                } else {
-                    defs.insert(id, definition);
+                if let Entry::Vacant(entry) = defs.entry(id) {
+                    entry.insert(definition);
                     Ok(())
+                } else {
+                    Err(anyhow!(":def {} occurs twice", id))
                 }
             }
         }

@@ -52,24 +52,26 @@ fn test_directory_binding_sort_order() {
     };
 
     // Variable then static should re-order (so static is first)
-    let mut entries = Vec::new();
-    entries.push((
-        Binding::Dynamic(Identifier::new("var")),
-        empty_directory_node.clone(),
-    ));
-    entries.push((Binding::Static("fixed"), empty_directory_node.clone()));
+    let entries = vec![
+        (
+            Binding::Dynamic(Identifier::new("var")),
+            empty_directory_node.clone(),
+        ),
+        (Binding::Static("fixed"), empty_directory_node.clone()),
+    ];
     let directory = DirectorySchema::new(HashMap::new(), HashMap::new(), entries);
     let entries = directory.entries();
     assert!(matches!(entries[0].0, Binding::Static(_)));
     assert!(matches!(entries[1].0, Binding::Dynamic(_)));
 
     // Static then variable should keep order (static first)
-    let mut entries = Vec::new();
-    entries.push((Binding::Static("fixed"), empty_directory_node.clone()));
-    entries.push((
-        Binding::Dynamic(Identifier::new("var")),
-        empty_directory_node.clone(),
-    ));
+    let entries = vec![
+        (Binding::Static("fixed"), empty_directory_node.clone()),
+        (
+            Binding::Dynamic(Identifier::new("var")),
+            empty_directory_node.clone(),
+        ),
+    ];
     let directory = DirectorySchema::new(HashMap::new(), HashMap::new(), entries);
     let entries = directory.entries();
     assert!(matches!(entries[0].0, Binding::Static(_)));

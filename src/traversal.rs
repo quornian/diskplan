@@ -46,7 +46,7 @@ where
 {
     for node in expand_uses(node, stack)? {
         // Create this entry, following symlinks
-        create(node, stack, filesystem, &path)
+        create(node, stack, filesystem, path)
             .with_context(|| format!("Create {}", path.absolute()))?;
 
         // Traverse over children
@@ -128,8 +128,8 @@ where
     let bound_child_schemas = directory_schema
         .entries()
         .iter()
-        .filter_map(|(binding, _)| match binding {
-            Binding::Static(name) => Some(Cow::Borrowed(*name)),
+        .filter_map(|(binding, _)| match *binding {
+            Binding::Static(name) => Some(Cow::Borrowed(name)),
             Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), path)
                 .ok()
                 .map(Cow::Owned),
@@ -148,15 +148,18 @@ where
             child_node.match_pattern.as_ref(),
             child_node.avoid_pattern.as_ref(),
             Some(&stack),
-            &path,
+            path,
         )?;
 
         for (name, have_match) in mapped.iter_mut() {
             log::debug!("Considering {} (have match: {:?})", name, have_match);
             match binding {
                 // Static binding produces a match for that name only
-                &Binding::Static(bound_name) if bound_name == name => match have_match {
-                    None => Ok(*have_match = Some((binding, child_node))),
+                Binding::Static(bound_name) if bound_name == name => match have_match {
+                    None => {
+                        *have_match = Some((binding, child_node));
+                        Ok(())
+                    }
                     Some((bound, _)) => Err(anyhow!(
                         "'{}' matches multiple static bindings '{}' and '{}'",
                         name,
@@ -165,9 +168,12 @@ where
                     )),
                 },
                 // Dynamic bindings must match their inner schema pattern
-                &Binding::Dynamic(_) if pattern.matches(name) => {
+                Binding::Dynamic(_) if pattern.matches(name) => {
                     match have_match {
-                        None => Ok(*have_match = Some((binding, child_node))),
+                        None => {
+                            *have_match = Some((binding, child_node));
+                            Ok(())
+                        }
                         Some((bound, _)) => match bound {
                             Binding::Static(_) => Ok(()), // Keep previous static binding
                             Binding::Dynamic(_) => Err(anyhow!(
@@ -278,8 +284,9 @@ where
             }
         }
         // Create the symlink pointing to its target before (forming the target itself)
+        // TODO: Consider if symlinks could be allowed to be relative
         filesystem
-            .create_symlink(path.absolute(), link_target.absolute().to_owned())
+            .create_symlink(path.absolute(), link_target.absolute())
             .context("As symlink")?;
         // From here on, use the target path for creation. Further traversal will use the original
         // path, and resolving canonical paths through the symlink

@@ -61,8 +61,14 @@ impl MemoryFilesystem {
         MemoryFilesystem { map, users }
     }
 
-    pub fn to_path_set<'a>(&'a self) -> HashSet<Utf8PathBuf> {
-        self.map.keys().cloned().collect()
+    pub fn to_path_set(&self) -> HashSet<&Utf8Path> {
+        self.map.keys().map(|i| i.as_ref()).collect()
+    }
+}
+
+impl Default for MemoryFilesystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -118,28 +124,19 @@ impl Filesystem for MemoryFilesystem {
     fn is_directory(&self, path: impl AsRef<Utf8Path>) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
-            Ok(path) => match self.map.get(&path) {
-                Some(Node::Directory { .. }) => true,
-                _ => false,
-            },
+            Ok(path) => matches!(self.map.get(&path), Some(Node::Directory { .. })),
         }
     }
 
     fn is_file(&self, path: impl AsRef<Utf8Path>) -> bool {
         match self.canonicalize(path) {
             Err(_) => false,
-            Ok(path) => match self.map.get(&path) {
-                Some(Node::File { .. }) => true,
-                _ => false,
-            },
+            Ok(path) => matches!(self.map.get(&path), Some(Node::File { .. })),
         }
     }
 
     fn is_link(&self, path: impl AsRef<Utf8Path>) -> bool {
-        match self.map.get(path.as_ref()) {
-            Some(Node::Symlink { .. }) => true,
-            _ => false,
-        }
+        matches!(self.map.get(path.as_ref()), Some(Node::Symlink { .. }))
     }
 
     fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>> {
@@ -208,13 +205,15 @@ impl Filesystem for MemoryFilesystem {
                 if use_default {
                     fs_attrs.mode = DEFAULT_DIRECTORY_MODE.into();
                 }
-                Ok(*attrs = fs_attrs)
+                *attrs = fs_attrs;
+                Ok(())
             }
             Node::File { attrs, .. } => {
                 if use_default {
                     fs_attrs.mode = DEFAULT_FILE_MODE.into();
                 }
-                Ok(*attrs = fs_attrs)
+                *attrs = fs_attrs;
+                Ok(())
             }
             Node::Symlink { .. } => Err(anyhow!("Non-canonical path: {}", path)),
         }

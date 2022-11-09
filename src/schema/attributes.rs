@@ -11,13 +11,13 @@ pub struct Attributes<'t> {
 
 impl<'t> Attributes<'t> {
     pub fn is_empty(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Attributes {
                 owner: None,
                 group: None,
                 mode: None,
-            } => true,
-            _ => false,
-        }
+            }
+        )
     }
 }

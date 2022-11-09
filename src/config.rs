@@ -51,7 +51,7 @@ impl Config {
             .filter(|(_, profile)| path.starts_with(&profile.root.0))
             .collect();
         match &matched[..] {
-            [(_, profile)] => Ok(&profile),
+            [(_, profile)] => Ok(profile),
             [] => Err(anyhow!("No profile has root matching path {:?}", path)),
             _ => Err(anyhow!("Multiple profile roots match path {:?}", path)),
         }

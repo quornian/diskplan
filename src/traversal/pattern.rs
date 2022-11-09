@@ -30,13 +30,13 @@ impl CompiledPattern {
         Ok(match (&match_pattern, &avoid_pattern) {
             (None, None) => CompiledPattern::Any,
             (Some(pattern), None) => {
-                Regex::new(&pattern)?; // Ensure it's valid before encasing to avoid injection
+                Regex::new(pattern)?; // Ensure it's valid before encasing to avoid injection
                 CompiledPattern::Regex(Regex::new(&format!("^(?:{})$", pattern))?)
             }
             (_, Some(avoiding)) => {
                 let pattern = match_pattern.as_deref().unwrap_or(".*");
-                Regex::new(&pattern)?;
-                Regex::new(&avoiding)?;
+                Regex::new(pattern)?;
+                Regex::new(avoiding)?;
                 CompiledPattern::RegexWithExclusions(
                     Regex::new(&format!("^(?:{})$", pattern))?,
                     Regex::new(&format!("^(?:{})$", avoiding))?,
@@ -47,9 +47,9 @@ impl CompiledPattern {
 
     pub fn matches(&self, text: &str) -> bool {
         match self {
-            &Self::Any => true,
-            &Self::Regex(ref regex) => regex.is_match(text),
-            &Self::RegexWithExclusions(ref regex, ref excl) => {
+            Self::Any => true,
+            Self::Regex(ref regex) => regex.is_match(text),
+            Self::RegexWithExclusions(ref regex, ref excl) => {
                 regex.is_match(text) && !excl.is_match(text)
             }
         }

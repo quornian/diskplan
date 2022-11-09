@@ -93,7 +93,7 @@ impl Display for Special {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Identifier<'t>(&'t str);
 
 impl<'t> Identifier<'t> {
@@ -118,9 +118,9 @@ impl<'a> From<&'a str> for Identifier<'a> {
     }
 }
 
-impl<'a> From<&Identifier<'a>> for Expression<'a> {
-    fn from(identifier: &Identifier<'a>) -> Self {
-        Expression(vec![Token::Variable(identifier.clone())])
+impl<'a> From<Identifier<'a>> for Expression<'a> {
+    fn from(identifier: Identifier<'a>) -> Self {
+        Expression(vec![Token::Variable(identifier)])
     }
 }
 

@@ -38,7 +38,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
         )))(s)
     };
     // Parse and process entire schema and handle any errors that arise
-    let (_, ops) = all_consuming(preceded(many0(blank_line), any_indent))(&text).map_err(|e| {
+    let (_, ops) = all_consuming(preceded(many0(blank_line), any_indent))(text).map_err(|e| {
         let e = match e {
             nom::Err::Error(e) | nom::Err::Failure(e) => e,
             nom::Err::Incomplete(_) => unreachable!(),
@@ -59,7 +59,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
         }
         error.unwrap()
     })?;
-    let ops = ops.unwrap_or_else(Vec::new);
+    let ops = ops.unwrap_or_default();
     let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
     if schema_node.match_pattern.is_some() {
         return Err(ParseError::new(
@@ -75,7 +75,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
     Ok(schema_node)
 }
 
-fn schema_node<'t, 'p>(
+fn schema_node<'t>(
     whole: &'t str,
     part: &'t str,
     item_type: NodeType,
@@ -134,7 +134,7 @@ fn schema_node<'t, 'p>(
             } => {
                 if let NodeType::File = item_type {
                     return Err(ParseError::new(
-                        format!("Files cannot have child items"),
+                        "Files cannot have child items".to_string(),
                         whole,
                         span,
                         None,
@@ -294,7 +294,7 @@ fn end_of_lines(s: &str) -> Res<&str, &str> {
 
 fn binding(s: &str) -> Res<&str, Binding<'_>> {
     alt((
-        map(preceded(char('$'), identifier), |i| Binding::Dynamic(i)),
+        map(preceded(char('$'), identifier), Binding::Dynamic),
         map(filename, Binding::Static),
     ))(s)
 }

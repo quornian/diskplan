@@ -334,7 +334,7 @@ fn test_multiline_meta_ops() {
         :owner usr-1
         :group grpX
         "
-    .strip_prefix("\n")
+    .strip_prefix('\n')
     .unwrap();
 
     let line = "        :mode 777\n";
