@@ -3,10 +3,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{arg, command, Parser};
 
 use diskplan::{
-    config::Config,
+    config::{Config, SchemaCache},
     filesystem::{self, Filesystem},
     schema::parse_schema,
-    traversal::traverse,
+    traversal::Traversal,
 };
 
 #[derive(Parser, Debug)]
@@ -47,6 +47,7 @@ fn init_logger(args: &Args) {
 fn main() -> Result<()> {
     let args = Args::parse();
     init_logger(&args);
+
     let config = Config::load(&args.config_file)?;
 
     let profile = match &args.profile {
@@ -72,13 +73,14 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("{}", e))
         .with_context(|| format!("Failed to load schema from: {}", schema))?;
 
+    let cache = SchemaCache::new();
     if apply {
         let mut fs = filesystem::DiskFilesystem::new();
-        traverse(&schema_root, &mut fs, target)?;
+        Traversal::new(target, None, &schema_root)?.traverse(&cache, &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
         fs.create_directory_all(target, Default::default())?;
-        traverse(&schema_root, &mut fs, target)?;
+        Traversal::new(target, None, &schema_root)?.traverse(&cache, &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
     Ok(())

@@ -18,6 +18,12 @@ pub(super) fn evaluate(
     path: &SplitPath,
 ) -> Result<String> {
     log::trace!("Evaluating: {}", expr);
+    // log::trace!(
+    //     "{:-<depth$}Evaluating: {}",
+    //     "",
+    //     expr,
+    //     depth = stack.map(|s| s.depth()).unwrap_or_default()
+    // );
     let mut value = String::new();
     for token in expr.tokens() {
         match token {

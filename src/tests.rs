@@ -40,7 +40,8 @@ macro_rules! assert_effect_of {
         use crate::{
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
             schema::parse_schema,
-            traversal::traverse,
+            traversal::Traversal,
+            config::SchemaCache,
         };
 
         // applying:
@@ -77,7 +78,9 @@ macro_rules! assert_effect_of {
             expected_paths.insert(Utf8PathBuf::from($in_l_path));
         )+)?
         // yields:
-        traverse(&node, &mut fs, root)?;
+        let traversal = Traversal::new(root, None, &node)?;
+        let cache = SchemaCache::new();
+        traversal.traverse(&cache, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root));
         $($(
