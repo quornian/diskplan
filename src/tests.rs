@@ -39,9 +39,8 @@ macro_rules! assert_effect_of {
         #[allow(unused_imports)]
         use crate::{
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-            schema::parse_schema,
+            schema::{parse_schema, SchemaCache},
             traversal::Traversal,
-            config::SchemaCache,
         };
 
         // applying:

@@ -142,6 +142,9 @@ use std::{collections::HashMap, fmt::Display};
 mod attributes;
 pub use attributes::Attributes;
 
+mod cache;
+pub use cache::SchemaCache;
+
 mod expression;
 pub use expression::{Expression, Identifier, Special, Token};
 

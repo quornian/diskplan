@@ -6,8 +6,6 @@ use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
-use crate::schema::SchemaNode;
-
 /// Application configuration
 #[derive(Deserialize, Default, Debug, Clone, PartialEq)]
 pub struct Config {
@@ -25,7 +23,7 @@ pub struct Profile {
     schema: Utf8PathBuf,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(try_from = "Utf8PathBuf")]
 pub struct Root(Utf8PathBuf);
 
@@ -89,30 +87,6 @@ impl TryFrom<Utf8PathBuf> for Root {
         } else {
             Err(format!("Invalid root; path must be absolute: {}", value))
         }
-    }
-}
-
-#[derive(Default)]
-pub struct SchemaCache<'a> {
-    texts: elsa::FrozenVec<String>,
-    schemas: elsa::FrozenVec<Box<SchemaNode<'a>>>,
-}
-
-impl<'a> SchemaCache<'a> {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    pub fn load<'s>(&'s self, path: impl AsRef<Utf8Path>) -> Result<&'s SchemaNode<'a>>
-    where
-        's: 'a,
-    {
-        let text = std::fs::read_to_string(path.as_ref())?;
-        let text = self.texts.push_get(text);
-        let schema = crate::schema::parse_schema(text)
-            // ParseError lifetime is tricky, flattern
-            .map_err(|e| anyhow!("{}", e))?;
-        Ok(self.schemas.push_get(Box::new(schema)))
     }
 }
 

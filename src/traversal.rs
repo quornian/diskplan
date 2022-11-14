@@ -4,12 +4,11 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Write};
 
 use anyhow::{anyhow, Context as _, Result};
-use camino::{Utf8Component, Utf8Path};
+use camino::Utf8Path;
 
 use crate::{
-    config::{Config, Profile, Root, SchemaCache},
     filesystem::{Filesystem, SetAttrs, SplitPath},
-    schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
+    schema::{Binding, DirectorySchema, SchemaCache, SchemaNode, SchemaType},
 };
 
 use self::{

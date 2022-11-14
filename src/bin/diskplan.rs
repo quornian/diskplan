@@ -3,9 +3,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{arg, command, Parser};
 
 use diskplan::{
-    config::{Config, SchemaCache},
+    config::Config,
     filesystem::{self, Filesystem},
-    schema::parse_schema,
+    schema::{parse_schema, SchemaCache},
     traversal::Traversal,
 };
 
