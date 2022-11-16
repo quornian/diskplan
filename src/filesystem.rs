@@ -141,11 +141,15 @@ pub struct SplitPath {
 }
 
 impl SplitPath {
-    pub fn new(root: Root, path: Option<&Utf8Path>) -> Result<Self> {
+    pub fn new(root: &Root, path: Option<&Utf8Path>) -> Result<Self> {
         let path = match path {
             Some(path) => {
                 if !path.starts_with(root.path()) {
-                    return Err(anyhow!("Root must be an absolute path"));
+                    return Err(anyhow!(
+                        "Path {} must start with root {}",
+                        path,
+                        root.path()
+                    ));
                 }
                 path
             }
@@ -195,7 +199,7 @@ mod tests {
     #[test]
     fn check_relative() {
         let path = SplitPath::new(
-            Root::try_from("/example").unwrap(),
+            &Root::try_from("/example").unwrap(),
             Some(Utf8Path::new("/example/path")),
         )
         .unwrap();

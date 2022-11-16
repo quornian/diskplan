@@ -21,13 +21,14 @@ mod eval;
 mod pattern;
 mod stack;
 
-pub fn traverse<'t, FS>(
+pub fn traverse<'a, 's, 't, FS>(
     path: impl AsRef<Utf8Path>,
-    rooted_schemas: &'t RootedSchemas<'t>,
+    rooted_schemas: &'s RootedSchemas<'t>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
+    's: 't,
 {
     let path = path.as_ref();
     if !path.is_absolute() {
@@ -36,44 +37,55 @@ where
     let (schema, root, remaining) = rooted_schemas
         .schema_for(path)?
         .ok_or_else(|| anyhow!("No schema for {}", path))?;
-    let path = SplitPath::new(root.to_owned(), Some(path))?;
+    let path = SplitPath::new(root, Some(path))?;
     log::debug!("Traversing root {} for {}", &schema, path);
-    traverse_node(schema, &path, remaining, None, filesystem)
+    traverse_node(schema, &path, remaining, rooted_schemas, None, filesystem)
 }
 
-fn traverse_node<'a, FS>(
+fn traverse_node<'a, 's, 't, FS>(
     schema: &SchemaNode<'_>,
     path: &SplitPath,
     remaining: &Utf8Path,
+    rooted_schemas: &'s RootedSchemas<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
+    's: 't,
 {
     for schema in expand_uses(schema, stack)? {
         // Create this entry, following symlinks
-        create(schema, path, stack, filesystem).with_context(|| format!("Create {}", &path))?;
+        create(schema, path, rooted_schemas, stack, filesystem)
+            .with_context(|| format!("Create {}", &path))?;
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
-            traverse_directory(directory_schema, path, remaining, stack, filesystem).with_context(
-                || format!("Directory {}\n{}", path, summarize_schema_node(schema)),
-            )?;
+            traverse_directory(
+                directory_schema,
+                path,
+                remaining,
+                rooted_schemas,
+                stack,
+                filesystem,
+            )
+            .with_context(|| format!("Directory {}\n{}", path, summarize_schema_node(schema)))?;
         }
     }
     Ok(())
 }
 
-fn traverse_directory<'a, FS>(
+fn traverse_directory<'a, 's, 't, FS>(
     directory_schema: &DirectorySchema<'_>,
     directory_path: &SplitPath,
     remaining_path: &Utf8Path,
+    rooted_schemas: &'s RootedSchemas<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
+    's: 't,
 {
     let stack = Stack::new(stack, Scope::Directory(directory_schema));
 
@@ -175,6 +187,7 @@ where
                     child_schema,
                     &child_path,
                     child_remaining,
+                    rooted_schemas,
                     Some(&stack),
                     filesystem,
                 )
@@ -188,11 +201,12 @@ where
                     child_schema,
                     &child_path
                 );
-                let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
+                let stack = Stack::new(Some(&stack), Scope::Binding(&var, name.into()));
                 traverse_node(
                     child_schema,
                     &child_path,
                     child_remaining,
+                    rooted_schemas,
                     Some(&stack),
                     filesystem,
                 )
@@ -213,14 +227,16 @@ where
     Ok(())
 }
 
-fn create<FS>(
+fn create<'a, 's, 't, FS>(
     schema: &SchemaNode,
     path: &SplitPath,
-    stack: Option<&Stack>,
+    rooted_schemas: &'s RootedSchemas<'t>,
+    stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
+    's: 't,
 {
     let owner = match &schema.attributes.owner {
         Some(expr) => Some(evaluate(expr, stack, path)?),
@@ -237,39 +253,51 @@ where
     };
 
     // References held to data within by `to_create`, but only in the symlink branch
-    // let link_str;
-    // let link_target;
+    let link_str;
+    let link_path;
+    let link_target;
 
     let to_create;
     if let Some(expr) = &schema.symlink {
-        todo!();
-        // link_str = evaluate(expr, stack, &self.current_path)?;
-        // link_target = SplitPath::new(&link_str)
-        //     .with_context(|| format!("Following symlink {} -> {}", self.current_path, link_str))?;
+        link_str = evaluate(expr, stack, path)?;
+        link_path = Utf8Path::new(&link_str);
 
-        // // TODO: Come up with a better way to specify parent structure when following symlinks
-        // if let Some(parent) = link_target.absolute().parent() {
-        //     if !filesystem.exists(parent) {
-        //         eprintln!(
-        //             "WARNING: Parent directory for symlink target does not exist, creating: {} \
-        //             (for {} -> {})",
-        //             parent,
-        //             self.current_path,
-        //             link_target.absolute()
-        //         );
-        //         filesystem
-        //             .create_directory_all(parent, attrs.clone())
-        //             .context("Creating parent directories")?;
-        //     }
-        // }
-        // // Create the symlink pointing to its target before (forming the target itself)
-        // // TODO: Consider if symlinks could be allowed to be relative
-        // filesystem
-        //     .create_symlink(self.current_path.absolute(), link_target.absolute())
-        //     .context("As symlink")?;
-        // // From here on, use the target path for creation. Further traversal will use the original
-        // // path, and resolving canonical paths through the symlink
-        // to_create = link_target.absolute();
+        // TODO: Support relative pathed symlinks
+        if !link_path.is_absolute() {
+            return Err(anyhow!("Relative paths in symlinks are not yet supported"));
+        }
+
+        let rooted = rooted_schemas.schema_for(link_path)?;
+        let (link_schema, link_root, link_remaining) = rooted.ok_or_else(|| {
+            anyhow!(
+                "No schema found for symlink target {} -> {}",
+                path,
+                link_path
+            )
+        })?;
+        link_target = SplitPath::new(link_root, Some(link_path))
+            .with_context(|| format!("Following symlink {} -> {}", path, link_path))?;
+
+        if let Some(parent) = link_target.absolute().parent() {
+            if !filesystem.exists(parent) {
+                traverse_node(
+                    link_schema,
+                    &link_target,
+                    link_remaining,
+                    rooted_schemas,
+                    stack,
+                    filesystem,
+                )?;
+            }
+        }
+        // Create the symlink pointing to its target before (forming the target itself)
+        // TODO: Consider if symlinks could be allowed to be relative
+        filesystem
+            .create_symlink(path.absolute(), link_target.absolute())
+            .context("As symlink")?;
+        // From here on, use the target path for creation. Further traversal will use the original
+        // path, and resolving canonical paths through the symlink
+        to_create = link_target.absolute();
     } else {
         to_create = path.absolute();
     }

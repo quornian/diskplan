@@ -53,14 +53,18 @@ fn test_create_symlink() -> Result<()> {
                     :source /resource/file
             "
         under: "/primary"
+        applying: ""
+        under: "/secondary"
         onto: "/primary"
         with:
             directories:
                 "/resource"
+                "/secondary" //TODO: Can we avoid this?
             files:
                 "/resource/file" ["FILE CONTENT"]
         yields:
             directories:
+                "/primary"
                 "/secondary"
                 "/secondary/subdirlink"
             files:

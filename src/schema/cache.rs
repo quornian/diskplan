@@ -17,7 +17,7 @@ impl<'a> SchemaCache<'a> {
         Default::default()
     }
 
-    pub fn load<'s>(&'s self, path: impl AsRef<Utf8Path>) -> Result<&'s SchemaNode<'a>>
+    pub fn load<'s, 'r>(&'s self, path: impl AsRef<Utf8Path>) -> Result<&'r SchemaNode<'a>>
     where
         's: 'a,
     {

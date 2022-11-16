@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
@@ -92,10 +92,8 @@ impl<'t> RootedSchemas<'t> {
     {
         for (root, schema_path) in self.rooted.iter() {
             if let Ok(remainder) = path.strip_prefix(root.path()) {
-                return self
-                    .cache
-                    .load(schema_path)
-                    .map(|schema| Some((schema, root, remainder)));
+                let schema = self.cache.load(schema_path)?;
+                return Ok(Some((schema, root, remainder)));
             }
         }
         Ok(None)
