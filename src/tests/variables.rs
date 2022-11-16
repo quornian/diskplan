@@ -8,7 +8,9 @@ fn match_binds_for_reuse() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/root"
         onto: "/root"
+        with:
             directories:
                 "/root"
                 "/root/existing"
@@ -28,7 +30,9 @@ fn let_binds_for_reuse() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/root"
         onto: "/root"
+        with:
             directories:
                 "/root"
         yields:
@@ -48,7 +52,9 @@ fn match_still_happens_with_let() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/root"
         onto: "/root"
+        with:
             directories:
                 "/root"
                 "/root/existing"
@@ -71,7 +77,9 @@ fn let_overrides_match() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/root"
         onto: "/root"
+        with:
             directories:
                 "/root"
                 "/root/existing"
@@ -92,7 +100,9 @@ fn let_overrides_let() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/root"
         onto: "/root"
+        with:
             directories:
                 "/root"
         yields:

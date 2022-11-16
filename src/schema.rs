@@ -148,6 +148,9 @@ pub use cache::SchemaCache;
 mod expression;
 pub use expression::{Expression, Identifier, Special, Token};
 
+mod roots;
+pub use roots::{Root, RootedSchemas, SchemaFor};
+
 mod text;
 pub use text::{parse_schema, ParseError};
 
@@ -242,7 +245,7 @@ impl<'t> DirectorySchema<'t> {
     pub fn get_var<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a Expression<'t>> {
         self.vars.get(id)
     }
-    pub fn defs<'s>(&'s self) -> &'s HashMap<Identifier, SchemaNode> {
+    pub fn defs(&self) -> &HashMap<Identifier, SchemaNode> {
         &self.defs
     }
     pub fn get_def<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a SchemaNode<'t>> {
@@ -268,7 +271,7 @@ impl Display for Binding<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileSchema<'t> {
     /// Path to the resource to be copied as file content
     // TODO: Make source enum: Enforce(...), Default(...) latter only creates if missing

@@ -9,6 +9,7 @@ fn test_incorrect_attribute_assertion() {
                 dir/
                     :mode 640
                 "
+            under: "/target"
             onto: "/target"
             yields:
                 directories:
@@ -29,6 +30,7 @@ fn test_attributes() -> Result<()> {
                 :owner daemon
                 :group sys
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -51,6 +53,7 @@ fn test_top_level_attributes() -> Result<()> {
             :group sys
             sub/
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -76,6 +79,7 @@ fn test_attribute_expressions() -> Result<()> {
                 :owner ${x}mon
                 :group ${y}y${y}
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -93,7 +97,9 @@ fn test_changing_attributes() -> Result<()> {
             dir/
                 :mode 750
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/target"
                 "/target/control" [mode = 0o555]

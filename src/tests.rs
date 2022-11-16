@@ -1,9 +1,15 @@
 macro_rules! assert_effect_of {
     {
+        $(
         applying:
             $text:literal
-        onto:
+        under:
             $root:literal
+        )+
+        onto:
+            $path:literal
+        $(
+        with:
             $(directories:
                 $($in_d_path:literal $([
                     $(owner = $in_d_owner:literal)?
@@ -17,6 +23,7 @@ macro_rules! assert_effect_of {
                     $(mode = $in_f_mode:expr)? ])+ )?
             $(symlinks:
                 $($in_l_path:literal -> $in_l_target:literal)+ )?
+        )?
         yields:
             $(directories:
                 $($out_d_path:literal $([
@@ -39,18 +46,32 @@ macro_rules! assert_effect_of {
         #[allow(unused_imports)]
         use crate::{
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-            schema::{parse_schema, SchemaCache},
-            traversal::Traversal,
+            schema::{parse_schema, Root, RootedSchemas, SchemaCache},
+            traversal,
         };
-
-        // applying:
-        let node = parse_schema($text)?;
-        // onto:
         let mut fs = MemoryFilesystem::new();
-        let root = Utf8Path::new($root);
-        // containing:
         let mut expected_paths: HashSet<&Utf8Path> = HashSet::new();
+        let mut rooted_schemas = RootedSchemas::new();
+
+        $(
+        // applying:
+        let schema = parse_schema($text)?;
+        // under:
+        let root = Root::try_from($root)?;
+
+        // Pretend the schema definition file lives at the root so we can load it from that
+        // path (schema is internally cached under it)
+        rooted_schemas.inject_for_testing(root.path(), schema);
+        rooted_schemas.add(root.clone(), root.path());
+        )+
+
+        // onto:
+        let path = Utf8Path::new($path);
+
+        $(
+        // with:
         $($(
+            // directories:
             #[allow(unused_mut)]
             let mut attrs = SetAttrs::default();
             $(
@@ -62,6 +83,7 @@ macro_rules! assert_effect_of {
             expected_paths.insert(Utf8Path::new($in_d_path));
         )+)?
         $($(
+            // files:
             #[allow(unused_mut)]
             let mut attrs = SetAttrs::default();
             $(
@@ -73,16 +95,18 @@ macro_rules! assert_effect_of {
             expected_paths.insert(Utf8Path::new($in_f_path));
         )+)?
         $($(
+            // symlinks:
             fs.create_symlink(Utf8Path::new($in_l_path), Utf8Path::new($in_l_target))?;
             expected_paths.insert(Utf8PathBuf::from($in_l_path));
         )+)?
+        )?
+
         // yields:
-        let traversal = Traversal::new(root, None, &node)?;
-        let cache = SchemaCache::new();
-        traversal.traverse(&cache, &mut fs)?;
+        traversal::traverse(path, &rooted_schemas, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
-        expected_paths.insert(Utf8Path::new(root));
+        expected_paths.insert(Utf8Path::new(root.path()));
         $($(
+            // directories:
             assert!(fs.is_directory(Utf8Path::new($out_d_path)), "Expected directory was not produced: {}", $out_d_path);
             $(
                 let attrs = fs.attributes(Utf8Path::new($out_d_path))?;
@@ -93,6 +117,7 @@ macro_rules! assert_effect_of {
             expected_paths.insert(Utf8Path::new($out_d_path));
         )+)?
         $($(
+            // files:
             assert!(fs.is_file($out_f_path), "Expected file at: {}", $out_f_path);
             $(
                 let attrs = fs.attributes(Utf8Path::new($out_f_path))?;
@@ -104,6 +129,7 @@ macro_rules! assert_effect_of {
             expected_paths.insert(Utf8Path::new($out_f_path));
         )+)?
         $($(
+            // symlinks:
             assert!(fs.is_link(Utf8Path::new($link)), "Expected symlink at: {}", $link);
             assert_eq!(&fs.read_link(Utf8Path::new($link))?, $target, "Expected symlink: {} -> {}", $link, $target);
             expected_paths.insert(Utf8Path::new($link));

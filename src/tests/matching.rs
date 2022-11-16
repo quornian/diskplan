@@ -10,7 +10,9 @@ fn test_binding_static_beats_dynamic() -> Result<()> {
                 :match .*
                 MATCHED_VARIABLE/
             "
+        under: "/"
         onto: "/"
+        with:
             directories:
                 "/fixed"
         yields:
@@ -29,7 +31,9 @@ fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
             fixed/
                 MATCHED_FIXED/
             "
+        under: "/"
         onto: "/"
+        with:
             directories:
                 "/fixed"
         yields:
@@ -46,14 +50,16 @@ fn test_binding_multiple_variable_error() {
     (|| -> Result<()> {
         assert_effect_of! {
             applying: "
-            $variable_a/
-                :match .*
-                MATCHED_VARIABLE_A/
-            $variable_b/
-                :match .*
-                MATCHED_VARIABLE_B/
-            "
+                $variable_a/
+                    :match .*
+                    MATCHED_VARIABLE_A/
+                $variable_b/
+                    :match .*
+                    MATCHED_VARIABLE_B/
+                "
+            under: "/"
             onto: "/"
+            with:
                 directories:
                     "/existing"
             yields:
@@ -72,9 +78,10 @@ fn test_binding_multiple_static_error() {
     (|| -> Result<()> {
         assert_effect_of! {
             applying: "
-            duplicate/
-            duplicate/
-            "
+                duplicate/
+                duplicate/
+                "
+            under: "/"
             onto: "/"
             yields:
         }
@@ -91,6 +98,7 @@ fn test_match_let_variable() -> Result<()> {
                 :match .*
                 variable/
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -111,6 +119,7 @@ fn test_match_let_variable_overridden_by_static() -> Result<()> {
             xxx/
                 static/
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -132,7 +141,9 @@ fn test_match_variable() -> Result<()> {
                 ends
                     :source /src/empty
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/src"
                 "/target"
@@ -158,7 +169,9 @@ fn test_match_variable_inherited() -> Result<()> {
                 sub/
                     $var/
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/target"
                 "/target/VALUE"
@@ -178,7 +191,9 @@ fn test_match_let() -> Result<()> {
             $var/
                 created/
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/target"
                 "/target/yyy"
@@ -198,7 +213,9 @@ fn inherited_variable_can_rebind() -> Result<()> {
                 $var/
                     inner/
             "
+        under: "/"
         onto: "/"
+        with:
             directories:
                 "/a"
                 "/a/x"
@@ -220,7 +237,9 @@ fn inherited_variable_with_match_avoids_rebind() -> Result<()> {
                     :match $var
                     inner/
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/target"
                 "/target/a"
@@ -245,7 +264,9 @@ fn test_match_categories() -> Result<()> {
                 :avoid .*shed
                 ANIMAL/
             "
+        under: "/target"
         onto: "/target"
+        with:
             directories:
                 "/target"
                 "/target/cow"

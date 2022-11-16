@@ -4,7 +4,7 @@ use anyhow::Result;
 #[test]
 fn empty_text_yields_empty_schema() -> Result<()> {
     assert_effect_of! {
-        applying: "" onto: "/target"
+        applying: "" under: "/target" onto: "/target"
         yields: directories: "/target" [mode = DEFAULT_DIRECTORY_MODE]
     }
 }
@@ -58,6 +58,7 @@ fn commented_out_has_no_effect() -> Result<()> {
             dir_b/
                 # :mode 123
             "
+        under: "/target"
         onto: "/target"
         yields:
             directories:

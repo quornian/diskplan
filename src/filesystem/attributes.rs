@@ -3,14 +3,14 @@ use std::{borrow::Cow, fmt::Debug};
 pub const DEFAULT_DIRECTORY_MODE: Mode = Mode(0o755);
 pub const DEFAULT_FILE_MODE: Mode = Mode(0o644);
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SetAttrs<'a> {
     pub owner: Option<&'a str>,
     pub group: Option<&'a str>,
     pub mode: Option<Mode>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attrs<'a> {
     pub owner: Cow<'a, str>,
     pub group: Cow<'a, str>,

@@ -10,6 +10,7 @@ fn test_def_use_simple() -> Result<()> {
             inner/
                 :use some_def
             "
+        under: "/"
         onto: "/"
         yields:
             directories:
@@ -30,6 +31,7 @@ fn test_def_use_at_top_level() -> Result<()> {
             inner/
                 :use has_sub
             "
+        under: "/"
         onto: "/"
         yields:
             directories:
@@ -53,6 +55,7 @@ fn test_def_use_multiple() -> Result<()> {
                 :use def_b
                 sub_c/
             "
+        under: "/"
         onto: "/"
         yields:
             directories:

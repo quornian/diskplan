@@ -6,15 +6,17 @@ use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
+use crate::schema::Root;
+
 /// Application configuration
-#[derive(Deserialize, Default, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     /// A map of unique profile names to their individual configurations
     profiles: HashMap<String, Profile>,
 }
 
 /// Configuration for a single profile
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     /// The absolute root directory on which to apply changes
     root: Root,
@@ -22,10 +24,6 @@ pub struct Profile {
     /// root should be structured
     schema: Utf8PathBuf,
 }
-
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(try_from = "Utf8PathBuf")]
-pub struct Root(Utf8PathBuf);
 
 impl Config {
     /// Load a configuration from the specified file
@@ -48,7 +46,7 @@ impl Config {
         let matched: Vec<_> = self
             .profiles
             .iter()
-            .filter(|(_, profile)| path.starts_with(&profile.root.0))
+            .filter(|(_, profile)| path.starts_with(profile.root.path()))
             .collect();
         match &matched[..] {
             [(_, profile)] => Ok(profile),
@@ -68,25 +66,6 @@ impl Profile {
     /// The absolute root directory on which to apply changes
     pub fn root(&self) -> &Root {
         &self.root
-    }
-}
-
-impl Root {
-    /// The absolute path of this root
-    pub fn path(&self) -> &Utf8Path {
-        &self.0
-    }
-}
-
-impl TryFrom<Utf8PathBuf> for Root {
-    type Error = String;
-
-    fn try_from(value: Utf8PathBuf) -> Result<Self, Self::Error> {
-        if value.is_absolute() {
-            Ok(Root(value))
-        } else {
-            Err(format!("Invalid root; path must be absolute: {}", value))
-        }
     }
 }
 

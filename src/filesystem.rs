@@ -9,6 +9,8 @@ mod attributes;
 mod memory;
 mod physical;
 
+use crate::schema::Root;
+
 pub use self::{
     attributes::{Attrs, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},
     memory::MemoryFilesystem,
@@ -139,17 +141,19 @@ pub struct SplitPath {
 }
 
 impl SplitPath {
-    pub fn new(root: impl AsRef<Utf8Path>) -> Result<Self> {
-        let root = root.as_ref();
-        if !is_normalized(root) {
-            return Err(anyhow!("Root must be a normalized path: {}", root));
-        }
-        if !root.starts_with("/") {
-            return Err(anyhow!("Root must be an absolute path"));
-        }
+    pub fn new(root: Root, path: Option<&Utf8Path>) -> Result<Self> {
+        let path = match path {
+            Some(path) => {
+                if !path.starts_with(root.path()) {
+                    return Err(anyhow!("Root must be an absolute path"));
+                }
+                path
+            }
+            None => root.path(),
+        };
         Ok(SplitPath {
-            root_len: root.as_str().len(),
-            full: root.to_owned(),
+            root_len: root.path().as_str().len(),
+            full: path.to_owned(),
         })
     }
 
@@ -190,8 +194,12 @@ mod tests {
 
     #[test]
     fn check_relative() {
-        let path = SplitPath::new("/example/path").unwrap();
-        assert!(!path.relative().is_absolute());
+        let path = SplitPath::new(
+            Root::try_from("/example").unwrap(),
+            Some(Utf8Path::new("/example/path")),
+        )
+        .unwrap();
+        assert_eq!(path.relative(), "path");
     }
 
     #[test]

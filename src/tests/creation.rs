@@ -7,8 +7,8 @@ fn test_create_directory() -> Result<()> {
             subdir/
                 subsubdir/
             "
-        onto:
-            "/primary"
+        under: "/primary"
+        onto: "/primary"
         yields:
             directories:
                 "/primary"
@@ -27,7 +27,9 @@ fn test_create_file() -> Result<()> {
             subfile
                 :source /resource/file2
             "
+        under: "/primary"
         onto: "/primary"
+        with:
             directories:
                 "/resource"
             files:
@@ -50,7 +52,9 @@ fn test_create_symlink() -> Result<()> {
                 subfile
                     :source /resource/file
             "
+        under: "/primary"
         onto: "/primary"
+        with:
             directories:
                 "/resource"
             files:

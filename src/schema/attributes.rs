@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use super::Expression;
 
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Attributes<'t> {
     pub owner: Option<Expression<'t>>,
     pub group: Option<Expression<'t>>,
