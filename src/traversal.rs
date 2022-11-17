@@ -24,6 +24,7 @@ mod stack;
 pub fn traverse<'a, 's, 't, FS>(
     path: impl AsRef<Utf8Path>,
     rooted_schemas: &'s RootedSchemas<'t>,
+    stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -34,18 +35,40 @@ where
     if !path.is_absolute() {
         return Err(anyhow!("Path must be absolute: {}", path));
     }
-    let (schema, root, remaining) = rooted_schemas
+    let (schema, root, remaining_path) = rooted_schemas
         .schema_for(path)?
         .ok_or_else(|| anyhow!("No schema for {}", path))?;
-    let path = SplitPath::new(root, Some(path))?;
-    log::debug!("Traversing root {} for {}", &schema, path);
-    traverse_node(schema, &path, remaining, rooted_schemas, None, filesystem)
+    let start_path = SplitPath::new(root, None)?;
+    log::debug!(
+        r#"Traversing root directory "{}" ("{}" relative path remains)"#,
+        start_path,
+        remaining_path
+    );
+    traverse_node(
+        schema,
+        &start_path,
+        remaining_path,
+        rooted_schemas,
+        stack,
+        filesystem,
+    )?;
+    // TODO: Figure out how to detect consumption of remaining_path and what still remains after
+    // traversal. Use this to create a better error message about how to extend the schema to cover
+    // these cases. Or failing that, make continued directory creation allowable.
+    if !filesystem.exists(path) {
+        return Err(anyhow!(
+            r#"Schema rooted at "{}" failed to produce target path "{}""#,
+            root.path(),
+            path
+        ));
+    }
+    Ok(())
 }
 
 fn traverse_node<'a, 's, 't, FS>(
     schema: &SchemaNode<'_>,
     path: &SplitPath,
-    remaining: &Utf8Path,
+    remaining_path: &Utf8Path,
     rooted_schemas: &'s RootedSchemas<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
@@ -57,19 +80,25 @@ where
     for schema in expand_uses(schema, stack)? {
         // Create this entry, following symlinks
         create(schema, path, rooted_schemas, stack, filesystem)
-            .with_context(|| format!("Create {}", &path))?;
+            .with_context(|| format!("Failed while trying to create {}", &path))?;
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
             traverse_directory(
                 directory_schema,
                 path,
-                remaining,
+                remaining_path,
                 rooted_schemas,
                 stack,
                 filesystem,
             )
-            .with_context(|| format!("Directory {}\n{}", path, summarize_schema_node(schema)))?;
+            .with_context(|| {
+                format!(
+                    "Failed while trying to apply directory schema to {}: {}",
+                    path,
+                    summarize_schema_node(schema)
+                )
+            })?;
         }
     }
     Ok(())
@@ -126,7 +155,6 @@ where
         )?;
 
         for (name, have_match) in mapped.iter_mut() {
-            log::debug!("Considering {} (have match: {:?})", name, have_match);
             match binding {
                 // Static binding produces a match for that name only
                 Binding::Static(bound_name) if bound_name == name => match have_match {
@@ -135,7 +163,7 @@ where
                         Ok(())
                     }
                     Some((bound, _)) => Err(anyhow!(
-                        "'{}' matches multiple static bindings '{}' and '{}'",
+                        r#""{}" matches multiple static bindings "{}" and "{}""#,
                         name,
                         bound,
                         binding
@@ -151,7 +179,7 @@ where
                         Some((bound, _)) => match bound {
                             Binding::Static(_) => Ok(()), // Keep previous static binding
                             Binding::Dynamic(_) => Err(anyhow!(
-                                "'{}' matches multiple dynamic bindings '{}' and '{}' {:?}",
+                                r#""{}" matches multiple dynamic bindings "{}" and "{}" {:?}"#,
                                 name,
                                 bound,
                                 binding,
@@ -162,6 +190,18 @@ where
                 }
                 _ => Ok(()),
             }?;
+            match have_match {
+                None => log::trace!(r#"Considered name "{}" but no match found"#, name),
+                Some((Binding::Static(_), _)) => {
+                    log::trace!(r#"Considered name "{}" and found exact static match"#, name)
+                }
+                Some((Binding::Dynamic(id), _)) => log::trace!(
+                    r#"Considered name "{}", matched {:?}, binding to variable ${{{}}}"#,
+                    name,
+                    pattern,
+                    id.value()
+                ),
+            }
         }
     }
 
@@ -169,19 +209,20 @@ where
         let Some((binding, child_schema)) = matched else { continue };
         let name = name.as_ref();
         let child_path = directory_path.join(name);
-        let child_remaining = if remaining_path == "" {
-            remaining_path
-        } else {
-            remaining_path.strip_prefix(name)?
-        };
+
+        // If this name is part of the target path, strip it off the front for further traversal.
+        // If it is not, we're no longer completing the target path in this branch
+        let child_remaining = remaining_path
+            .strip_prefix(name)
+            .unwrap_or_else(|_err| Utf8Path::new(""));
 
         match binding {
             Binding::Static(s) => {
                 log::debug!(
-                    "Directory entry {} -> {} for {}",
+                    r#"Traversing static directory entry "{}" at {} ("{}" relative path remains)"#,
                     s,
-                    child_schema,
                     &child_path,
+                    child_remaining,
                 );
                 traverse_node(
                     child_schema,
@@ -191,17 +232,17 @@ where
                     Some(&stack),
                     filesystem,
                 )
-                .with_context(|| format!("Node {}", &child_path))?
+                .with_context(|| format!("Failed while trying to process path {}", &child_path))?
             }
             Binding::Dynamic(var) => {
                 log::debug!(
-                    "Directory entry '{}' (= '{}') -> {} for '{}'",
+                    r#"Traversing variable directory entry ${}="{}" at {} ("{}" relative path remains)"#,
                     var,
                     name,
-                    child_schema,
-                    &child_path
+                    &child_path,
+                    child_remaining,
                 );
-                let stack = Stack::new(Some(&stack), Scope::Binding(&var, name.into()));
+                let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
                 traverse_node(
                     child_schema,
                     &child_path,
@@ -212,7 +253,7 @@ where
                 )
                 .with_context(|| {
                     format!(
-                        "Node {} (with {})",
+                        r#"Failed while trying to process path {} (with {})"#,
                         &child_path,
                         &stack
                             .scope()
@@ -261,12 +302,14 @@ where
     if let Some(expr) = &schema.symlink {
         link_str = evaluate(expr, stack, path)?;
         link_path = Utf8Path::new(&link_str);
+        log::info!("Creating {} -> {}", path, link_path);
 
         // TODO: Support relative pathed symlinks
         if !link_path.is_absolute() {
             return Err(anyhow!("Relative paths in symlinks are not yet supported"));
         }
 
+        // TODO: Maybe we just need to get the root here
         let rooted = rooted_schemas.schema_for(link_path)?;
         let (link_schema, link_root, link_remaining) = rooted.ok_or_else(|| {
             anyhow!(
@@ -278,17 +321,10 @@ where
         link_target = SplitPath::new(link_root, Some(link_path))
             .with_context(|| format!("Following symlink {} -> {}", path, link_path))?;
 
-        if let Some(parent) = link_target.absolute().parent() {
-            if !filesystem.exists(parent) {
-                traverse_node(
-                    link_schema,
-                    &link_target,
-                    link_remaining,
-                    rooted_schemas,
-                    stack,
-                    filesystem,
-                )?;
-            }
+        // TODO: Think about which schema wins? Target root, or local. Or if this is a link to the local one anyway?!
+        if !filesystem.exists(link_target.absolute()) {
+            traverse(link_target.absolute(), rooted_schemas, stack, filesystem)?;
+            assert!(filesystem.exists(link_target.absolute()));
         }
         // Create the symlink pointing to its target before (forming the target itself)
         // TODO: Consider if symlinks could be allowed to be relative
@@ -299,12 +335,14 @@ where
         // path, and resolving canonical paths through the symlink
         to_create = link_target.absolute();
     } else {
+        log::info!("Creating {}", path);
         to_create = path.absolute();
     }
 
     match &schema.schema {
         SchemaType::Directory(_) => {
             if !filesystem.is_directory(to_create) {
+                log::debug!("Make directory: {}", to_create);
                 filesystem
                     .create_directory(to_create, attrs)
                     .context("As directory")?;
@@ -353,18 +391,18 @@ fn expand_uses<'a, 't>(
 }
 
 fn summarize_schema_node(node: &SchemaNode) -> String {
-    let mut f = String::new();
+    let mut buf = String::new();
     match &node.schema {
         SchemaType::Directory(ds) => {
-            write!(f, "Schema: directory ({} entries)", ds.entries().len()).unwrap()
+            write!(buf, "directory schema ({} entries)", ds.entries().len()).unwrap()
         }
-        SchemaType::File(fs) => write!(f, "Schema: file (source: {})", fs.source()).unwrap(),
+        SchemaType::File(fs) => write!(buf, "file schema (source: {})", fs.source()).unwrap(),
     }
     if let Some(pattern) = &node.match_pattern {
-        write!(f, "(matching: {})", pattern).unwrap()
+        write!(buf, "(matching: {})", pattern).unwrap()
     }
     if let Some(pattern) = &node.avoid_pattern {
-        write!(f, "(avoiding: {})", pattern).unwrap()
+        write!(buf, "(avoiding: {})", pattern).unwrap()
     }
-    f
+    buf
 }

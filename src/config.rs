@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
-use crate::schema::Root;
+use crate::schema::{Root, RootedSchemas};
 
 /// Application configuration
 #[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
@@ -53,6 +53,14 @@ impl Config {
             [] => Err(anyhow!("No profile has root matching path {:?}", path)),
             _ => Err(anyhow!("Multiple profile roots match path {:?}", path)),
         }
+    }
+
+    pub fn rooted_schemas(&self) -> RootedSchemas {
+        let mut rooted_schemas = RootedSchemas::new();
+        for (_, profile) in self.profiles.iter() {
+            rooted_schemas.add(profile.root().clone(), profile.schema());
+        }
+        rooted_schemas
     }
 }
 

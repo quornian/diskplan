@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
@@ -83,6 +83,10 @@ impl<'t> RootedSchemas<'t> {
         self.rooted.insert(root, schema_path.as_ref().to_owned());
     }
 
+    pub fn roots(&self) -> impl Iterator<Item = &Root> {
+        self.rooted.keys()
+    }
+
     pub fn schema_for<'s, 'p>(
         &'s self,
         path: &'p Utf8Path,
@@ -92,7 +96,13 @@ impl<'t> RootedSchemas<'t> {
     {
         for (root, schema_path) in self.rooted.iter() {
             if let Ok(remainder) = path.strip_prefix(root.path()) {
-                let schema = self.cache.load(schema_path)?;
+                let schema = self.cache.load(schema_path).with_context(|| {
+                    format!(
+                        "Failed to load schema for configured root {} (for target path {})",
+                        root.path(),
+                        path
+                    )
+                })?;
                 return Ok(Some((schema, root, remainder)));
             }
         }

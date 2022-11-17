@@ -1,32 +1,28 @@
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{arg, command, Parser};
 
 use diskplan::{
     config::Config,
     filesystem::{self, Filesystem},
-    schema::{parse_schema, SchemaCache},
-    traversal::Traversal,
+    traversal,
 };
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// The root directory on which to apply the schema
+    /// The directory to produce. This must be absolute and begin with one of the configured roots
     target: Utf8PathBuf,
-
-    /// The profile to apply
-    profile: Option<String>,
 
     /// The path to the diskplan.toml config file
     #[arg(short, long, default_value = "diskplan.toml")]
     config_file: Utf8PathBuf,
 
-    /// Whether to apply the changes (otherwise they are simulated in memory)
+    /// Whether to apply the changes (otherwise, only simulate and print)
     #[arg(long)]
     apply: bool,
 
-    /// Increase verbosity level
+    /// Increase verbosity level (0: warn; 1: info; 2: debug; 3: trace)
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
@@ -49,38 +45,23 @@ fn main() -> Result<()> {
     init_logger(&args);
 
     let config = Config::load(&args.config_file)?;
-
-    let profile = match &args.profile {
-        Some(profile) => config
-            .get_profile(profile)
-            .ok_or_else(|| anyhow!("No profile has name {:?}", profile)),
-        None => config.profile_for_path(&args.target),
-    }
-    .with_context(|| anyhow!("Reading config {:?}", args.config_file))?;
+    let rooted_schemas = config.rooted_schemas();
 
     let target = &args.target;
     let apply = args.apply;
-    let schema = profile.schema();
 
-    log::debug!("Schema: {}", schema);
     log::debug!("Target: {}", target);
     log::debug!("Apply: {}", apply);
 
-    let content = std::fs::read_to_string(schema)
-        .with_context(|| format!("Failed to load schema from: {}", schema))?;
-
-    let schema_root = parse_schema(&content)
-        .map_err(|e| anyhow!("{}", e))
-        .with_context(|| format!("Failed to load schema from: {}", schema))?;
-
-    let cache = SchemaCache::new();
     if apply {
         let mut fs = filesystem::DiskFilesystem::new();
-        Traversal::new(target, None, &schema_root)?.traverse(&cache, &mut fs)?;
+        traversal::traverse(target, &rooted_schemas, None, &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
-        fs.create_directory_all(target, Default::default())?;
-        Traversal::new(target, None, &schema_root)?.traverse(&cache, &mut fs)?;
+        for root in rooted_schemas.roots() {
+            fs.create_directory_all(root.path(), Default::default())?;
+        }
+        traversal::traverse(target, &rooted_schemas, None, &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
     Ok(())

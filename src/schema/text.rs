@@ -118,7 +118,7 @@ fn schema_node<'t>(
                 let item_node =
                     schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
-                            format!("Problem within \"{}\"", binding),
+                            format!(r#"Problem within "{}""#, binding),
                             whole,
                             span,
                             Some(Box::new(e)),
@@ -147,7 +147,7 @@ fn schema_node<'t>(
                 let properties =
                     schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
                         ParseError::new(
-                            format!("Error within definition \"{}\"", name),
+                            format!(r#"Error within definition "{}""#, name),
                             whole,
                             span,
                             Some(Box::new(e)),

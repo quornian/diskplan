@@ -36,7 +36,6 @@ impl<'a> Scope<'a> {
 }
 
 pub fn lookup<'a>(var: &Identifier<'a>, stack: Option<&'a Stack>) -> Option<Value<'a>> {
-    log::trace!("Seeking value of variable '{}'", var);
     if let Some(Stack { parent, scope, .. }) = stack {
         match scope {
             Scope::Directory(directory) => directory.get_var(var).map(Value::Expression),

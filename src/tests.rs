@@ -102,7 +102,7 @@ macro_rules! assert_effect_of {
         )?
 
         // yields:
-        traversal::traverse(path, &rooted_schemas, &mut fs)?;
+        traversal::traverse(path, &rooted_schemas, None, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root.path()));
         $($(

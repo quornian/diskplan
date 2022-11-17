@@ -44,7 +44,7 @@ fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
 
 #[test]
 #[should_panic(
-    expected = "'existing' matches multiple dynamic bindings '$variable_a' and '$variable_b'"
+    expected = r#""existing" matches multiple dynamic bindings "$variable_a" and "$variable_b""#
 )]
 fn test_binding_multiple_variable_error() {
     (|| -> Result<()> {
@@ -72,7 +72,7 @@ fn test_binding_multiple_variable_error() {
 
 #[test]
 #[should_panic(
-    expected = "'duplicate' matches multiple static bindings 'duplicate' and 'duplicate'"
+    expected = r#""duplicate" matches multiple static bindings "duplicate" and "duplicate""#
 )]
 fn test_binding_multiple_static_error() {
     (|| -> Result<()> {
