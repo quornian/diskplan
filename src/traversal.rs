@@ -132,31 +132,47 @@ where
 {
     let stack = Stack::new(stack, Scope::Directory(directory_schema));
 
-    // Collect names of what's on disk
-    let on_disk_filenames = filesystem
-        .list_directory(directory_path.absolute())
-        .unwrap_or_else(|_| vec![]);
-    let on_disk_filenames = on_disk_filenames
-        .iter()
-        .map(AsRef::as_ref)
-        .map(Cow::Borrowed);
-
-    // Collect names of fixed and variable schema entries (fixed are sorted first)
-    let bound_child_schemas = directory_schema
-        .entries()
-        .iter()
-        .filter_map(|(binding, _)| match *binding {
-            Binding::Static(name) => Some(Cow::Borrowed(name)),
-            Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), directory_path)
-                .ok()
-                .map(Cow::Owned),
+    // Pull the front off the relative remaining_path
+    let next_remaining = remaining_path
+        .as_str()
+        .split_once('/')
+        .map(|(name, _remaining)| Some(name))
+        .unwrap_or(if remaining_path == "" {
+            None
+        } else {
+            Some(remaining_path.as_str())
         });
 
+    // Collect a set of names of
+    //  - what's on disk
+    //  - the next component of our intended path (next_remaining)
+    //  - any static bindings
+    //  - any variable bindings for which we have a value from the stack
+    let mut names: HashMap<Cow<str>, Option<_>> = HashMap::new();
+    let from_key = |key| (key, None);
+    names.extend(
+        filesystem
+            .list_directory(directory_path.absolute())
+            .unwrap_or_default()
+            .into_iter()
+            .map(Cow::Owned)
+            .map(from_key),
+    );
+    names.extend(next_remaining.map(Cow::Borrowed).map(from_key));
+    names.extend(
+        directory_schema
+            .entries()
+            .iter()
+            .filter_map(|(binding, _)| match *binding {
+                Binding::Static(name) => Some(Cow::Borrowed(name)),
+                Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), directory_path)
+                    .ok() // Ignore errors here (assume we don't have the variable in scope)
+                    .map(Cow::Owned),
+            })
+            .map(from_key),
+    );
+
     // Use these to build unique mappings, and error if not unique
-    let mut mapped: HashMap<Cow<str>, Option<(&Binding, &SchemaNode)>> = on_disk_filenames
-        .chain(bound_child_schemas)
-        .map(|name| (name, None))
-        .collect();
     for (binding, child_node) in directory_schema.entries() {
         // Note: Since we don't know the name of the thing we're matching yet, any path
         // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
@@ -168,7 +184,7 @@ where
             directory_path,
         )?;
 
-        for (name, have_match) in mapped.iter_mut() {
+        for (name, have_match) in names.iter_mut() {
             match binding {
                 // Static binding produces a match for that name only
                 Binding::Static(bound_name) if bound_name == name => match have_match {
@@ -219,7 +235,7 @@ where
         }
     }
 
-    for (name, matched) in mapped {
+    for (name, matched) in names {
         let Some((binding, child_schema)) = matched else { continue };
         let name = name.as_ref();
         let child_path = directory_path.join(name);
