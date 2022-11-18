@@ -61,6 +61,8 @@ fn main() -> Result<()> {
         for root in rooted_schemas.roots() {
             fs.create_directory_all(root.path(), Default::default())?;
         }
+        fs.create_directory("/dev", Default::default())?;
+        fs.create_file("/dev/null", Default::default(), "".to_owned())?;
         traversal::traverse(target, &rooted_schemas, None, &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
