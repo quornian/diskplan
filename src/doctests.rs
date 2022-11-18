@@ -4,16 +4,25 @@ use regex::Regex;
 
 use diskplan::{
     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-    schema::SchemaNode,
+    schema::{Root, RootedSchemas, SchemaNode},
     traversal::traverse,
 };
 
-pub fn verify_trees(
-    schema_root: &SchemaNode,
+pub fn verify_trees<'s, 't>(
+    rooted_schemas: &'s RootedSchemas<'t>,
     in_tree: &str,
     out_tree: &str,
     target: &str,
-) -> Result<()> {
+) -> Result<()>
+where
+    's: 't,
+{
+    let env = env_logger::Env::new().filter("DISKPLAN_LOG");
+    env_logger::Builder::from_env(env)
+        .filter_level(log::LevelFilter::Debug)
+        .format_timestamp(None)
+        .init();
+
     let mut fs = MemoryFilesystem::new();
 
     // Create initial filesystem from input tree
@@ -30,7 +39,7 @@ pub fn verify_trees(
     }
 
     // Apply schema
-    traverse(&schema_root, &mut fs, target)?;
+    traverse(target, &rooted_schemas, None, &mut fs)?;
 
     // Check tree matches expected output tree
     for entry in parse_tree(out_tree)? {

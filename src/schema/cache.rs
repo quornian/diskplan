@@ -40,8 +40,7 @@ impl<'a> SchemaCache<'a> {
         Ok(self.schemas.push_get(Box::new(schema)))
     }
 
-    #[cfg(test)]
-    pub(crate) fn inject_for_testing(&self, path: impl AsRef<Utf8Path>, schema: SchemaNode<'a>) {
+    pub fn inject(&self, path: impl AsRef<Utf8Path>, schema: SchemaNode<'a>) {
         let mut locked = self.mapped.lock().expect("Lock poisoned");
         locked.insert(path.as_ref().to_owned(), self.schemas.len());
         self.schemas.push(Box::new(schema));

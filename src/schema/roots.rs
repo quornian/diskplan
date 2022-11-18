@@ -83,6 +83,17 @@ impl<'t> RootedSchemas<'t> {
         self.rooted.insert(root, schema_path.as_ref().to_owned());
     }
 
+    pub fn add_precached(
+        &mut self,
+        root: Root,
+        schema_path: impl AsRef<Utf8Path>,
+        schema: SchemaNode<'t>,
+    ) {
+        let schema_path = schema_path.as_ref();
+        self.cache.inject(schema_path, schema);
+        self.add(root, schema_path);
+    }
+
     pub fn roots(&self) -> impl Iterator<Item = &Root> {
         self.rooted.keys()
     }
@@ -107,10 +118,5 @@ impl<'t> RootedSchemas<'t> {
             }
         }
         Ok(None)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn inject_for_testing(&self, path: impl AsRef<Utf8Path>, schema: SchemaNode<'t>) {
-        self.cache.inject_for_testing(path, schema)
     }
 }

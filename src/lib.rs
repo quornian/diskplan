@@ -51,7 +51,7 @@
 //! using all of the above features:
 //!
 //! ```
-//! let schema_root = diskplan::schema::parse_schema(
+//! let local_schema = diskplan::schema::parse_schema(
 //! "
 //! :let remote_disk = /net/remote
 //!
@@ -80,6 +80,17 @@
 //!
 //! "
 //! )?;
+//!
+//! let remote_schema = diskplan::schema::parse_schema(
+//! "
+//! resources/
+//! storage_pool/
+//! "
+//! )?;
+//!
+//! let mut rooted_schemas = diskplan::schema::RootedSchemas::new();
+//! rooted_schemas.add_precached(diskplan::schema::Root::try_from("/local")?, "local.diskplan", local_schema);
+//! rooted_schemas.add_precached(diskplan::schema::Root::try_from("/net/remote")?, "remote.diskplan", remote_schema);
 //!
 //! // Given this existing structure in the filesystem:
 //! let input_tree = "
@@ -128,7 +139,7 @@
 //! #
 //! # // Now verify it so our docs are always correct
 //! # mod doctests { include!{"doctests.rs"} }
-//! # doctests::verify_trees(&schema_root, input_tree, output_tree, "/local")?;
+//! # doctests::verify_trees(&rooted_schemas, input_tree, output_tree, "/local")?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -142,9 +153,8 @@
 //! use diskplan::{
 //!     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
 //!     traversal::traverse,
-//!     schema::parse_schema
+//!     schema::{parse_schema, Root, RootedSchemas},
 //! };
-//! # mod doctests { include!{"doctests.rs"} }
 //!
 //! // Construct a schema
 //! let schema_root = parse_schema("
@@ -159,8 +169,11 @@
 //! let mut fs = MemoryFilesystem::new();
 //!
 //! // Run the traversal to apply the tree to the filesystem
+//! let root = Root::try_from("/")?;
 //! fs.create_directory(target, SetAttrs::default());
-//! traverse(&schema_root, &mut fs, target)?;
+//! let mut rooted_schemas = RootedSchemas::new();
+//! rooted_schemas.add_precached(root, "schema.diskplan", schema_root);
+//! traverse(target, &rooted_schemas, None, &mut fs)?;
 //!
 //! assert!(fs.is_directory("/local/directory"));
 //! #

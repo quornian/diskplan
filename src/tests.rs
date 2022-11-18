@@ -61,8 +61,7 @@ macro_rules! assert_effect_of {
 
         // Pretend the schema definition file lives at the root so we can load it from that
         // path (schema is internally cached under it)
-        rooted_schemas.inject_for_testing(root.path(), schema);
-        rooted_schemas.add(root.clone(), root.path());
+        rooted_schemas.add_precached(root.clone(), root.path(), schema);
         )+
 
         // onto:

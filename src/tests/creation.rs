@@ -53,8 +53,14 @@ fn test_create_symlink() -> Result<()> {
                     :source /resource/file
             "
         under: "/primary"
-        applying: ""
+
+        applying: "
+            $_a/
+                $_b/
+                    $_c/
+            "
         under: "/secondary"
+
         onto: "/primary"
         with:
             directories:
