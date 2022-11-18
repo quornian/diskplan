@@ -185,7 +185,9 @@ impl<'t> SchemaNodeBuilder<'t> {
                 entries,
             } => SchemaType::Directory(DirectorySchema::new(vars, defs, entries)),
             TypeSpecific::File { source } => {
-                let source = source.ok_or_else(|| anyhow!("File must have a :source"))?;
+                let source = source.ok_or_else(|| {
+                    anyhow!("File must have a :source (or add a '/' to make it a directory)")
+                })?;
                 SchemaType::File(FileSchema::new(source))
             }
         };

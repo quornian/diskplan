@@ -1,7 +1,7 @@
 //! A mechanism for traversing a schema and applying its nodes to an underlying
 //! filesystem structure
 //!
-use std::{borrow::Cow, collections::HashMap, fmt::Write};
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::{anyhow, Context as _, Result};
 use camino::Utf8Path;
@@ -56,11 +56,22 @@ where
     // traversal. Use this to create a better error message about how to extend the schema to cover
     // these cases. Or failing that, make continued directory creation allowable.
     if !filesystem.exists(path) {
-        return Err(anyhow!(
-            r#"Schema rooted at "{}" failed to produce target path "{}""#,
-            root.path(),
-            path
-        ));
+        return Err(if let Some(stack) = stack {
+            anyhow!(
+                "{} rooted at \"{}\" failed to produce target path \"{}\" with stack: {}",
+                schema,
+                root.path(),
+                path,
+                stack,
+            )
+        } else {
+            anyhow!(
+                r#"{} rooted at "{}" failed to produce target path "{}" with empty stack"#,
+                schema,
+                root.path(),
+                path,
+            )
+        });
     }
     Ok(())
 }
@@ -78,6 +89,7 @@ where
     's: 't,
 {
     for schema in expand_uses(schema, stack)? {
+        log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
         create(schema, path, rooted_schemas, stack, filesystem)
             .with_context(|| format!("Failed while trying to create {}", &path))?;
@@ -95,8 +107,7 @@ where
             .with_context(|| {
                 format!(
                     "Failed while trying to apply directory schema to {}: {}",
-                    path,
-                    summarize_schema_node(schema)
+                    path, schema
                 )
             })?;
         }
@@ -388,21 +399,4 @@ fn expand_uses<'a, 't>(
         );
     }
     Ok(use_schemas)
-}
-
-fn summarize_schema_node(node: &SchemaNode) -> String {
-    let mut buf = String::new();
-    match &node.schema {
-        SchemaType::Directory(ds) => {
-            write!(buf, "directory schema ({} entries)", ds.entries().len()).unwrap()
-        }
-        SchemaType::File(fs) => write!(buf, "file schema (source: {})", fs.source()).unwrap(),
-    }
-    if let Some(pattern) = &node.match_pattern {
-        write!(buf, "(matching: {})", pattern).unwrap()
-    }
-    if let Some(pattern) = &node.avoid_pattern {
-        write!(buf, "(avoiding: {})", pattern).unwrap()
-    }
-    buf
 }

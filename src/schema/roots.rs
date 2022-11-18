@@ -58,13 +58,6 @@ impl TryFrom<&str> for Root {
     }
 }
 
-pub trait SchemaFor<'p> {
-    fn schema_for(
-        &self,
-        path: impl AsRef<Utf8Path> + 'p,
-    ) -> Result<Option<(&SchemaNode<'_>, &'p Utf8Path)>>;
-}
-
 #[derive(Default)]
 pub struct RootedSchemas<'t> {
     /// Maps root path to the schema definition's file path
