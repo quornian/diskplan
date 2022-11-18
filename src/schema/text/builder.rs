@@ -11,6 +11,7 @@ use super::NodeType;
 
 #[derive(Debug)]
 pub struct SchemaNodeBuilder<'t> {
+    line: &'t str,
     match_pattern: Option<Expression<'t>>,
     avoid_pattern: Option<Expression<'t>>,
     symlink: Option<Expression<'t>>,
@@ -32,8 +33,9 @@ enum TypeSpecific<'t> {
 }
 
 impl<'t> SchemaNodeBuilder<'t> {
-    pub fn new(node_type: NodeType, symlink: Option<Expression<'t>>) -> Self {
+    pub fn new(line: &'t str, node_type: NodeType, symlink: Option<Expression<'t>>) -> Self {
         SchemaNodeBuilder {
+            line,
             match_pattern: None,
             avoid_pattern: None,
             symlink,
@@ -168,6 +170,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn build(self) -> Result<SchemaNode<'t>> {
         let SchemaNodeBuilder {
+            line,
             match_pattern,
             avoid_pattern,
             symlink,
@@ -187,6 +190,7 @@ impl<'t> SchemaNodeBuilder<'t> {
             }
         };
         Ok(SchemaNode {
+            line,
             match_pattern,
             avoid_pattern,
             symlink,

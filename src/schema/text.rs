@@ -60,7 +60,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
         error.unwrap()
     })?;
     let ops = ops.unwrap_or_default();
-    let schema_node = schema_node(text, text, NodeType::Directory, None, ops)?;
+    let schema_node = schema_node("root", text, text, NodeType::Directory, None, ops)?;
     if schema_node.match_pattern.is_some() {
         return Err(ParseError::new(
             "Top level :match is not allowed".into(),
@@ -76,6 +76,7 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
 }
 
 fn schema_node<'t>(
+    line: &'t str,
     whole: &'t str,
     part: &'t str,
     item_type: NodeType,
@@ -84,6 +85,7 @@ fn schema_node<'t>(
 ) -> std::result::Result<SchemaNode<'t>, ParseError<'t>> {
     let part_parse_error = |e: anyhow::Error| ParseError::new(e.to_string(), whole, part, None);
     let mut builder = SchemaNodeBuilder::new(
+        line,
         match item_type {
             NodeType::Directory => NodeType::Directory,
             NodeType::File => NodeType::File,
@@ -106,6 +108,7 @@ fn schema_node<'t>(
             // Operators that apply to child items
             Operator::Let { name, expr } => builder.let_var(name, expr),
             Operator::Item {
+                line,
                 binding,
                 is_directory,
                 link,
@@ -115,8 +118,8 @@ fn schema_node<'t>(
                     false => NodeType::File,
                     true => NodeType::Directory,
                 };
-                let item_node =
-                    schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
+                let item_node = schema_node(line, whole, span, sub_item_type, link, children)
+                    .map_err(|e| {
                         ParseError::new(
                             format!(r#"Problem within "{}""#, binding),
                             whole,
@@ -127,6 +130,7 @@ fn schema_node<'t>(
                 builder.add_entry(binding, item_node)
             }
             Operator::Def {
+                line,
                 name,
                 is_directory,
                 link,
@@ -144,8 +148,8 @@ fn schema_node<'t>(
                     false => NodeType::File,
                     true => NodeType::Directory,
                 };
-                let properties =
-                    schema_node(whole, span, sub_item_type, link, children).map_err(|e| {
+                let properties = schema_node(line, whole, span, sub_item_type, link, children)
+                    .map_err(|e| {
                         ParseError::new(
                             format!(r#"Error within definition "{}""#, name),
                             whole,
@@ -216,10 +220,11 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
                 // $binding/ -> link
                 //     children...
                 tuple((
-                    delimited(indentation(level), item_header, end_of_lines),
+                    delimited(indentation(level), consumed(item_header), end_of_lines),
                     many0(operator(level + 1)),
                 )),
-                |((binding, is_directory, link), children)| Operator::Item {
+                |((line, (binding, is_directory, link)), children)| Operator::Item {
+                    line,
                     binding,
                     is_directory,
                     link,
@@ -228,10 +233,11 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
             ),
             map(
                 tuple((
-                    delimited(indentation(level), def_header, end_of_lines),
+                    delimited(indentation(level), consumed(def_header), end_of_lines),
                     many0(operator(level + 1)),
                 )),
-                |((name, is_directory, link), children)| Operator::Def {
+                |((line, (name, is_directory, link)), children)| Operator::Def {
+                    line,
                     name,
                     is_directory,
                     link,
@@ -245,6 +251,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
 #[derive(Debug, Clone, PartialEq)]
 enum Operator<'t> {
     Item {
+        line: &'t str,
         binding: Binding<'t>,
         is_directory: bool,
         link: Option<Expression<'t>>,
@@ -255,6 +262,7 @@ enum Operator<'t> {
         expr: Expression<'t>,
     },
     Def {
+        line: &'t str,
         name: Identifier<'t>,
         is_directory: bool,
         link: Option<Expression<'t>>,

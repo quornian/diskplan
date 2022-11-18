@@ -157,6 +157,8 @@ pub use text::{parse_schema, ParseError};
 /// A node in an abstract directory hierarchy
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaNode<'t> {
+    pub line: &'t str,
+
     /// Condition against which to match file/directory names
     pub match_pattern: Option<Expression<'t>>,
 

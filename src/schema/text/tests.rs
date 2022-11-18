@@ -219,6 +219,7 @@ fn test_def_op_no_children() {
             (
                 s,
                 Operator::Def {
+                    line: ":def something_",
                     name: Identifier::new("something_"),
                     is_directory: false,
                     link: None,
@@ -241,6 +242,7 @@ fn test_def_op_no_children() {
             (
                 s,
                 Operator::Def {
+                    line: ":def something -> /somewhere/else",
                     name: Identifier::new("something"),
                     is_directory: false,
                     link: Some(Expression::from(vec![Token::Text("/somewhere/else")])),
@@ -261,6 +263,7 @@ fn test_def_op_with_children() {
             (
                 s,
                 Operator::Def {
+                    line: s,
                     name: Identifier::new("something"),
                     is_directory: false,
                     link: Some(Expression::from(vec![
@@ -404,6 +407,7 @@ fn test_def_with_newline() {
             (
                 s,
                 Operator::Def {
+                    line: ":def defined/",
                     name: Identifier::new("defined"),
                     is_directory: true,
                     link: None,
@@ -428,6 +432,7 @@ fn test_def_with_block() {
             (
                 &s[1..], // Skip /n
                 Operator::Def {
+                    line: ":def defined/",
                     name: Identifier::new("defined"),
                     is_directory: true,
                     link: None,
@@ -436,6 +441,7 @@ fn test_def_with_block() {
                             &s[s.find("            file").unwrap()
                                 ..s.find("            dir").unwrap()],
                             Operator::Item {
+                                line: "file",
                                 binding: Binding::Static("file"),
                                 is_directory: false,
                                 link: None,
@@ -445,6 +451,7 @@ fn test_def_with_block() {
                         (
                             &s[s.find("            dir").unwrap()..],
                             Operator::Item {
+                                line: "dir/",
                                 binding: Binding::Static("dir"),
                                 is_directory: true,
                                 link: None,
@@ -484,12 +491,14 @@ fn test_usage() {
                 (
                     &s[def_pos..usage_pos],
                     Operator::Def {
+                        line: ":def defined/",
                         name: Identifier::new("defined"),
                         is_directory: true,
                         link: None,
                         children: vec![(
                             &s[file_pos..usage_pos],
                             Operator::Item {
+                                line: "file",
                                 binding: Binding::Static("file"),
                                 is_directory: false,
                                 link: None,
@@ -506,6 +515,7 @@ fn test_usage() {
                 (
                     &s[usage_pos..],
                     Operator::Item {
+                        line: "usage/",
                         binding: Binding::Static("usage"),
                         is_directory: true,
                         link: None,

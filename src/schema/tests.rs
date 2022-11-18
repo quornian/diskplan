@@ -43,6 +43,7 @@ fn test_def_and_use_compare_equal() {
 fn test_directory_binding_sort_order() {
     let empty_subdirectory = SchemaType::Directory(DirectorySchema::default());
     let empty_directory_node = SchemaNode {
+        line: "N/A",
         schema: empty_subdirectory,
         match_pattern: None,
         avoid_pattern: None,
