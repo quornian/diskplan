@@ -113,7 +113,12 @@ impl<'t> RootedSchemas<'t> {
         }
 
         Ok(if let Some((root, schema_path)) = longest_candidate {
-            log::warn!("For {}, found: {} ({})", path, root.path(), schema_path);
+            log::trace!(
+                r#"Schema for path "{}", found root "{}", schema "{}""#,
+                path,
+                root.path(),
+                schema_path
+            );
             let schema = self.cache.load(schema_path).with_context(|| {
                 format!(
                     "Failed to load schema {} for configured root {} (for target path {})",

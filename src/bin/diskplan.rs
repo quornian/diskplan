@@ -93,7 +93,11 @@ where
         println!();
 
         if fs.is_directory(path) {
-            for child in fs.list_directory(path)? {
+            for child in {
+                let mut list = fs.list_directory(path)?;
+                list.sort();
+                list
+            } {
                 let child = path.join(&child);
                 print_tree(&child, fs, depth + 1)?;
             }
