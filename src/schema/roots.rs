@@ -94,22 +94,37 @@ impl<'t> RootedSchemas<'t> {
     pub fn schema_for<'s, 'p>(
         &'s self,
         path: &'p Utf8Path,
-    ) -> Result<Option<(&SchemaNode<'t>, &Root, &'p Utf8Path)>>
+    ) -> Result<Option<(&SchemaNode<'t>, &Root)>>
     where
         's: 't,
     {
+        let mut longest_candidate = None;
         for (root, schema_path) in self.rooted.iter() {
-            if let Ok(remainder) = path.strip_prefix(root.path()) {
-                let schema = self.cache.load(schema_path).with_context(|| {
-                    format!(
-                        "Failed to load schema for configured root {} (for target path {})",
-                        root.path(),
-                        path
-                    )
-                })?;
-                return Ok(Some((schema, root, remainder)));
+            if path.starts_with(root.path()) {
+                match longest_candidate {
+                    None => longest_candidate = Some((root, schema_path)),
+                    Some(prev) => {
+                        if root.path().as_str().len() > prev.0.path().as_str().len() {
+                            longest_candidate = Some((root, schema_path))
+                        }
+                    }
+                }
             }
         }
-        Ok(None)
+
+        Ok(if let Some((root, schema_path)) = longest_candidate {
+            log::warn!("For {}, found: {} ({})", path, root.path(), schema_path);
+            let schema = self.cache.load(schema_path).with_context(|| {
+                format!(
+                    "Failed to load schema {} for configured root {} (for target path {})",
+                    schema_path,
+                    root.path(),
+                    path
+                )
+            })?;
+            return Ok(Some((schema, root)));
+        } else {
+            None
+        })
     }
 }

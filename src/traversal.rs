@@ -35,14 +35,17 @@ where
     if !path.is_absolute() {
         return Err(anyhow!("Path must be absolute: {}", path));
     }
-    let (schema, root, remaining_path) = rooted_schemas
+    let (schema, root) = rooted_schemas
         .schema_for(path)?
         .ok_or_else(|| anyhow!("No schema for {}", path))?;
     let start_path = SplitPath::new(root, None)?;
+    let remaining_path = path
+        .strip_prefix(root.path())
+        .expect("Located root must prefix path");
     log::debug!(
         r#"Traversing root directory "{}" ("{}" relative path remains)"#,
         start_path,
-        remaining_path
+        remaining_path,
     );
     traverse_node(
         schema,
@@ -322,7 +325,7 @@ where
 
         // TODO: Maybe we just need to get the root here
         let rooted = rooted_schemas.schema_for(link_path)?;
-        let (link_schema, link_root, link_remaining) = rooted.ok_or_else(|| {
+        let (link_schema, link_root) = rooted.ok_or_else(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
                 path,
