@@ -55,7 +55,7 @@ fn main() -> Result<()> {
 
     if apply {
         let mut fs = filesystem::DiskFilesystem::new();
-        traversal::traverse(target, &rooted_schemas, None, &mut fs)?;
+        traversal::traverse(target, rooted_schemas, None, &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
         for root in rooted_schemas.roots() {
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
         }
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
-        traversal::traverse(target, &rooted_schemas, None, &mut fs)?;
+        traversal::traverse(target, rooted_schemas, None, &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
     Ok(())

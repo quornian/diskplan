@@ -2,108 +2,61 @@
 //!
 use std::{collections::HashMap, fmt::Debug};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
 use crate::schema::{Root, RootedSchemas};
 
+pub struct Config<'t> {
+    rooted_schemas: RootedSchemas<'t>,
+}
+
 /// Application configuration
 #[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-pub struct Config {
+struct ConfigData {
     /// A map of unique profile names to their individual configurations
-    profiles: HashMap<String, Profile>,
+    profiles: HashMap<String, ProfileData>,
+
+    /// Schema directory (defaults to directory containing config)
+    schema_directory: Option<Utf8PathBuf>,
 }
 
 /// Configuration for a single profile
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct Profile {
+struct ProfileData {
     /// The absolute root directory on which to apply changes
     root: Root,
     /// The path to a schema definition file that describes how files and directories under the
-    /// root should be structured
+    /// root should be structured (may be absolute or relative to the config file's directory)
     schema: Utf8PathBuf,
 }
 
-impl Config {
+impl<'t> Config<'t> {
     /// Load a configuration from the specified file
-    pub fn load<P>(path: P) -> Result<Config>
+    pub fn load<P>(path: P) -> Result<Self>
     where
         P: AsRef<Utf8Path> + Debug,
     {
         let config_context = || format!("Reading config file {:?}", path);
-        let config = std::fs::read_to_string(path.as_ref()).with_context(config_context)?;
-        toml::from_str(&config).with_context(config_context)
-    }
+        let config_data = std::fs::read_to_string(path.as_ref()).with_context(config_context)?;
+        let ConfigData {
+            schema_directory,
+            profiles,
+        } = toml::from_str(&config_data).with_context(config_context)?;
 
-    /// Return the [`Profile`] with the given name if one exists
-    pub fn get_profile(&self, name: &str) -> Option<&Profile> {
-        self.profiles.get(name)
-    }
-
-    /// Return the [`Profile`] whose root contains the given path, if one exists
-    pub fn profile_for_path(&self, path: &Utf8Path) -> Result<&Profile> {
-        let matched: Vec<_> = self
-            .profiles
-            .iter()
-            .filter(|(_, profile)| path.starts_with(profile.root.path()))
-            .collect();
-        match &matched[..] {
-            [(_, profile)] => Ok(profile),
-            [] => Err(anyhow!("No profile has root matching path {:?}", path)),
-            _ => Err(anyhow!("Multiple profile roots match path {:?}", path)),
-        }
-    }
-
-    pub fn rooted_schemas(&self) -> RootedSchemas {
+        let schema_directory = schema_directory
+            .as_deref()
+            .unwrap_or_else(|| path.as_ref().parent().unwrap_or_else(|| Utf8Path::new(".")));
         let mut rooted_schemas = RootedSchemas::new();
-        for (_, profile) in self.profiles.iter() {
-            rooted_schemas.add(profile.root().clone(), profile.schema());
+        for (_, profile) in profiles.into_iter() {
+            rooted_schemas.add(profile.root, schema_directory.join(profile.schema));
         }
-        rooted_schemas
-    }
-}
-
-impl Profile {
-    /// The path to a schema definition file that describes how files and directories under the
-    /// root should be structured
-    pub fn schema(&self) -> &Utf8Path {
-        &self.schema
+        Ok(Config { rooted_schemas })
     }
 
-    /// The absolute root directory on which to apply changes
-    pub fn root(&self) -> &Root {
-        &self.root
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use toml::from_str;
-
-    use super::Config;
-
-    #[test]
-    fn root_absolute() {
-        let config: Result<Config, _> =
-            from_str("[profiles.one]\nschema = \"\"\nroot = \"/absolute/path\"\n");
-        assert!(config
-            .unwrap()
-            .get_profile("one")
-            .unwrap()
-            .root()
-            .path()
-            .is_absolute())
-    }
-
-    #[test]
-    fn root_relative_disallowed() {
-        let config: Result<Config, _> =
-            from_str("[profiles.one]\nschema = \"\"\nroot = \"relative/path\"\n");
-        assert!(config.is_err());
-        assert!(config
-            .unwrap_err()
-            .to_string()
-            .contains("path must be absolute"));
+    /// Access the set of roots and schemas defined by this config
+    pub fn rooted_schemas(&self) -> &RootedSchemas<'t> {
+        &self.rooted_schemas
     }
 }
