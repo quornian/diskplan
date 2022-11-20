@@ -3,13 +3,14 @@ use anyhow::Result;
 use regex::Regex;
 
 use diskplan::{
+    config::Config,
     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-    schema::{Root, RootedSchemas, SchemaNode},
+    schema::{Root, SchemaNode},
     traversal::traverse,
 };
 
 pub fn verify_trees<'s, 't>(
-    rooted_schemas: &'s RootedSchemas<'t>,
+    config: &'s Config<'t>,
     in_tree: &str,
     out_tree: &str,
     target: &str,
@@ -39,7 +40,7 @@ where
     }
 
     // Apply schema
-    traverse(target, &rooted_schemas, None, &mut fs)?;
+    traverse(target, &config, None, &mut fs)?;
 
     // Check tree matches expected output tree
     for entry in parse_tree(out_tree)? {

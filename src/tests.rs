@@ -45,13 +45,14 @@ macro_rules! assert_effect_of {
 
         #[allow(unused_imports)]
         use crate::{
+            config::Config,
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-            schema::{parse_schema, Root, RootedSchemas, SchemaCache},
+            schema::{parse_schema, Root, SchemaCache},
             traversal,
         };
         let mut fs = MemoryFilesystem::new();
         let mut expected_paths: HashSet<&Utf8Path> = HashSet::new();
-        let mut rooted_schemas = RootedSchemas::new();
+        let mut config = Config::new();
 
         $(
         // applying:
@@ -61,7 +62,7 @@ macro_rules! assert_effect_of {
 
         // Pretend the schema definition file lives at the root so we can load it from that
         // path (schema is internally cached under it)
-        rooted_schemas.add_precached(root.clone(), root.path(), schema);
+        config.add_precached_stem(root.clone(), root.path(), schema);
         )+
 
         // onto:
@@ -101,7 +102,7 @@ macro_rules! assert_effect_of {
         )?
 
         // yields:
-        traversal::traverse(path, &rooted_schemas, None, &mut fs)?;
+        traversal::traverse(path, &config, None, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root.path()));
         $($(

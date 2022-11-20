@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         traversal::traverse(target, &config, None, &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
-        for root in config.rooted_schemas().roots() {
+        for root in config.stem_roots() {
             fs.create_directory_all(root.path(), Default::default())?;
         }
         fs.create_directory("/dev", Default::default())?;

@@ -85,12 +85,15 @@
 //! "
 //! resources/
 //! storage_pool/
+//!     $pool/
 //! "
 //! )?;
 //!
-//! let mut rooted_schemas = diskplan::schema::RootedSchemas::new();
-//! rooted_schemas.add_precached(diskplan::schema::Root::try_from("/local")?, "local.diskplan", local_schema);
-//! rooted_schemas.add_precached(diskplan::schema::Root::try_from("/net/remote")?, "remote.diskplan", remote_schema);
+//! use diskplan::{config::Config, schema::Root};
+//!
+//! let mut config = Config::new();
+//! config.add_precached_stem(Root::try_from("/local")?, "local.diskplan", local_schema);
+//! config.add_precached_stem(Root::try_from("/net/remote")?, "remote.diskplan", remote_schema);
 //!
 //! // Given this existing structure in the filesystem:
 //! let input_tree = "
@@ -139,7 +142,7 @@
 //! #
 //! # // Now verify it so our docs are always correct
 //! # mod doctests { include!{"doctests.rs"} }
-//! # doctests::verify_trees(&rooted_schemas, input_tree, output_tree, "/local")?;
+//! # doctests::verify_trees(&config, input_tree, output_tree, "/local")?;
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -151,9 +154,10 @@
 //! We can use the in-memory filesystem to test:
 //! ```
 //! use diskplan::{
+//!     config::Config,
 //!     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
 //!     traversal::traverse,
-//!     schema::{parse_schema, Root, RootedSchemas},
+//!     schema::{parse_schema, Root},
 //! };
 //!
 //! // Construct a schema
@@ -169,11 +173,11 @@
 //! let mut fs = MemoryFilesystem::new();
 //!
 //! // Run the traversal to apply the tree to the filesystem
-//! let root = Root::try_from("/")?;
+//! let root = Root::try_from("/local")?;
 //! fs.create_directory(target, SetAttrs::default());
-//! let mut rooted_schemas = RootedSchemas::new();
-//! rooted_schemas.add_precached(root, "schema.diskplan", schema_root);
-//! traverse(target, &rooted_schemas, None, &mut fs)?;
+//! let mut config = Config::new();
+//! config.add_precached_stem(root, "schema.diskplan", schema_root);
+//! traverse(target, &config, None, &mut fs)?;
 //!
 //! assert!(fs.is_directory("/local/directory"));
 //! #

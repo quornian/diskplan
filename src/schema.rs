@@ -149,7 +149,7 @@ mod expression;
 pub use expression::{Expression, Identifier, Special, Token};
 
 mod roots;
-pub use roots::{Root, RootedSchemas};
+pub use roots::Root;
 
 mod text;
 pub use text::{parse_schema, ParseError};

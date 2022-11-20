@@ -37,7 +37,6 @@ where
         return Err(anyhow!("Path must be absolute: {}", path));
     }
     let (schema, root) = config
-        .rooted_schemas()
         .schema_for(path)?
         .ok_or_else(|| anyhow!("No schema for {}", path))?;
     let start_path = SplitPath::new(root, None)?;
@@ -350,8 +349,8 @@ where
         }
 
         // TODO: Maybe we just need to get the root here
-        let rooted = config.rooted_schemas().schema_for(link_path)?;
-        let (link_schema, link_root) = rooted.ok_or_else(|| {
+        let stem = config.schema_for(link_path)?;
+        let (link_schema, link_root) = stem.ok_or_else(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
                 path,
