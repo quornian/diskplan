@@ -7,8 +7,9 @@ use anyhow::{anyhow, Context as _, Result};
 use camino::Utf8Path;
 
 use crate::{
+    config::Config,
     filesystem::{Filesystem, SetAttrs, SplitPath},
-    schema::{Binding, DirectorySchema, RootedSchemas, SchemaNode, SchemaType},
+    schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
 use self::{
@@ -23,7 +24,7 @@ mod stack;
 
 pub fn traverse<'a, 's, 't, FS>(
     path: impl AsRef<Utf8Path>,
-    rooted_schemas: &'s RootedSchemas<'t>,
+    config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
@@ -35,7 +36,8 @@ where
     if !path.is_absolute() {
         return Err(anyhow!("Path must be absolute: {}", path));
     }
-    let (schema, root) = rooted_schemas
+    let (schema, root) = config
+        .rooted_schemas()
         .schema_for(path)?
         .ok_or_else(|| anyhow!("No schema for {}", path))?;
     let start_path = SplitPath::new(root, None)?;
@@ -51,7 +53,7 @@ where
         schema,
         &start_path,
         remaining_path,
-        rooted_schemas,
+        config,
         stack,
         filesystem,
     )?;
@@ -83,7 +85,7 @@ fn traverse_node<'a, 's, 't, FS>(
     schema: &SchemaNode<'_>,
     path: &SplitPath,
     remaining_path: &Utf8Path,
-    rooted_schemas: &'s RootedSchemas<'t>,
+    config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
@@ -94,7 +96,7 @@ where
     for schema in expand_uses(schema, stack)? {
         log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
-        create(schema, path, rooted_schemas, stack, filesystem)
+        create(schema, path, config, stack, filesystem)
             .with_context(|| format!("Failed while trying to create {}", &path))?;
 
         // Traverse over children
@@ -103,7 +105,7 @@ where
                 directory_schema,
                 path,
                 remaining_path,
-                rooted_schemas,
+                config,
                 stack,
                 filesystem,
             )
@@ -122,7 +124,7 @@ fn traverse_directory<'a, 's, 't, FS>(
     directory_schema: &DirectorySchema<'_>,
     directory_path: &SplitPath,
     remaining_path: &Utf8Path,
-    rooted_schemas: &'s RootedSchemas<'t>,
+    config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
@@ -258,7 +260,7 @@ where
                     child_schema,
                     &child_path,
                     child_remaining,
-                    rooted_schemas,
+                    config,
                     Some(&stack),
                     filesystem,
                 )
@@ -277,7 +279,7 @@ where
                     child_schema,
                     &child_path,
                     child_remaining,
-                    rooted_schemas,
+                    config,
                     Some(&stack),
                     filesystem,
                 )
@@ -301,7 +303,7 @@ where
 fn create<'a, 's, 't, FS>(
     schema: &SchemaNode,
     path: &SplitPath,
-    rooted_schemas: &'s RootedSchemas<'t>,
+    config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
 ) -> Result<()>
@@ -309,17 +311,25 @@ where
     FS: Filesystem,
     's: 't,
 {
+    let evaluated_owner;
     let owner = match &schema.attributes.owner {
-        Some(expr) => Some(evaluate(expr, stack, path)?),
+        Some(expr) => {
+            evaluated_owner = evaluate(expr, stack, path)?;
+            Some(config.map_user(&evaluated_owner))
+        }
         None => None,
     };
+    let evaluated_group;
     let group = match &schema.attributes.group {
-        Some(expr) => Some(evaluate(expr, stack, path)?),
+        Some(expr) => {
+            evaluated_group = evaluate(expr, stack, path)?;
+            Some(config.map_group(&evaluated_group))
+        }
         None => None,
     };
     let attrs = SetAttrs {
-        owner: owner.as_deref(),
-        group: group.as_deref(),
+        owner,
+        group,
         mode: schema.attributes.mode.map(Into::into),
     };
 
@@ -340,7 +350,7 @@ where
         }
 
         // TODO: Maybe we just need to get the root here
-        let rooted = rooted_schemas.schema_for(link_path)?;
+        let rooted = config.rooted_schemas().schema_for(link_path)?;
         let (link_schema, link_root) = rooted.ok_or_else(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
@@ -353,7 +363,7 @@ where
 
         // TODO: Think about which schema wins? Target root, or local. Or if this is a link to the local one anyway?!
         if !filesystem.exists(link_target.absolute()) {
-            traverse(link_target.absolute(), rooted_schemas, stack, filesystem)?;
+            traverse(link_target.absolute(), config, stack, filesystem)?;
             assert!(filesystem.exists(link_target.absolute()));
         }
         // Create the symlink pointing to its target before (forming the target itself)

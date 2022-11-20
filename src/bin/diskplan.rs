@@ -1,31 +1,12 @@
 use anyhow::{anyhow, Result};
-use camino::{Utf8Path, Utf8PathBuf};
-use clap::{arg, command, Parser};
+use camino::Utf8Path;
+use clap::Parser;
 
 use diskplan::{
-    config::Config,
+    config::{Args, Config},
     filesystem::{self, Filesystem},
     traversal,
 };
-
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// The directory to produce. This must be absolute and begin with one of the configured roots
-    target: Utf8PathBuf,
-
-    /// The path to the diskplan.toml config file
-    #[arg(short, long, default_value = "diskplan.toml")]
-    config_file: Utf8PathBuf,
-
-    /// Whether to apply the changes (otherwise, only simulate and print)
-    #[arg(long)]
-    apply: bool,
-
-    /// Increase verbosity level (0: warn; 1: info; 2: debug; 3: trace)
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
-}
 
 fn init_logger(args: &Args) {
     let env = env_logger::Env::new().filter("DISKPLAN_LOG");
@@ -44,8 +25,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
     init_logger(&args);
 
-    let config = Config::load(&args.config_file)?;
-    let rooted_schemas = config.rooted_schemas();
+    let config = Config::from_args(&args)?;
 
     let target = &args.target;
     let apply = args.apply;
@@ -55,15 +35,15 @@ fn main() -> Result<()> {
 
     if apply {
         let mut fs = filesystem::DiskFilesystem::new();
-        traversal::traverse(target, rooted_schemas, None, &mut fs)?;
+        traversal::traverse(target, &config, None, &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
-        for root in rooted_schemas.roots() {
+        for root in config.rooted_schemas().roots() {
             fs.create_directory_all(root.path(), Default::default())?;
         }
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
-        traversal::traverse(target, rooted_schemas, None, &mut fs)?;
+        traversal::traverse(target, &config, None, &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
     Ok(())
