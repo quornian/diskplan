@@ -1,10 +1,10 @@
 //! A mechanism for traversing a schema and applying its nodes to an underlying
 //! filesystem structure
 //!
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Write as _};
 
 use anyhow::{anyhow, Context as _, Result};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
     config::Config,
@@ -83,7 +83,7 @@ where
 fn traverse_node<'a, 's, 't, FS>(
     schema: &SchemaNode<'_>,
     path: &SplitPath,
-    remaining_path: &Utf8Path,
+    remaining: &Utf8Path,
     config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
@@ -92,6 +92,7 @@ where
     FS: Filesystem,
     's: 't,
 {
+    let mut unresolved = if remaining == "" { None } else { Some(vec![]) };
     for schema in expand_uses(schema, stack)? {
         log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
@@ -100,33 +101,52 @@ where
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
-            traverse_directory(
-                directory_schema,
-                path,
-                remaining_path,
-                config,
-                stack,
-                filesystem,
-            )
-            .with_context(|| {
-                format!(
-                    "Failed while trying to apply directory schema to {}: {}",
-                    path, schema
-                )
-            })?;
+            let resolution =
+                traverse_directory(directory_schema, path, remaining, config, stack, filesystem)
+                    .with_context(|| {
+                        format!(
+                            "Failed while trying to apply directory schema to {}: {}",
+                            path, schema
+                        )
+                    })?;
+            match resolution {
+                Resolution::FullyResolved => unresolved = None,
+                Resolution::Unresolved(path) => {
+                    if let Some(ref mut issues) = unresolved {
+                        issues.push((schema, path));
+                    }
+                }
+            }
         }
     }
-    Ok(())
+    if let Some(issues) = unresolved {
+        let mut message = format!(
+            "Failed to traverse fully into \"{}\", starting at \"{}\"",
+            remaining, path
+        );
+        for (schema, path) in issues {
+            write!(message, "\n{} -> {}", schema, path)?;
+        }
+        Err(anyhow!("{}", message))
+    } else {
+        Ok(())
+    }
+}
+
+#[must_use]
+enum Resolution {
+    FullyResolved,
+    Unresolved(Utf8PathBuf),
 }
 
 fn traverse_directory<'a, 's, 't, FS>(
     directory_schema: &DirectorySchema<'_>,
     directory_path: &SplitPath,
-    remaining_path: &Utf8Path,
+    remaining: &Utf8Path,
     config: &'s Config<'t>,
     stack: Option<&'a Stack<'a>>,
     filesystem: &mut FS,
-) -> Result<()>
+) -> Result<Resolution>
 where
     FS: Filesystem,
     's: 't,
@@ -134,19 +154,19 @@ where
     let stack = Stack::new(stack, Scope::Directory(directory_schema));
 
     // Pull the front off the relative remaining_path
-    let next_remaining = remaining_path
+    let (sought, remaining) = remaining
         .as_str()
         .split_once('/')
-        .map(|(name, _remaining)| Some(name))
-        .unwrap_or(if remaining_path == "" {
-            None
+        .map(|(name, remaining)| (Some(name), Utf8Path::new(remaining)))
+        .unwrap_or(if remaining == "" {
+            (None, Utf8Path::new(""))
         } else {
-            Some(remaining_path.as_str())
+            (Some(remaining.as_str()), Utf8Path::new(""))
         });
 
     // Collect a set of names of
     //  - what's on disk
-    //  - the next component of our intended path (next_remaining)
+    //  - the next component of our intended path (sought)
     //  - any static bindings
     //  - any variable bindings for which we have a value from the stack
     let mut names: HashMap<Cow<str>, Option<_>> = HashMap::new();
@@ -159,7 +179,7 @@ where
             .map(Cow::Owned)
             .map(from_key),
     );
-    names.extend(next_remaining.map(Cow::Borrowed).map(from_key));
+    names.extend(sought.map(Cow::Borrowed).map(from_key));
     names.extend(
         directory_schema
             .entries()
@@ -236,16 +256,24 @@ where
         }
     }
 
+    // Consider nothing to seek as if it were found
+    let mut sought_matched = sought.is_none();
+
     for (name, matched) in names {
         let Some((binding, child_schema)) = matched else { continue };
         let name = name.as_ref();
         let child_path = directory_path.join(name);
 
-        // If this name is part of the target path, strip it off the front for further traversal.
-        // If it is not, we're no longer completing the target path in this branch
-        let child_remaining = remaining_path
-            .strip_prefix(name)
-            .unwrap_or_else(|_err| Utf8Path::new(""));
+        // If this name is part of the target path, record that we found a match and keep
+        // traversing that path. If it is not, we're no longer completing the target path
+        // in this branch ("remaining" is cleared for further traversal)
+        let remaining = if sought == Some(name) {
+            // log::warn!("Match: {}/{}", directory_path, name);
+            sought_matched = true;
+            remaining
+        } else {
+            Utf8Path::new("")
+        };
 
         match binding {
             Binding::Static(s) => {
@@ -253,17 +281,17 @@ where
                     r#"Traversing static directory entry "{}" at {} ("{}" relative path remains)"#,
                     s,
                     &child_path,
-                    child_remaining,
+                    remaining,
                 );
                 traverse_node(
                     child_schema,
                     &child_path,
-                    child_remaining,
+                    remaining,
                     config,
                     Some(&stack),
                     filesystem,
                 )
-                .with_context(|| format!("Failed while trying to process path {}", &child_path))?
+                .with_context(|| format!("Failed while trying to process path {}", &child_path))?;
             }
             Binding::Dynamic(var) => {
                 log::debug!(
@@ -271,13 +299,13 @@ where
                     var,
                     name,
                     &child_path,
-                    child_remaining,
+                    remaining,
                 );
                 let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
                 traverse_node(
                     child_schema,
                     &child_path,
-                    child_remaining,
+                    remaining,
                     config,
                     Some(&stack),
                     filesystem,
@@ -296,7 +324,12 @@ where
             }
         }
     }
-    Ok(())
+    if !sought_matched {
+        let unresolved = Utf8PathBuf::from(format!("{}/{}", sought.unwrap(), remaining));
+        Ok(Resolution::Unresolved(unresolved))
+    } else {
+        Ok(Resolution::FullyResolved)
+    }
 }
 
 fn create<'a, 's, 't, FS>(
