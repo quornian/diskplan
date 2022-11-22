@@ -58,7 +58,6 @@ pub fn find_definition<'a>(
     var: &Identifier<'a>,
     stack: Option<&Stack<'a>>,
 ) -> Option<&'a SchemaNode<'a>> {
-    log::trace!("Seeking definition of '{}'", var);
     if let Some(Stack { parent, scope, .. }) = stack {
         match scope {
             Scope::Directory(directory) => directory.get_def(var),

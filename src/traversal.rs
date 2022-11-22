@@ -193,6 +193,8 @@ where
             .map(from_key),
     );
 
+    log::trace!("Within {}...", directory_path);
+
     // Use these to build unique mappings, and error if not unique
     for (binding, child_node) in directory_schema.entries() {
         // Note: Since we don't know the name of the thing we're matching yet, any path
@@ -241,18 +243,22 @@ where
                 }
                 _ => Ok(()),
             }?;
-            match have_match {
-                None => log::trace!(r#"Considered name "{}" but no match found"#, name),
-                Some((Binding::Static(_), _)) => {
-                    log::trace!(r#"Considered name "{}" and found exact static match"#, name)
-                }
-                Some((Binding::Dynamic(id), _)) => log::trace!(
-                    r#"Considered name "{}", matched {:?}, binding to variable ${{{}}}"#,
-                    name,
-                    pattern,
-                    id.value()
-                ),
+        }
+    }
+
+    // Report
+    for (name, have_match) in names.iter() {
+        match have_match {
+            None => log::trace!(r#""{}" has no match"#, name),
+            Some((Binding::Static(_), _)) => {
+                log::trace!(r#""{}" matches same, binding static"#, name)
             }
+            Some((Binding::Dynamic(id), node)) => log::trace!(
+                r#""{}" matches {:?}, binding to variable ${{{}}}"#,
+                name,
+                node.match_pattern,
+                id.value()
+            ),
         }
     }
 
@@ -454,6 +460,7 @@ fn expand_uses<'a, 't>(
         _ => None,
     };
     for used in &node.uses {
+        log::trace!("Seeking definition of '{}'", used);
         use_schemas.push(
             stack::find_definition(used, stack.as_ref())
                 .ok_or_else(|| anyhow!("No definition (:def) found for {}", used))?,
