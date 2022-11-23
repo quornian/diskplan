@@ -2,7 +2,7 @@
 //! and virtual ([`MemoryFilesystem`]) implementation.
 use std::{borrow::Cow, fmt::Display};
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 
 mod attributes;
@@ -78,7 +78,7 @@ pub trait Filesystem {
         let path = path.as_ref();
         if !path.is_absolute() {
             // TODO: Keep a current_directory to provide relative path support
-            return Err(anyhow!("Only absolute paths supported"));
+            bail!("Only absolute paths supported");
         }
         let path = normalize(path);
         let mut canon = Utf8PathBuf::with_capacity(path.as_str().len());
@@ -145,11 +145,7 @@ impl SplitPath {
         let path = match path {
             Some(path) => {
                 if !path.starts_with(root.path()) {
-                    return Err(anyhow!(
-                        "Path {} must start with root {}",
-                        path,
-                        root.path()
-                    ));
+                    bail!("Path {} must start with root {}", path, root.path());
                 }
                 path
             }

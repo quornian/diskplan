@@ -190,9 +190,15 @@ impl<'t> std::fmt::Display for SchemaNode<'t> {
 
         match &self.schema {
             SchemaType::Directory(ds) => {
-                write!(f, " as directory (entries: {})", ds.entries().len()).unwrap()
+                let len = ds.entries().len();
+                write!(
+                    f,
+                    " (directory with {} entr{})",
+                    len,
+                    if len == 1 { "y" } else { "ies" }
+                )?
             }
-            SchemaType::File(fs) => write!(f, " as file (source: {})", fs.source()).unwrap(),
+            SchemaType::File(fs) => write!(f, " (file from source: {})", fs.source())?,
         }
         Ok(())
     }

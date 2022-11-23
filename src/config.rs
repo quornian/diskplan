@@ -2,7 +2,7 @@
 //!
 use std::{collections::HashMap, fmt::Debug, ops::Deref};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use serde::Deserialize;
@@ -159,10 +159,10 @@ impl TryFrom<&str> for NameMap {
                 .next()
                 .ok_or_else(|| anyhow!("Expected ':' separated key value pair"))?;
             if key.is_empty() || value.is_empty() {
-                return Err(anyhow!("Key and value must be non-empty"));
+                bail!("Key and value must be non-empty");
             }
             if let Some(unexpected) = kv_iter.next() {
-                return Err(anyhow!("Unexpected third value \"{}\"", unexpected));
+                bail!("Unexpected third value \"{}\"", unexpected);
             }
             map.insert(key.to_owned(), value.to_owned());
         }

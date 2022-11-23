@@ -1,9 +1,13 @@
 //! A mechanism for traversing a schema and applying its nodes to an underlying
 //! filesystem structure
 //!
-use std::{borrow::Cow, collections::HashMap, fmt::Write as _};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt::{Display, Write as _},
+};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
@@ -34,11 +38,11 @@ where
 {
     let path = path.as_ref();
     if !path.is_absolute() {
-        return Err(anyhow!("Path must be absolute: {}", path));
+        bail!("Path must be absolute: {}", path);
     }
     let (schema, root) = config
         .schema_for(path)?
-        .ok_or_else(|| anyhow!("No schema for {}", path))?;
+        .ok_or_else(|| anyhow!("Config has no root/schema for path {}", path))?;
     let start_path = SplitPath::new(root, None)?;
     let remaining_path = path
         .strip_prefix(root.path())
@@ -55,27 +59,36 @@ where
         config,
         stack,
         filesystem,
-    )?;
+    )
+    .with_context(|| {
+        schema_context(
+            "Failed to apply schema",
+            schema,
+            start_path.absolute(),
+            remaining_path,
+            stack,
+        )
+    })?;
     // TODO: Figure out how to detect consumption of remaining_path and what still remains after
     // traversal. Use this to create a better error message about how to extend the schema to cover
     // these cases. Or failing that, make continued directory creation allowable.
     if !filesystem.exists(path) {
-        return Err(if let Some(stack) = stack {
-            anyhow!(
-                "{} rooted at \"{}\" failed to produce target path \"{}\" with stack: {}",
+        if let Some(stack) = stack {
+            bail!(
+                r#"{} rooted at "{}" failed to produce target path "{}" with stack: {}"#,
                 schema,
                 root.path(),
                 path,
                 stack,
             )
         } else {
-            anyhow!(
+            bail!(
                 r#"{} rooted at "{}" failed to produce target path "{}" with empty stack"#,
                 schema,
                 root.path(),
                 path,
             )
-        });
+        };
     }
     Ok(())
 }
@@ -97,18 +110,28 @@ where
         log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
         create(schema, path, config, stack, filesystem)
-            .with_context(|| format!("Failed while trying to create {}", &path))?;
+            .with_context(|| format!("Creating {}", &path))?;
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
-            let resolution =
-                traverse_directory(directory_schema, path, remaining, config, stack, filesystem)
-                    .with_context(|| {
-                        format!(
-                            "Failed while trying to apply directory schema to {}: {}",
-                            path, schema
-                        )
-                    })?;
+            let resolution = traverse_directory(
+                schema,
+                directory_schema,
+                path,
+                remaining,
+                config,
+                stack,
+                filesystem,
+            )
+            .with_context(|| {
+                schema_context(
+                    "Applying directory schema",
+                    schema,
+                    path.absolute(),
+                    remaining,
+                    stack,
+                )
+            })?;
             match resolution {
                 Resolution::FullyResolved => unresolved = None,
                 Resolution::Unresolved(path) => {
@@ -121,16 +144,31 @@ where
     }
     if let Some(issues) = unresolved {
         let mut message = format!(
-            "Failed to traverse fully into \"{}\", starting at \"{}\"",
-            remaining, path
+            "No schema within \"{}\" was able to produce \"{}\"",
+            path, remaining
         );
-        for (schema, path) in issues {
-            write!(message, "\n{} -> {}", schema, path)?;
+        for (schema, _) in issues {
+            write!(message, "\nInside: {}:", schema)?;
+            if let SchemaType::Directory(dir) = &schema.schema {
+                if dir.entries().is_empty() {
+                    write!(message, "\n  No entries to match",)?;
+                }
+                for (binding, node) in dir.entries() {
+                    write!(message, "\n  Considered: {} - {}", binding, node)?;
+                }
+            }
         }
-        Err(anyhow!("{}", message))
-    } else {
-        Ok(())
+        Err(anyhow!("{}", message)).with_context(|| {
+            schema_context(
+                "Applying directory entries",
+                schema,
+                path.absolute(),
+                remaining,
+                stack,
+            )
+        })?;
     }
+    Ok(())
 }
 
 #[must_use]
@@ -139,7 +177,51 @@ enum Resolution {
     Unresolved(Utf8PathBuf),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Source {
+    Disk,
+    Path,
+    Schema,
+}
+
+impl Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Source::Disk => write!(f, "on disk"),
+            Source::Path => write!(f, "the target path"),
+            Source::Schema => write!(f, "the schema"),
+        }
+    }
+}
+
+fn schema_context(
+    message: &str,
+    schema: &SchemaNode,
+    path: &Utf8Path,
+    remaining: &Utf8Path,
+    stack: Option<&Stack>,
+) -> anyhow::Error {
+    match stack {
+        Some(stack) => anyhow!(
+            "{}\n  To path: \"{}\" (\"{}\" remaining)\n  {}\n{}",
+            message,
+            path,
+            remaining,
+            schema,
+            stack,
+        ),
+        None => anyhow!(
+            "{}\n  To path: \"{}\" (\"{}\" remaining)\n  {}",
+            message,
+            path,
+            remaining,
+            schema,
+        ),
+    }
+}
+
 fn traverse_directory<'a, 's, 't, FS>(
+    schema: &SchemaNode<'_>,
     directory_schema: &DirectorySchema<'_>,
     directory_path: &SplitPath,
     remaining: &Utf8Path,
@@ -164,22 +246,23 @@ where
             (Some(remaining.as_str()), Utf8Path::new(""))
         });
 
-    // Collect a set of names of
+    // Collect an unordered map of names-to-empty-values for...
     //  - what's on disk
     //  - the next component of our intended path (sought)
     //  - any static bindings
     //  - any variable bindings for which we have a value from the stack
-    let mut names: HashMap<Cow<str>, Option<_>> = HashMap::new();
-    let from_key = |key| (key, None);
+    //
+    let mut names: HashMap<Cow<str>, (Source, Option<_>)> = HashMap::new();
+    let with_source = |src: Source| move |key| (key, (src, None));
     names.extend(
         filesystem
             .list_directory(directory_path.absolute())
             .unwrap_or_default()
             .into_iter()
             .map(Cow::Owned)
-            .map(from_key),
+            .map(with_source(Source::Disk)),
     );
-    names.extend(sought.map(Cow::Borrowed).map(from_key));
+    names.extend(sought.map(Cow::Borrowed).map(with_source(Source::Path)));
     names.extend(
         directory_schema
             .entries()
@@ -190,12 +273,14 @@ where
                     .ok() // Ignore errors here (assume we don't have the variable in scope)
                     .map(Cow::Owned),
             })
-            .map(from_key),
+            .map(with_source(Source::Schema)),
     );
 
     log::trace!("Within {}...", directory_path);
 
-    // Use these to build unique mappings, and error if not unique
+    // Traverse the directory schema's sub-entries (static first, then variable), updating the
+    // map of names so each matched name points to its binding and schema node.
+    //
     for (binding, child_node) in directory_schema.entries() {
         // Note: Since we don't know the name of the thing we're matching yet, any path
         // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
@@ -207,14 +292,19 @@ where
             directory_path,
         )?;
 
-        for (name, have_match) in names.iter_mut() {
+        // Match this static/variable binding and schema against all names, flagging any conflicts
+        // with previously matched names. Since static bindings are ordered first, and static-
+        // then-variable conflicts explicitly ignored
+        for (name, (_, have_match)) in names.iter_mut() {
             match binding {
                 // Static binding produces a match for that name only
                 Binding::Static(bound_name) if bound_name == name => match have_match {
+                    // Didn't already have a match for this name
                     None => {
                         *have_match = Some((binding, child_node));
                         Ok(())
                     }
+                    // Somehow already had a match. This should be impossible
                     Some((bound, _)) => Err(anyhow!(
                         r#""{}" matches multiple static bindings "{}" and "{}""#,
                         name,
@@ -225,10 +315,12 @@ where
                 // Dynamic bindings must match their inner schema pattern
                 Binding::Dynamic(_) if pattern.matches(name) => {
                     match have_match {
+                        // Didn't already have a match for this name
                         None => {
                             *have_match = Some((binding, child_node));
                             Ok(())
                         }
+                        // Name and schema pattern matched. See if we had a conflicting match
                         Some((bound, _)) => match bound {
                             Binding::Static(_) => Ok(()), // Keep previous static binding
                             Binding::Dynamic(_) => Err(anyhow!(
@@ -247,15 +339,22 @@ where
     }
 
     // Report
-    for (name, have_match) in names.iter() {
+    for (name, (source, have_match)) in names.iter() {
         match have_match {
-            None => log::trace!(r#""{}" has no match"#, name),
+            None => log::warn!(
+                r#""{}" from {} has no match in "{}" under {}"#,
+                name,
+                source,
+                directory_path,
+                schema
+            ),
             Some((Binding::Static(_), _)) => {
-                log::trace!(r#""{}" matches same, binding static"#, name)
+                log::trace!(r#""{}" from {} matches same, binding static"#, name, source)
             }
             Some((Binding::Dynamic(id), node)) => log::trace!(
-                r#""{}" matches {:?}, binding to variable ${{{}}}"#,
+                r#""{}" from {} matches {:?}, binding to variable ${{{}}}"#,
                 name,
+                source,
                 node.match_pattern,
                 id.value()
             ),
@@ -265,7 +364,7 @@ where
     // Consider nothing to seek as if it were found
     let mut sought_matched = sought.is_none();
 
-    for (name, matched) in names {
+    for (name, (_, matched)) in names {
         let Some((binding, child_schema)) = matched else { continue };
         let name = name.as_ref();
         let child_path = directory_path.join(name);
@@ -297,7 +396,7 @@ where
                     Some(&stack),
                     filesystem,
                 )
-                .with_context(|| format!("Failed while trying to process path {}", &child_path))?;
+                .with_context(|| format!("Processing path {}", &child_path))?;
             }
             Binding::Dynamic(var) => {
                 log::debug!(
@@ -318,7 +417,7 @@ where
                 )
                 .with_context(|| {
                     format!(
-                        r#"Failed while trying to process path {} (with {})"#,
+                        r#"Processing path {} (with {})"#,
                         &child_path,
                         &stack
                             .scope()

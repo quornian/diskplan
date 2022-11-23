@@ -71,34 +71,28 @@ pub fn find_definition<'a>(
 
 impl Display for Stack<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn recurse(stack: &Stack, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            if let Some(parent) = stack.parent {
-                recurse(parent, f)?;
-            }
-            match &stack.scope {
-                Scope::Directory(directory_schema) => {
-                    write!(f, "\n[Directory]",)?;
-                    let mut no_vars = true;
-                    for (ident, expr) in directory_schema.vars() {
-                        no_vars = false;
-                        write!(f, "\n${{{ident}}}=\"{value}\"", ident = ident, value = expr,)?;
-                    }
-                    if no_vars {
-                        write!(f, "\n(no variables)",)?;
-                    }
+        match &self.scope {
+            Scope::Directory(directory_schema) => {
+                write!(f, "Directory scope:",)?;
+                let mut no_vars = true;
+                for (ident, expr) in directory_schema.vars() {
+                    no_vars = false;
+                    write!(f, "\n  ${ident} = \"{value}\"", ident = ident, value = expr,)?;
                 }
-                Scope::Binding(ident, value) => {
-                    write!(f, "\n[Binding]")?;
-                    write!(
-                        f,
-                        "\n${{{ident}}}=\"{value}\"",
-                        ident = ident,
-                        value = value,
-                    )?;
+                if no_vars {
+                    write!(f, "\n  (no variables)",)?;
                 }
             }
-            write!(f, "")
+            Scope::Binding(ident, value) => {
+                write!(f, "Schema binding:")?;
+                write!(
+                    f,
+                    "\n  ${ident} = \"{value}\"",
+                    ident = ident,
+                    value = value,
+                )?;
+            }
         }
-        recurse(self, f)
+        Ok(())
     }
 }
