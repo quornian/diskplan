@@ -26,15 +26,14 @@ mod eval;
 mod pattern;
 mod stack;
 
-pub fn traverse<'a, 's, 't, FS>(
+pub fn traverse<'a, 'b, FS>(
     path: impl AsRef<Utf8Path>,
-    config: &'s Config<'t>,
-    stack: Option<&'a Stack<'a>>,
+    config: &'a Config<'a>,
+    stack: Option<&'b Stack<'b>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
-    's: 't,
 {
     let path = path.as_ref();
     if !path.is_absolute() {
@@ -93,17 +92,16 @@ where
     Ok(())
 }
 
-fn traverse_node<'a, 's, 't, FS>(
+fn traverse_node<'a, 'b, FS>(
     schema: &SchemaNode<'_>,
     path: &SplitPath,
     remaining: &Utf8Path,
-    config: &'s Config<'t>,
-    stack: Option<&'a Stack<'a>>,
+    config: &'a Config<'a>,
+    stack: Option<&'b Stack<'b>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
-    's: 't,
 {
     let mut unresolved = if remaining == "" { None } else { Some(vec![]) };
     for schema in expand_uses(schema, stack)? {
@@ -220,18 +218,17 @@ fn schema_context(
     }
 }
 
-fn traverse_directory<'a, 's, 't, FS>(
+fn traverse_directory<'a, 'b, FS>(
     schema: &SchemaNode<'_>,
     directory_schema: &DirectorySchema<'_>,
     directory_path: &SplitPath,
     remaining: &Utf8Path,
-    config: &'s Config<'t>,
-    stack: Option<&'a Stack<'a>>,
+    config: &'a Config<'a>,
+    stack: Option<&'b Stack<'b>>,
     filesystem: &mut FS,
 ) -> Result<Resolution>
 where
     FS: Filesystem,
-    's: 't,
 {
     let stack = Stack::new(stack, Scope::Directory(directory_schema));
 
@@ -437,16 +434,15 @@ where
     }
 }
 
-fn create<'a, 's, 't, FS>(
+fn create<'a, 'b, FS>(
     schema: &SchemaNode,
     path: &SplitPath,
-    config: &'s Config<'t>,
-    stack: Option<&'a Stack<'a>>,
+    config: &'a Config<'a>,
+    stack: Option<&'b Stack<'b>>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
-    's: 't,
 {
     let evaluated_owner;
     let owner = match &schema.attributes.owner {
@@ -543,8 +539,8 @@ where
     Ok(())
 }
 
-fn expand_uses<'a, 't>(
-    node: &'a SchemaNode<'t>,
+fn expand_uses<'a>(
+    node: &'a SchemaNode<'a>,
     stack: Option<&'a Stack>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
     // Expand `node` to itself and any `:use`s within
