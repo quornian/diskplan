@@ -68,27 +68,6 @@ where
             stack,
         )
     })?;
-    // TODO: Figure out how to detect consumption of remaining_path and what still remains after
-    // traversal. Use this to create a better error message about how to extend the schema to cover
-    // these cases. Or failing that, make continued directory creation allowable.
-    if !filesystem.exists(path) {
-        if let Some(stack) = stack {
-            bail!(
-                r#"{} rooted at "{}" failed to produce target path "{}" with stack: {}"#,
-                schema,
-                root.path(),
-                path,
-                stack,
-            )
-        } else {
-            bail!(
-                r#"{} rooted at "{}" failed to produce target path "{}" with empty stack"#,
-                schema,
-                root.path(),
-                path,
-            )
-        };
-    }
     Ok(())
 }
 
