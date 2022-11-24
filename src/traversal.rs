@@ -346,7 +346,6 @@ where
         // traversing that path. If it is not, we're no longer completing the target path
         // in this branch ("remaining" is cleared for further traversal)
         let remaining = if sought == Some(name) {
-            // log::warn!("Match: {}/{}", directory_path, name);
             sought_matched = true;
             remaining
         } else {
@@ -458,9 +457,7 @@ where
             return Err(anyhow!("Relative paths in symlinks are not yet supported"));
         }
 
-        // TODO: Maybe we just need to get the root here
-        let stem = config.schema_for(link_path)?;
-        let (link_schema, link_root) = stem.ok_or_else(|| {
+        let (_, link_root) = config.schema_for(link_path)?.ok_or_else(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
                 path,
