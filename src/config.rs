@@ -32,6 +32,9 @@ pub struct Args {
 
     #[arg(long, value_parser = parse_name_map)]
     groupmap: Option<NameMap>,
+
+    #[arg(long, value_parser = parse_name_map)]
+    vars: Option<NameMap>,
 }
 
 fn parse_name_map(value: &str) -> Result<NameMap> {
@@ -45,6 +48,7 @@ pub struct Config<'t> {
 
     user_map: Option<NameMap>,
     group_map: Option<NameMap>,
+    vars: Option<NameMap>,
 }
 
 #[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
@@ -93,6 +97,7 @@ impl<'t> Config<'t> {
             stems,
             user_map: args.usermap.clone(),
             group_map: args.groupmap.clone(),
+            vars: args.vars.clone(),
         })
     }
 
@@ -136,6 +141,10 @@ impl<'t> Config<'t> {
             None => name,
         }
     }
+
+    pub fn vars(&self) -> Option<&NameMap> {
+        self.vars.as_ref()
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -144,6 +153,12 @@ pub struct NameMap(HashMap<String, String>);
 impl NameMap {
     pub fn map<'a>(&'a self, name: &'a str) -> &'a str {
         self.0.get(name).map(|s| s.deref()).unwrap_or(name)
+    }
+}
+
+impl From<NameMap> for HashMap<String, String> {
+    fn from(map: NameMap) -> Self {
+        map.0
     }
 }
 

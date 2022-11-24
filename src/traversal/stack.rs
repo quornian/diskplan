@@ -1,4 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+};
 
 use crate::schema::{DirectorySchema, Identifier, SchemaNode};
 
@@ -25,6 +28,19 @@ impl<'a> Stack<'a> {
 pub enum Scope<'a> {
     Directory(&'a DirectorySchema<'a>),
     Binding(&'a Identifier<'a>, String),
+    Map(HashMap<String, String>),
+}
+
+impl From<HashMap<String, String>> for Scope<'_> {
+    fn from(map: HashMap<String, String>) -> Self {
+        Scope::Map(map)
+    }
+}
+
+impl From<HashMap<String, String>> for Stack<'_> {
+    fn from(map: HashMap<String, String>) -> Self {
+        Stack::new(None, Scope::Map(map))
+    }
 }
 
 impl<'a> Scope<'a> {
@@ -47,6 +63,7 @@ pub fn lookup<'a>(var: &Identifier<'a>, stack: Option<&'a Stack>) -> Option<Valu
                     None
                 }
             }
+            Scope::Map(map) => map.get(var.value()).map(|s| Value::String(s.as_str())),
         }
         .or_else(|| lookup(var, *parent))
     } else {
@@ -77,7 +94,7 @@ impl Display for Stack<'_> {
                 let mut no_vars = true;
                 for (ident, expr) in directory_schema.vars() {
                     no_vars = false;
-                    write!(f, "\n  ${ident} = \"{value}\"", ident = ident, value = expr,)?;
+                    write!(f, "\n  ${ident} = \"{expr}\"")?;
                 }
                 if no_vars {
                     write!(f, "\n  (no variables)",)?;
@@ -85,12 +102,13 @@ impl Display for Stack<'_> {
             }
             Scope::Binding(ident, value) => {
                 write!(f, "Schema binding:")?;
-                write!(
-                    f,
-                    "\n  ${ident} = \"{value}\"",
-                    ident = ident,
-                    value = value,
-                )?;
+                write!(f, "\n  ${ident} = \"{value}\"",)?;
+            }
+            Scope::Map(map) => {
+                write!(f, "Variable map:")?;
+                for (key, value) in map.iter() {
+                    write!(f, "\n  ${key} = \"{value}\"")?;
+                }
             }
         }
         Ok(())

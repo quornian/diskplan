@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use clap::Parser;
@@ -5,7 +7,7 @@ use clap::Parser;
 use diskplan::{
     config::{Args, Config},
     filesystem::{self, Filesystem},
-    traversal,
+    traversal::{self, Stack},
 };
 
 fn init_logger(args: &Args) {
@@ -33,9 +35,13 @@ fn main() -> Result<()> {
     log::debug!("Target: {}", target);
     log::debug!("Apply: {}", apply);
 
+    // TODO: Improve this mess
+    let vars: Option<HashMap<_, _>> = config.vars().map(|vars| vars.clone().into());
+    let stack: Option<Stack> = vars.map(|vars| vars.into());
+
     if apply {
         let mut fs = filesystem::DiskFilesystem::new();
-        traversal::traverse(target, &config, None, &mut fs)?;
+        traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
     } else {
         let mut fs = filesystem::MemoryFilesystem::new();
         for root in config.stem_roots() {
@@ -43,7 +49,7 @@ fn main() -> Result<()> {
         }
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
-        traversal::traverse(target, &config, None, &mut fs)?;
+        traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
         print_tree("/", &fs, 0)?;
     }
     Ok(())

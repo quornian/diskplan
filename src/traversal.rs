@@ -16,15 +16,12 @@ use crate::{
     schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
-use self::{
-    eval::evaluate,
-    pattern::CompiledPattern,
-    stack::{Scope, Stack},
-};
+use self::{eval::evaluate, pattern::CompiledPattern, stack::Scope};
 
 mod eval;
 mod pattern;
 mod stack;
+pub use stack::Stack;
 
 pub fn traverse<'a, 'b, FS>(
     path: impl AsRef<Utf8Path>,
