@@ -1,6 +1,3 @@
 /target/
 /old/
-/*.md
-/*.txt
-/example_schemas/
 /.vscode/

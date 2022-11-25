@@ -1,0 +1,17 @@
+# Root directory configuration
+# ...
+:let emptyfile = /dev/null
+
+# Sub-directory
+sub-directory/
+    
+    # Variable directory...
+    $variable/
+        # ...whose name must match this pattern:
+        :match [A-Z][a-z]*
+
+        inner-directory/
+
+    # An empty file
+    blank_file
+        :source ${emptyfile}

@@ -43,6 +43,7 @@ fn main() -> Result<()> {
         let mut fs = filesystem::DiskFilesystem::new();
         traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
     } else {
+        log::warn!("Simulating in memory only, use --apply to apply to disk");
         let mut fs = filesystem::MemoryFilesystem::new();
         for root in config.stem_roots() {
             fs.create_directory_all(root.path(), Default::default())?;
@@ -50,7 +51,11 @@ fn main() -> Result<()> {
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
         traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
-        print_tree("/", &fs, 0)?;
+        log::warn!("Displaying in-memory filesystem...");
+        for root in config.stem_roots() {
+            println!("\n[Root: {}]", root.path());
+            print_tree(root.path(), &fs, 0)?;
+        }
     }
     Ok(())
 }
@@ -70,7 +75,7 @@ where
         owner = attrs.owner,
         group = attrs.group,
         indent = depth * 2,
-        name = name,
+        name = if depth == 0 { path.as_str() } else { name },
         symbol = if dir { "/" } else { "" }
     );
     if let Ok(target) = fs.read_link(path) {
