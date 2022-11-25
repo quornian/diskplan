@@ -224,6 +224,7 @@ where
     //  - the next component of our intended path (sought)
     //  - any static bindings
     //  - any variable bindings for which we have a value from the stack
+    //    and whose value matches the node's match pattern
     //
     let mut names: HashMap<Cow<str>, (Source, Option<_>)> = HashMap::new();
     let with_source = |src: Source| move |key| (key, (src, None));
@@ -236,35 +237,40 @@ where
             .map(with_source(Source::Disk)),
     );
     names.extend(sought.map(Cow::Borrowed).map(with_source(Source::Path)));
-    names.extend(
-        directory_schema
-            .entries()
-            .iter()
-            .filter_map(|(binding, _)| match *binding {
-                Binding::Static(name) => Some(Cow::Borrowed(name)),
-                Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), directory_path)
-                    .ok() // Ignore errors here (assume we don't have the variable in scope)
-                    .map(Cow::Owned),
-            })
-            .map(with_source(Source::Schema)),
-    );
+    let mut compiled_schema_entries = Vec::with_capacity(directory_schema.entries().len());
+    for (binding, node) in directory_schema.entries() {
+        // TODO: Only compile for Binding::Dynamic
+
+        // Note: Since we don't know the name of the thing we're matching yet, any path
+        // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
+        // using the parent directory
+        let pattern = CompiledPattern::compile(
+            node.match_pattern.as_ref(),
+            node.avoid_pattern.as_ref(),
+            Some(&stack),
+            directory_path,
+        )?;
+
+        // Include names for all static bindings and dynamic bindings whose variable evaluates
+        // (has a value on the stack) and where that value matches the child schema's pattern
+        if let Some(name) = match *binding {
+            Binding::Static(name) => Some(Cow::Borrowed(name)),
+            Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), directory_path)
+                .ok()
+                .filter(|name| pattern.matches(name))
+                .map(Cow::Owned),
+        } {
+            names.insert(name, (Source::Schema, None));
+        }
+        compiled_schema_entries.push((binding, node, pattern));
+    }
 
     log::trace!("Within {}...", directory_path);
 
     // Traverse the directory schema's sub-entries (static first, then variable), updating the
     // map of names so each matched name points to its binding and schema node.
     //
-    for (binding, child_node) in directory_schema.entries() {
-        // Note: Since we don't know the name of the thing we're matching yet, any path
-        // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
-        // using the parent directory
-        let pattern = CompiledPattern::compile(
-            child_node.match_pattern.as_ref(),
-            child_node.avoid_pattern.as_ref(),
-            Some(&stack),
-            directory_path,
-        )?;
-
+    for (binding, child_node, pattern) in compiled_schema_entries {
         // Match this static/variable binding and schema against all names, flagging any conflicts
         // with previously matched names. Since static bindings are ordered first, and static-
         // then-variable conflicts explicitly ignored
