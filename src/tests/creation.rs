@@ -79,3 +79,22 @@ fn test_create_symlink() -> Result<()> {
                 "/primary/subdirlink" -> "/secondary/subdirlink"
     }
 }
+
+#[test]
+fn test_create_relative_symlink() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            versions/
+                1.0/
+                1.0.1/ -> 1.0
+            "
+        under: "/"
+        onto: "/"
+        yields:
+            directories:
+                "/versions"
+                "/versions/1.0"
+            symlinks:
+                "/versions/1.0.1" -> "1.0"
+    }
+}

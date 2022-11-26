@@ -458,9 +458,27 @@ where
         link_path = Utf8Path::new(&link_str);
         log::info!("Creating {} -> {}", path, link_path);
 
-        // TODO: Support relative pathed symlinks
+        // Allow relative symlinks only if there is no schema to apply to the target (allowing us
+        // to create it and return early)
         if !link_path.is_absolute() {
-            return Err(anyhow!("Relative paths in symlinks are not yet supported"));
+            if schema.attributes.is_empty()
+                && schema.uses.is_empty()
+                && schema
+                    .schema
+                    .as_directory()
+                    .map(|d| d.entries().is_empty())
+                    .unwrap_or_default()
+            {
+                filesystem
+                    .create_symlink(path.absolute(), link_path)
+                    .context("As symlink")?;
+                return Ok(());
+            } else {
+                return Err(anyhow!(concat!(
+                    "Relative paths in symlinks are only supported for directories whose schema ",
+                    "nodes have no attributes, use statements, or child entries"
+                )));
+            }
         }
 
         let (_, link_root) = config.schema_for(link_path)?.ok_or_else(|| {
@@ -479,7 +497,6 @@ where
             assert!(filesystem.exists(link_target.absolute()));
         }
         // Create the symlink pointing to its target before (forming the target itself)
-        // TODO: Consider if symlinks could be allowed to be relative
         filesystem
             .create_symlink(path.absolute(), link_target.absolute())
             .context("As symlink")?;
