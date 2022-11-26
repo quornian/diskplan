@@ -1,0 +1,3 @@
+[profiles.example]
+root = "/tmp/diskplan-root"
+schema = "examples/simple-schema.diskplan"
