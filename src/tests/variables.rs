@@ -169,3 +169,25 @@ fn variable_will_not_match_other() -> Result<()> {
             // Doesn't create /aaa/OTHER
     )
 }
+
+#[test]
+fn repeat_variable_binding() -> Result<()> {
+    assert_effect_of!(
+        applying: "
+            :let variable = aaa
+            
+            $variable/
+                :match a+
+                VAR_A/
+            $variable/
+                :match b+
+                VAR_B/
+            "
+        under: "/"
+        onto: "/"
+        yields:
+            directories:
+                "/aaa"
+                "/aaa/VAR_A"
+    )
+}

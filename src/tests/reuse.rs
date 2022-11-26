@@ -65,3 +65,24 @@ fn test_def_use_multiple() -> Result<()> {
                 "/inner/sub_c"
     }
 }
+
+#[test]
+fn test_use_owner() -> Result<()> {
+    // Note: these rely on the user and group existing on the system. If user "sync" or group
+    // "games" do not exist, change appropriately
+    assert_effect_of! {
+        applying: "
+            :def definition/
+                :owner sync
+                :group games
+            
+            usage/
+                :use definition
+            "
+        under: "/"
+        onto: "/"
+        yields:
+            directories:
+                "/usage" [owner = "sync" group = "games"]
+    }
+}
