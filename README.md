@@ -53,3 +53,7 @@ variable assignment:
 $ diskplan /tmp/diskplan-root/sub-directory/Example
 $ diskplan /tmp/diskplan-root --vars 'variable:Example'
 ```
+
+## Credits
+- Ian Thompson (quornian)
+- John van Leeuwen (fuglaro)
