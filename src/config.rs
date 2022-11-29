@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::schema::{Root, SchemaCache, SchemaNode};
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = include_str!("../icon.txt"))]
+#[command(author, version, about, long_about = None)]
 pub struct Args {
     /// The directory to produce. This must be absolute and begin with one of the configured roots
     pub target: Utf8PathBuf,
