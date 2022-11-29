@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use nix::unistd;
 use users::{Groups, Users, UsersCache};
 
 use super::{
@@ -15,6 +16,9 @@ use super::{
 pub struct MemoryFilesystem {
     map: HashMap<Utf8PathBuf, Node>,
     users: UsersCache,
+
+    uid: u32,
+    gid: u32,
 }
 
 #[derive(Debug)]
@@ -57,8 +61,12 @@ impl MemoryFilesystem {
                 children: vec![],
             },
         );
-        let users = UsersCache::new();
-        MemoryFilesystem { map, users }
+        MemoryFilesystem {
+            map,
+            users: UsersCache::new(),
+            uid: unistd::getuid().as_raw(),
+            gid: unistd::getgid().as_raw(),
+        }
     }
 
     pub fn to_path_set(&self) -> HashSet<&Utf8Path> {
@@ -235,7 +243,7 @@ impl MemoryFilesystem {
                 .get_user_by_name(owner)
                 .ok_or_else(|| anyhow!("No such user: {}", owner))?
                 .uid(),
-            None => Self::DEFAULT_OWNER,
+            None => self.uid,
         };
         let gid = match attrs.group {
             Some(group) => self
@@ -243,7 +251,7 @@ impl MemoryFilesystem {
                 .get_group_by_name(group)
                 .ok_or_else(|| anyhow!("No such group: {}", group))?
                 .gid(),
-            None => Self::DEFAULT_GROUP,
+            None => self.gid,
         };
         let mode = attrs.mode.unwrap_or(default_mode).into();
         Ok(FSAttrs { uid, gid, mode })

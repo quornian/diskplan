@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fs, io::Write, os::unix::fs::PermissionsExt};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::{
     sys::stat,
@@ -153,7 +153,9 @@ impl DiskFilesystem {
         };
         let mode = PermissionsExt::from_mode(attrs.mode.unwrap_or(default_mode).into());
 
-        nix::unistd::chown(path.as_ref().as_std_path(), uid, gid)?;
+        log::trace!("chown {:?} {:?}:{:?}", path.as_ref(), uid, gid);
+        nix::unistd::chown(path.as_ref().as_std_path(), uid, gid)
+            .with_context(|| format!("Changing ownership of {:?}", path.as_ref()))?;
         fs::set_permissions(path.as_ref(), mode)?;
         Ok(())
     }
