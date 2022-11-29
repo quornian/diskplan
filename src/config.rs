@@ -1,6 +1,10 @@
 //! Configuration for the system
 //!
-use std::{collections::HashMap, fmt::Debug, ops::Deref};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Write as _},
+    ops::Deref,
+};
 
 use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -118,10 +122,7 @@ impl<'t> Config<'t> {
         self.stems.roots()
     }
 
-    pub fn schema_for<'s, 'p>(
-        &'s self,
-        path: &'p Utf8Path,
-    ) -> Result<Option<(&SchemaNode<'t>, &Root)>>
+    pub fn schema_for<'s, 'p>(&'s self, path: &'p Utf8Path) -> Result<(&SchemaNode<'t>, &Root)>
     where
         's: 't,
     {
@@ -218,10 +219,7 @@ impl<'t> Stems<'t> {
         self.path_map.keys()
     }
 
-    pub fn schema_for<'s, 'p>(
-        &'s self,
-        path: &'p Utf8Path,
-    ) -> Result<Option<(&SchemaNode<'t>, &Root)>>
+    pub fn schema_for<'s, 'p>(&'s self, path: &'p Utf8Path) -> Result<(&SchemaNode<'t>, &Root)>
     where
         's: 't,
     {
@@ -239,7 +237,7 @@ impl<'t> Stems<'t> {
             }
         }
 
-        Ok(if let Some((root, schema_path)) = longest_candidate {
+        if let Some((root, schema_path)) = longest_candidate {
             log::trace!(
                 r#"Schema for path "{}", found root "{}", schema "{}""#,
                 path,
@@ -254,9 +252,17 @@ impl<'t> Stems<'t> {
                     path
                 )
             })?;
-            return Ok(Some((schema, root)));
+            Ok((schema, root))
         } else {
-            None
-        })
+            let mut roots = String::new();
+            for root in self.roots() {
+                write!(roots, "\n - {}", root.path())?;
+            }
+            Err(anyhow!(
+                "No root/schema for path {}\nConfigured roots:{}",
+                path,
+                roots
+            ))
+        }
     }
 }

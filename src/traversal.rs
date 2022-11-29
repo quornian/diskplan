@@ -36,9 +36,7 @@ where
     if !path.is_absolute() {
         bail!("Path must be absolute: {}", path);
     }
-    let (schema, root) = config
-        .schema_for(path)?
-        .ok_or_else(|| anyhow!("Config has no root/schema for path {}", path))?;
+    let (schema, root) = config.schema_for(path)?;
     let start_path = SplitPath::new(root, None)?;
     let remaining_path = path
         .strip_prefix(root.path())
@@ -219,7 +217,7 @@ where
             (Some(remaining.as_str()), Utf8Path::new(""))
         });
 
-    // Collect an unordered map of names-to-empty-values for...
+    // Collect an unordered map of names (each mapped to None) for...
     //  - what's on disk
     //  - the next component of our intended path (sought)
     //  - any static bindings
@@ -481,7 +479,7 @@ where
             }
         }
 
-        let (_, link_root) = config.schema_for(link_path)?.ok_or_else(|| {
+        let (_, link_root) = config.schema_for(link_path).with_context(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
                 path,
