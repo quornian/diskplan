@@ -81,7 +81,3 @@ drwxr-xr-x root       root           Example/
 drwxr-xr-x root       root             inner-directory/
 -rw-r--r-- root       root           blank_file
 ```
-
-## Credits
-- Ian Thompson (quornian)
-- John van Leeuwen (fuglaro)
