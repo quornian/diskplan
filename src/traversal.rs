@@ -16,12 +16,12 @@ use crate::{
     schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
-use self::{eval::evaluate, pattern::CompiledPattern, stack::Scope};
+use self::{eval::evaluate, pattern::CompiledPattern};
 
 mod eval;
 mod pattern;
 mod stack;
-pub use stack::Stack;
+pub use stack::{Frame, Stack};
 
 pub fn traverse<'a, 'b, FS>(
     path: impl AsRef<Utf8Path>,
@@ -204,7 +204,7 @@ fn traverse_directory<'a, 'b, FS>(
 where
     FS: Filesystem,
 {
-    let stack = Stack::new(stack, Scope::Directory(directory_schema));
+    let stack = Stack::new(stack, Frame::Directory(directory_schema));
 
     // Pull the front off the relative remaining_path
     let (sought, remaining) = remaining
@@ -382,7 +382,7 @@ where
                     &child_path,
                     remaining,
                 );
-                let stack = Stack::new(Some(&stack), Scope::Binding(var, name.into()));
+                let stack = Stack::new(Some(&stack), Frame::Binding(var, name.into()));
                 traverse_node(
                     child_schema,
                     &child_path,
@@ -396,7 +396,7 @@ where
                         r#"Processing path {} (with {})"#,
                         &child_path,
                         &stack
-                            .scope()
+                            .frame()
                             .as_binding()
                             .map(|(var, value)| format!("${} = {}", var, value))
                             .unwrap_or_else(|| "<no binding>".into()),
@@ -540,12 +540,12 @@ fn expand_uses<'a>(
     // Expand `node` to itself and any `:use`s within
     let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
     use_schemas.push(node);
-    // Include node itself and its :defs in the scope
+    // Include node itself and its :defs in the stack frame
     let stack: Option<Stack> = match node {
         SchemaNode {
             schema: SchemaType::Directory(d),
             ..
-        } => Some(Stack::new(stack, Scope::Directory(d))),
+        } => Some(Stack::new(stack, Frame::Directory(d))),
         _ => None,
     };
     for used in &node.uses {
