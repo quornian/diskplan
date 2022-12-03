@@ -130,12 +130,18 @@ fn normalize(path: &Utf8Path) -> Cow<'_, Utf8Path> {
     path
 }
 
-pub struct SplitPath {
+/// An absolute path that can be split easily into its Root and relative path parts
+pub struct PlantedPath {
     root_len: usize,
     full: Utf8PathBuf,
 }
 
-impl SplitPath {
+impl PlantedPath {
+    /// Creates a planted path from a given root and optional full path
+    ///
+    /// If no path is given the root's path will be used. If a given path is not prefixed with
+    /// the root's path, an error is returned.
+    ///
     pub fn new(root: &Root, path: Option<&Utf8Path>) -> Result<Self> {
         let path = match path {
             Some(path) => {
@@ -146,36 +152,46 @@ impl SplitPath {
             }
             None => root.path(),
         };
-        Ok(SplitPath {
+        Ok(PlantedPath {
             root_len: root.path().as_str().len(),
             full: path.to_owned(),
         })
     }
 
+    /// The absolute path of the root part of this planted path
     pub fn root(&self) -> &Utf8Path {
         self.full.as_str()[..self.root_len].into()
     }
 
+    /// The full, absolute path
     pub fn absolute(&self) -> &Utf8Path {
         &self.full
     }
 
+    /// The path relative to the root
     pub fn relative(&self) -> &Utf8Path {
         self.full.as_str()[self.root_len..]
             .trim_start_matches('/')
             .into()
     }
 
-    pub fn join(&self, path: impl AsRef<Utf8Path>) -> Self {
+    /// Produces a new planted path with the given path part appended
+    pub fn join(&self, path: impl AsRef<Utf8Path>) -> Result<Self> {
         let path = normalize(path.as_ref());
-        SplitPath {
+        if path.is_absolute() {
+            bail!(
+                "Absolute paths cannot be joined to a planted path: {}",
+                path
+            );
+        }
+        Ok(PlantedPath {
             root_len: self.root_len,
             full: self.full.join(&path),
-        }
+        })
     }
 }
 
-impl Display for SplitPath {
+impl Display for PlantedPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.full)
     }
@@ -189,7 +205,7 @@ mod tests {
 
     #[test]
     fn check_relative() {
-        let path = SplitPath::new(
+        let path = PlantedPath::new(
             &Root::try_from("/example").unwrap(),
             Some(Utf8Path::new("/example/path")),
         )

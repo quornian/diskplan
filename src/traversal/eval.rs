@@ -3,7 +3,7 @@ use std::fmt::Display;
 use anyhow::{anyhow, Result};
 
 use crate::{
-    filesystem::SplitPath,
+    filesystem::PlantedPath,
     schema::{Expression, Special, Token},
 };
 
@@ -17,7 +17,7 @@ pub enum Value<'a> {
 pub(super) fn evaluate(
     expr: &Expression<'_>,
     stack: Option<&stack::Stack>,
-    path: &SplitPath,
+    path: &PlantedPath,
 ) -> Result<String> {
     log::trace!(r#"Evaluating expression "{}""#, expr);
     let mut value = String::new();

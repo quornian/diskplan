@@ -1,7 +1,7 @@
 use anyhow::Result;
 use regex::Regex;
 
-use crate::{filesystem::SplitPath, schema::Expression};
+use crate::{filesystem::PlantedPath, schema::Expression};
 
 use super::{eval::evaluate, stack};
 
@@ -17,7 +17,7 @@ impl CompiledPattern {
         match_pattern: Option<&Expression>,
         avoid_pattern: Option<&Expression>,
         stack: Option<&stack::Stack>,
-        path: &SplitPath,
+        path: &PlantedPath,
     ) -> Result<CompiledPattern> {
         let match_pattern = match match_pattern {
             Some(expr) => Some(evaluate(expr, stack, path)?),

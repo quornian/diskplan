@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
     config::Config,
-    filesystem::{Filesystem, SetAttrs, SplitPath},
+    filesystem::{Filesystem, PlantedPath, SetAttrs},
     schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
 
@@ -37,7 +37,7 @@ where
         bail!("Path must be absolute: {}", path);
     }
     let (schema, root) = config.schema_for(path)?;
-    let start_path = SplitPath::new(root, None)?;
+    let start_path = PlantedPath::new(root, None)?;
     let remaining_path = path
         .strip_prefix(root.path())
         .expect("Located root must prefix path");
@@ -68,7 +68,7 @@ where
 
 fn traverse_node<'a, 'b, FS>(
     schema: &SchemaNode<'_>,
-    path: &SplitPath,
+    path: &PlantedPath,
     remaining: &Utf8Path,
     config: &'a Config<'a>,
     stack: Option<&'b Stack<'b>>,
@@ -195,7 +195,7 @@ fn schema_context(
 fn traverse_directory<'a, 'b, FS>(
     schema: &SchemaNode<'_>,
     directory_schema: &DirectorySchema<'_>,
-    directory_path: &SplitPath,
+    directory_path: &PlantedPath,
     remaining: &Utf8Path,
     config: &'a Config<'a>,
     stack: Option<&'b Stack<'b>>,
@@ -344,7 +344,7 @@ where
     for (name, (_, matched)) in names {
         let Some((binding, child_schema)) = matched else { continue };
         let name = name.as_ref();
-        let child_path = directory_path.join(name);
+        let child_path = directory_path.join(name)?;
 
         // If this name is part of the target path, record that we found a match and keep
         // traversing that path. If it is not, we're no longer completing the target path
@@ -415,7 +415,7 @@ where
 
 fn create<'a, 'b, FS>(
     schema: &SchemaNode,
-    path: &SplitPath,
+    path: &PlantedPath,
     config: &'a Config<'a>,
     stack: Option<&'b Stack<'b>>,
     filesystem: &mut FS,
@@ -486,7 +486,7 @@ where
                 link_path
             )
         })?;
-        link_target = SplitPath::new(link_root, Some(link_path))
+        link_target = PlantedPath::new(link_root, Some(link_path))
             .with_context(|| format!("Following symlink {} -> {}", path, link_path))?;
 
         // TODO: Think about which schema wins? Target root, or local. Or if this is a link to the local one anyway?!
