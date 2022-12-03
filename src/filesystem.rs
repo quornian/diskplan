@@ -104,7 +104,7 @@ pub trait Filesystem {
     }
 }
 
-pub fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
+fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
     // TODO: Consider join(parent, "/absolute/child")
     path.as_str().rsplit_once('/').map(|(parent, child)| {
         if parent.is_empty() {
@@ -115,12 +115,7 @@ pub fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
     })
 }
 
-pub fn is_normalized(path: impl AsRef<Utf8Path>) -> bool {
-    let path = path.as_ref().as_str();
-    !((path.ends_with('/') && path != "/") || path.contains("//") || path.contains("/./"))
-}
-
-pub fn normalize(path: &Utf8Path) -> Cow<'_, Utf8Path> {
+fn normalize(path: &Utf8Path) -> Cow<'_, Utf8Path> {
     let mut path = Cow::Borrowed(if path == "/" {
         path
     } else {

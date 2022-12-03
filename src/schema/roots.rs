@@ -2,8 +2,6 @@ use anyhow::{anyhow, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
-use crate::filesystem::is_normalized;
-
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(try_from = "Utf8PathBuf")]
 pub struct Root(Utf8PathBuf);
@@ -52,4 +50,9 @@ impl TryFrom<&str> for Root {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Utf8PathBuf::from(value).try_into()
     }
+}
+
+fn is_normalized(path: impl AsRef<Utf8Path>) -> bool {
+    let path = path.as_ref().as_str();
+    !((path.ends_with('/') && path != "/") || path.contains("//") || path.contains("/./"))
 }
