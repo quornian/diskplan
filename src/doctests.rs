@@ -6,7 +6,7 @@ use diskplan::{
     config::Config,
     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
     schema::{Root, SchemaNode},
-    traversal::traverse,
+    traversal::{traverse, StackFrame},
 };
 
 pub fn verify_trees<'s, 't>(
@@ -40,7 +40,8 @@ where
     }
 
     // Apply schema
-    traverse(target, &config, None, &mut fs)?;
+    let stack = StackFrame::stack(1.into(), 1.into(), &config, Default::default());
+    traverse(target, &stack, &mut fs)?;
 
     // Check tree matches expected output tree
     for entry in parse_tree(out_tree)? {

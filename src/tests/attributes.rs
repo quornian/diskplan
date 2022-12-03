@@ -62,8 +62,8 @@ fn test_top_level_attributes() -> Result<()> {
                     group = "sys"
                     mode = 0o640]
                 "/target/sub" [
-                    owner = "root"
-                    group = "root"
+                    // owner = "current_user"
+                    // group = "current_user"
                     mode = DEFAULT_DIRECTORY_MODE]
     }
 }

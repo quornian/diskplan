@@ -1,19 +1,18 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use clap::Parser;
+use nix::unistd;
 
 use diskplan::{
-    config::{Args, Config},
+    config::{CommandLineArgs, Config},
     filesystem::{self, Filesystem},
-    traversal::{self, Stack},
+    traversal::{self, StackFrame, VariableSource},
 };
 
-fn init_logger(args: &Args) {
+fn init_logger(verbosity: u8) {
     let env = env_logger::Env::new().filter("DISKPLAN_LOG");
     env_logger::Builder::from_env(env)
-        .filter_level(match args.verbose {
+        .filter_level(match verbosity {
             0 => log::LevelFilter::Warn,
             1 => log::LevelFilter::Info,
             2 => log::LevelFilter::Debug,
@@ -24,24 +23,38 @@ fn init_logger(args: &Args) {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
-    init_logger(&args);
+    let CommandLineArgs {
+        target,
+        config_file,
+        apply,
+        verbose,
+        usermap,
+        groupmap,
+        vars,
+    } = CommandLineArgs::parse();
 
-    let config = Config::from_args(&args)?;
+    init_logger(verbose);
 
-    let target = &args.target;
-    let apply = args.apply;
+    let mut config = Config::new(target, apply);
+    config.load(config_file)?;
 
-    log::debug!("Target: {}", target);
-    log::debug!("Apply: {}", apply);
+    if let Some(usermap) = usermap {
+        config.apply_user_map(usermap)
+    }
+    if let Some(groupmap) = groupmap {
+        config.apply_group_map(groupmap)
+    }
 
-    // TODO: Improve this mess
-    let vars: Option<HashMap<_, _>> = config.vars().map(|vars| vars.clone().into());
-    let stack: Option<Stack> = vars.map(|vars| vars.into());
+    let default_owner = unistd::getuid();
+    let default_group = unistd::getgid();
+    let variables = vars
+        .map(|vars| VariableSource::Map(vars.into()))
+        .unwrap_or_default();
+    let stack = StackFrame::stack(default_owner, default_group, &config, variables);
 
-    if apply {
+    if config.will_apply() {
         let mut fs = filesystem::DiskFilesystem::new();
-        traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
+        traversal::traverse(config.target_path(), &stack, &mut fs)?;
     } else {
         log::warn!("Simulating in memory only, use --apply to apply to disk");
         let mut fs = filesystem::MemoryFilesystem::new();
@@ -50,7 +63,7 @@ fn main() -> Result<()> {
         }
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
-        traversal::traverse(target, &config, stack.as_ref(), &mut fs)?;
+        traversal::traverse(config.target_path(), &stack, &mut fs)?;
         log::warn!("Displaying in-memory filesystem...");
         for root in config.stem_roots() {
             println!("\n[Root: {}]", root.path());

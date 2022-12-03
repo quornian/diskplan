@@ -91,7 +91,7 @@
 //!
 //! use diskplan::{config::Config, schema::Root};
 //!
-//! let mut config = Config::new();
+//! let mut config = Config::new("/local");
 //! config.add_precached_stem(Root::try_from("/local")?, "local.diskplan", local_schema);
 //! config.add_precached_stem(Root::try_from("/net/remote")?, "remote.diskplan", remote_schema);
 //!
@@ -156,7 +156,7 @@
 //! use diskplan::{
 //!     config::Config,
 //!     filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-//!     traversal::traverse,
+//!     traversal::{traverse, StackFrame},
 //!     schema::{parse_schema, Root},
 //! };
 //!
@@ -175,9 +175,11 @@
 //! // Run the traversal to apply the tree to the filesystem
 //! let root = Root::try_from("/local")?;
 //! fs.create_directory(target, SetAttrs::default());
-//! let mut config = Config::new();
+//! let mut config = Config::new(target);
 //! config.add_precached_stem(root, "schema.diskplan", schema_root);
-//! traverse(target, &config, None, &mut fs)?;
+//! // FIXME: This needs some work
+//! let stack = StackFrame::stack(1.into(), 1.into(), &config, Default::default());
+//! traverse(target, &stack, &mut fs)?;
 //!
 //! assert!(fs.is_directory("/local/directory"));
 //! #

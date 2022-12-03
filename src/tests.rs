@@ -48,11 +48,11 @@ macro_rules! assert_effect_of {
             config::Config,
             filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
             schema::{parse_schema, Root, SchemaCache},
-            traversal,
+            traversal::{self, StackFrame},
         };
         let mut fs = MemoryFilesystem::new();
         let mut expected_paths: HashSet<&Utf8Path> = HashSet::new();
-        let mut config = Config::new();
+        let mut config = Config::new($path, false);
 
         $(
         // applying:
@@ -67,6 +67,7 @@ macro_rules! assert_effect_of {
 
         // onto:
         let path = Utf8Path::new($path);
+        let stack = StackFrame::stack(1.into(), 1.into(), &config, Default::default());
 
         $(
         // with:
@@ -102,7 +103,7 @@ macro_rules! assert_effect_of {
         )?
 
         // yields:
-        traversal::traverse(path, &config, None, &mut fs)?;
+        traversal::traverse(path, &stack, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root.path()));
         $($(
