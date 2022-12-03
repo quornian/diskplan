@@ -60,7 +60,7 @@ fn traverse_node<'a, FS>(
     schema: &'a SchemaNode<'a>,
     path: &PlantedPath,
     remaining: &Utf8Path,
-    stack: &StackFrame<'_, 'a>,
+    stack: &StackFrame<'_, 'a, '_>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -169,13 +169,22 @@ fn traverse_directory<'a, FS>(
     directory_schema: &'a DirectorySchema,
     directory_path: &PlantedPath,
     remaining: &Utf8Path,
-    stack: &StackFrame<'_, 'a>,
+    stack: &StackFrame<'_, 'a, '_>,
     filesystem: &mut FS,
 ) -> Result<Resolution>
 where
     FS: Filesystem,
 {
-    let stack = stack.push(VariableSource::Directory(directory_schema));
+    let (local_owner, local_group);
+    let mut stack = stack.push(VariableSource::Directory(directory_schema));
+    if let Some(ref owner) = schema.attributes.owner {
+        local_owner = owner.to_string();
+        stack.put_owner(&local_owner);
+    }
+    if let Some(ref group) = schema.attributes.group {
+        local_group = group.to_string();
+        stack.put_group(&local_group);
+    }
 
     // Pull the front off the relative remaining_path
     let (sought, remaining) = remaining
@@ -385,7 +394,7 @@ where
             evaluated_owner = evaluate(expr, stack, path)?;
             Some(stack.config.map_user(&evaluated_owner))
         }
-        None => None,
+        None => Some(stack.inherit_owner()),
     };
     let evaluated_group;
     let group = match &schema.attributes.group {
@@ -393,12 +402,18 @@ where
             evaluated_group = evaluate(expr, stack, path)?;
             Some(stack.config.map_group(&evaluated_group))
         }
-        None => None,
+        None => Some(stack.inherit_group()),
     };
     let attrs = SetAttrs {
         owner,
         group,
-        mode: schema.attributes.mode.map(Into::into),
+        mode: Some(
+            schema
+                .attributes
+                .mode
+                .map(Into::into)
+                .unwrap_or_else(|| stack.inherit_mode()),
+        ),
     };
 
     // References held to data within by `to_create`, but only in the symlink branch
@@ -491,7 +506,7 @@ where
 
 fn expand_uses<'a>(
     node: &'a SchemaNode<'_>,
-    stack: &StackFrame<'_, 'a>,
+    stack: &StackFrame<'_, 'a, '_>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
     // Expand `node` to itself and any `:use`s within
     let mut use_schemas = Vec::with_capacity(1 + node.uses.len());

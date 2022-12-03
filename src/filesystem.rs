@@ -12,7 +12,7 @@ mod physical;
 use crate::schema::Root;
 
 pub use self::{
-    attributes::{Attrs, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},
+    attributes::{Attrs, Mode, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},
     memory::MemoryFilesystem,
     physical::DiskFilesystem,
 };

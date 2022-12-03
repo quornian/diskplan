@@ -3,48 +3,55 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use nix::unistd::{Gid, Uid};
-
 use crate::{
     config::{Config, NameMap},
+    filesystem::Mode,
     schema::{DirectorySchema, Identifier, SchemaNode},
     traversal::eval::Value,
 };
 
 /// Keeps track of variables and provides access to definitions from parent
 /// nodes
-pub struct StackFrame<'p, 'v> {
-    parent: Option<&'p StackFrame<'p, 'v>>,
+pub struct StackFrame<'p, 'v, 'l>
+where
+    'v: 'p, // The shared values pointed to live longer than the parent/whole stack
+    'p: 'l, // The local variables live within this frame, so can be shorter lived
+{
+    parent: Option<&'p StackFrame<'p, 'v, 'p>>,
+
+    /// A reference to the shared config
+    pub config: &'v Config<'v>,
 
     /// Collection of variables and values at this level of the stack
     variables: VariableSource<'v>,
 
     /// The owner (after mapping) of this level, inherited by children
-    owner: Uid,
+    owner: &'l str,
     /// The group (after mapping) of this level, inherited by children
-    group: Gid,
-
-    /// A reference to the shared config
-    pub config: &'v Config<'v>,
+    group: &'l str,
+    /// The mode of this level, inherited by children
+    mode: Mode,
 }
 
-impl<'p, 'v> StackFrame<'p, 'v> {
+impl<'p, 'v, 'l> StackFrame<'p, 'v, 'l> {
     pub fn stack(
-        owner: Uid,
-        group: Gid,
         config: &'v Config<'v>,
         variables: VariableSource<'v>,
+        owner: &'l str,
+        group: &'l str,
+        mode: Mode,
     ) -> Self {
         StackFrame {
             parent: None,
+            config,
             variables,
             owner,
             group,
-            config,
+            mode,
         }
     }
 
-    pub fn push<'s, 'r>(&'s self, variables: VariableSource<'v>) -> StackFrame<'r, 'v>
+    pub fn push<'s, 'r>(&'s self, variables: VariableSource<'v>) -> StackFrame<'r, 'v, 'r>
     where
         'v: 'r,
         's: 'r,
@@ -54,8 +61,29 @@ impl<'p, 'v> StackFrame<'p, 'v> {
             variables,
             owner: self.owner,
             group: self.group,
+            mode: self.mode,
             config: self.config,
         }
+    }
+
+    pub fn put_owner(&mut self, owner: &'l str) {
+        self.owner = owner;
+    }
+
+    pub fn put_group(&mut self, group: &'l str) {
+        self.group = group;
+    }
+
+    pub fn inherit_owner(&self) -> &'l str {
+        self.owner
+    }
+
+    pub fn inherit_group(&self) -> &'l str {
+        self.group
+    }
+
+    pub fn inherit_mode(&self) -> Mode {
+        self.mode
     }
 
     pub fn variables(&self) -> &VariableSource<'v> {
@@ -129,7 +157,7 @@ impl<'a> VariableSource<'a> {
     }
 }
 
-impl Display for StackFrame<'_, '_> {
+impl Display for StackFrame<'_, '_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.variables {
             VariableSource::Empty => {}

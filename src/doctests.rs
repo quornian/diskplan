@@ -40,7 +40,7 @@ where
     }
 
     // Apply schema
-    let stack = StackFrame::stack(1.into(), 1.into(), &config, Default::default());
+    let stack = StackFrame::stack(&config, Default::default(), "root", "root", 0o755.into());
     traverse(target, &stack, &mut fs)?;
 
     // Check tree matches expected output tree

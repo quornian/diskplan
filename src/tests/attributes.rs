@@ -62,8 +62,6 @@ fn test_top_level_attributes() -> Result<()> {
                     group = "sys"
                     mode = 0o640]
                 "/target/sub" [
-                    // owner = "current_user"
-                    // group = "current_user"
                     mode = DEFAULT_DIRECTORY_MODE]
     }
 }
@@ -108,5 +106,30 @@ fn test_changing_attributes() -> Result<()> {
             directories:
                 "/target/control" [mode = 0o555]
                 "/target/dir" [mode = 0o750]
+    }
+}
+
+#[test]
+fn test_inherited_attributes() -> Result<()> {
+    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
+    assert_effect_of! {
+        applying: "
+            :mode 640
+            :owner daemon
+            :group sys
+            sub/
+            "
+        under: "/target"
+        onto: "/target"
+        yields:
+            directories:
+                "/target" [
+                    owner = "daemon"
+                    group = "sys"
+                    mode = 0o640]
+                "/target/sub" [
+                    owner = "daemon"
+                    group = "sys"
+                    mode = DEFAULT_DIRECTORY_MODE]
     }
 }
