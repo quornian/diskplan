@@ -16,7 +16,7 @@ pub enum Value<'a> {
 
 pub(super) fn evaluate(
     expr: &Expression<'_>,
-    stack: Option<&stack::Stack>,
+    stack: &stack::StackFrame,
     path: &PlantedPath,
 ) -> Result<String> {
     log::trace!(r#"Evaluating expression "{}""#, expr);
@@ -25,7 +25,7 @@ pub(super) fn evaluate(
         match token {
             Token::Text(text) => value.push_str(text),
             Token::Variable(var) => {
-                let sub = stack::lookup(var, stack).ok_or_else(|| {
+                let sub = stack.lookup(var).ok_or_else(|| {
                     anyhow!(r#"Undefined variable "{}" in expression "{}""#, var, expr)
                 })?;
                 log::trace!(r#"Variable ${{{}}} = "{}""#, var, sub);

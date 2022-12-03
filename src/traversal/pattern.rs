@@ -16,7 +16,7 @@ impl CompiledPattern {
     pub fn compile(
         match_pattern: Option<&Expression>,
         avoid_pattern: Option<&Expression>,
-        stack: Option<&stack::Stack>,
+        stack: &stack::StackFrame,
         path: &PlantedPath,
     ) -> Result<CompiledPattern> {
         let match_pattern = match match_pattern {

@@ -11,7 +11,6 @@ use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
-    config::Config,
     filesystem::{Filesystem, PlantedPath, SetAttrs},
     schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
 };
@@ -21,12 +20,11 @@ use self::{eval::evaluate, pattern::CompiledPattern};
 mod eval;
 mod pattern;
 mod stack;
-pub use stack::{Frame, Stack};
+pub use stack::{StackFrame, VariableSource};
 
-pub fn traverse<'a, 'b, FS>(
+pub fn traverse<FS>(
     path: impl AsRef<Utf8Path>,
-    config: &'a Config<'a>,
-    stack: Option<&'b Stack<'b>>,
+    stack: &StackFrame,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -36,7 +34,7 @@ where
     if !path.is_absolute() {
         bail!("Path must be absolute: {}", path);
     }
-    let (schema, root) = config.schema_for(path)?;
+    let (schema, root) = stack.config.schema_for(path)?;
     let start_path = PlantedPath::new(root, None)?;
     let remaining_path = path
         .strip_prefix(root.path())
@@ -46,15 +44,7 @@ where
         start_path,
         remaining_path,
     );
-    traverse_node(
-        schema,
-        &start_path,
-        remaining_path,
-        config,
-        stack,
-        filesystem,
-    )
-    .with_context(|| {
+    traverse_node(schema, &start_path, remaining_path, stack, filesystem).with_context(|| {
         schema_context(
             "Failed to apply schema",
             schema,
@@ -66,12 +56,11 @@ where
     Ok(())
 }
 
-fn traverse_node<'a, 'b, FS>(
-    schema: &SchemaNode<'_>,
+fn traverse_node<'a, FS>(
+    schema: &'a SchemaNode<'a>,
     path: &PlantedPath,
     remaining: &Utf8Path,
-    config: &'a Config<'a>,
-    stack: Option<&'b Stack<'b>>,
+    stack: &StackFrame<'_, 'a>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -81,29 +70,21 @@ where
     for schema in expand_uses(schema, stack)? {
         log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
-        create(schema, path, config, stack, filesystem)
-            .with_context(|| format!("Creating {}", &path))?;
+        create(schema, path, stack, filesystem).with_context(|| format!("Creating {}", &path))?;
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
-            let resolution = traverse_directory(
-                schema,
-                directory_schema,
-                path,
-                remaining,
-                config,
-                stack,
-                filesystem,
-            )
-            .with_context(|| {
-                schema_context(
-                    "Applying directory schema",
-                    schema,
-                    path.absolute(),
-                    remaining,
-                    stack,
-                )
-            })?;
+            let resolution =
+                traverse_directory(schema, directory_schema, path, remaining, stack, filesystem)
+                    .with_context(|| {
+                        schema_context(
+                            "Applying directory schema",
+                            schema,
+                            path.absolute(),
+                            remaining,
+                            stack,
+                        )
+                    })?;
             match resolution {
                 Resolution::FullyResolved => unresolved = None,
                 Resolution::Unresolved(path) => {
@@ -171,40 +152,30 @@ fn schema_context(
     schema: &SchemaNode,
     path: &Utf8Path,
     remaining: &Utf8Path,
-    stack: Option<&Stack>,
+    stack: &StackFrame,
 ) -> anyhow::Error {
-    match stack {
-        Some(stack) => anyhow!(
-            "{}\n  To path: \"{}\" (\"{}\" remaining)\n  {}\n{}",
-            message,
-            path,
-            remaining,
-            schema,
-            stack,
-        ),
-        None => anyhow!(
-            "{}\n  To path: \"{}\" (\"{}\" remaining)\n  {}",
-            message,
-            path,
-            remaining,
-            schema,
-        ),
-    }
+    anyhow!(
+        "{}\n  To path: \"{}\" (\"{}\" remaining)\n  {}\n{}",
+        message,
+        path,
+        remaining,
+        schema,
+        stack,
+    )
 }
 
-fn traverse_directory<'a, 'b, FS>(
-    schema: &SchemaNode<'_>,
-    directory_schema: &DirectorySchema<'_>,
+fn traverse_directory<'a, FS>(
+    schema: &SchemaNode,
+    directory_schema: &'a DirectorySchema,
     directory_path: &PlantedPath,
     remaining: &Utf8Path,
-    config: &'a Config<'a>,
-    stack: Option<&'b Stack<'b>>,
+    stack: &StackFrame<'_, 'a>,
     filesystem: &mut FS,
 ) -> Result<Resolution>
 where
     FS: Filesystem,
 {
-    let stack = Stack::new(stack, Frame::Directory(directory_schema));
+    let stack = stack.push(VariableSource::Directory(directory_schema));
 
     // Pull the front off the relative remaining_path
     let (sought, remaining) = remaining
@@ -245,7 +216,7 @@ where
         let pattern = CompiledPattern::compile(
             node.match_pattern.as_ref(),
             node.avoid_pattern.as_ref(),
-            Some(&stack),
+            &stack,
             directory_path,
         )?;
 
@@ -253,7 +224,7 @@ where
         // (has a value on the stack) and where that value matches the child schema's pattern
         if let Some(name) = match *binding {
             Binding::Static(name) => Some(Cow::Borrowed(name)),
-            Binding::Dynamic(var) => evaluate(&var.into(), Some(&stack), directory_path)
+            Binding::Dynamic(var) => evaluate(&var.into(), &stack, directory_path)
                 .ok()
                 .filter(|name| pattern.matches(name))
                 .map(Cow::Owned),
@@ -364,15 +335,8 @@ where
                     &child_path,
                     remaining,
                 );
-                traverse_node(
-                    child_schema,
-                    &child_path,
-                    remaining,
-                    config,
-                    Some(&stack),
-                    filesystem,
-                )
-                .with_context(|| format!("Processing path {}", &child_path))?;
+                traverse_node(child_schema, &child_path, remaining, &stack, filesystem)
+                    .with_context(|| format!("Processing path {}", &child_path))?;
             }
             Binding::Dynamic(var) => {
                 log::debug!(
@@ -382,26 +346,19 @@ where
                     &child_path,
                     remaining,
                 );
-                let stack = Stack::new(Some(&stack), Frame::Binding(var, name.into()));
-                traverse_node(
-                    child_schema,
-                    &child_path,
-                    remaining,
-                    config,
-                    Some(&stack),
-                    filesystem,
-                )
-                .with_context(|| {
-                    format!(
-                        r#"Processing path {} (with {})"#,
-                        &child_path,
-                        &stack
-                            .frame()
-                            .as_binding()
-                            .map(|(var, value)| format!("${} = {}", var, value))
-                            .unwrap_or_else(|| "<no binding>".into()),
-                    )
-                })?;
+                let stack = StackFrame::push(&stack, VariableSource::Binding(var, name.into()));
+                traverse_node(child_schema, &child_path, remaining, &stack, filesystem)
+                    .with_context(|| {
+                        format!(
+                            r#"Processing path {} (with {})"#,
+                            &child_path,
+                            &stack
+                                .variables()
+                                .as_binding()
+                                .map(|(var, value)| format!("${} = {}", var, value))
+                                .unwrap_or_else(|| "<no binding>".into()),
+                        )
+                    })?;
             }
         }
     }
@@ -413,11 +370,10 @@ where
     }
 }
 
-fn create<'a, 'b, FS>(
+fn create<FS>(
     schema: &SchemaNode,
     path: &PlantedPath,
-    config: &'a Config<'a>,
-    stack: Option<&'b Stack<'b>>,
+    stack: &StackFrame,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -427,7 +383,7 @@ where
     let owner = match &schema.attributes.owner {
         Some(expr) => {
             evaluated_owner = evaluate(expr, stack, path)?;
-            Some(config.map_user(&evaluated_owner))
+            Some(stack.config.map_user(&evaluated_owner))
         }
         None => None,
     };
@@ -435,7 +391,7 @@ where
     let group = match &schema.attributes.group {
         Some(expr) => {
             evaluated_group = evaluate(expr, stack, path)?;
-            Some(config.map_group(&evaluated_group))
+            Some(stack.config.map_group(&evaluated_group))
         }
         None => None,
     };
@@ -479,7 +435,7 @@ where
             }
         }
 
-        let (_, link_root) = config.schema_for(link_path).with_context(|| {
+        let (_, link_root) = stack.config.schema_for(link_path).with_context(|| {
             anyhow!(
                 "No schema found for symlink target {} -> {}",
                 path,
@@ -491,7 +447,7 @@ where
 
         // TODO: Think about which schema wins? Target root, or local. Or if this is a link to the local one anyway?!
         if !filesystem.exists(link_target.absolute()) {
-            traverse(link_target.absolute(), config, stack, filesystem)?;
+            traverse(link_target.absolute(), stack, filesystem)?;
             assert!(filesystem.exists(link_target.absolute()));
         }
         // Create the symlink pointing to its target before (forming the target itself)
@@ -534,24 +490,28 @@ where
 }
 
 fn expand_uses<'a>(
-    node: &'a SchemaNode<'a>,
-    stack: Option<&'a Stack>,
+    node: &'a SchemaNode<'_>,
+    stack: &StackFrame<'_, 'a>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
     // Expand `node` to itself and any `:use`s within
     let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
     use_schemas.push(node);
     // Include node itself and its :defs in the stack frame
-    let stack: Option<Stack> = match node {
-        SchemaNode {
-            schema: SchemaType::Directory(d),
-            ..
-        } => Some(Stack::new(stack, Frame::Directory(d))),
-        _ => None,
-    };
+    let stack = StackFrame::push(
+        stack,
+        match node {
+            SchemaNode {
+                schema: SchemaType::Directory(d),
+                ..
+            } => VariableSource::Directory(d),
+            _ => VariableSource::Empty,
+        },
+    );
     for used in &node.uses {
         log::trace!("Seeking definition of '{}'", used);
         use_schemas.push(
-            stack::find_definition(used, stack.as_ref())
+            stack
+                .find_definition(used)
                 .ok_or_else(|| anyhow!("No definition (:def) found for {}", used))?,
         );
     }
