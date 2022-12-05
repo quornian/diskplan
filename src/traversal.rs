@@ -60,7 +60,7 @@ fn traverse_node<'a, FS>(
     schema: &'a SchemaNode<'a>,
     path: &PlantedPath,
     remaining: &Utf8Path,
-    stack: &StackFrame<'_, 'a, '_>,
+    stack: &StackFrame<'a, '_, '_>,
     filesystem: &mut FS,
 ) -> Result<()>
 where
@@ -169,7 +169,7 @@ fn traverse_directory<'a, FS>(
     directory_schema: &'a DirectorySchema,
     directory_path: &PlantedPath,
     remaining: &Utf8Path,
-    stack: &StackFrame<'_, 'a, '_>,
+    stack: &StackFrame<'a, '_, '_>,
     filesystem: &mut FS,
 ) -> Result<Resolution>
 where
@@ -394,7 +394,7 @@ where
             evaluated_owner = evaluate(expr, stack, path)?;
             Some(stack.config.map_user(&evaluated_owner))
         }
-        None => Some(stack.inherit_owner()),
+        None => Some(stack.owner()),
     };
     let evaluated_group;
     let group = match &schema.attributes.group {
@@ -402,7 +402,7 @@ where
             evaluated_group = evaluate(expr, stack, path)?;
             Some(stack.config.map_group(&evaluated_group))
         }
-        None => Some(stack.inherit_group()),
+        None => Some(stack.group()),
     };
     let attrs = SetAttrs {
         owner,
@@ -412,7 +412,7 @@ where
                 .attributes
                 .mode
                 .map(Into::into)
-                .unwrap_or_else(|| stack.inherit_mode()),
+                .unwrap_or_else(|| stack.mode()),
         ),
     };
 
@@ -506,22 +506,19 @@ where
 
 fn expand_uses<'a>(
     node: &'a SchemaNode<'_>,
-    stack: &StackFrame<'_, 'a, '_>,
+    stack: &StackFrame<'a, '_, '_>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
     // Expand `node` to itself and any `:use`s within
     let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
     use_schemas.push(node);
     // Include node itself and its :defs in the stack frame
-    let stack = StackFrame::push(
-        stack,
-        match node {
-            SchemaNode {
-                schema: SchemaType::Directory(d),
-                ..
-            } => VariableSource::Directory(d),
-            _ => VariableSource::Empty,
-        },
-    );
+    let stack = stack.push(match node {
+        SchemaNode {
+            schema: SchemaType::Directory(d),
+            ..
+        } => VariableSource::Directory(d),
+        _ => VariableSource::Empty,
+    });
     for used in &node.uses {
         log::trace!("Seeking definition of '{}'", used);
         use_schemas.push(

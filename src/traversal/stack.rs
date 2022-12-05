@@ -12,18 +12,18 @@ use crate::{
 
 /// Keeps track of variables and provides access to definitions from parent
 /// nodes
-pub struct StackFrame<'p, 'v, 'l>
+pub struct StackFrame<'g, 'p, 'l>
 where
-    'v: 'p, // The shared values pointed to live longer than the parent/whole stack
+    'g: 'p, // The shared values pointed to live longer than the whole stack
     'p: 'l, // The local variables live within this frame, so can be shorter lived
 {
-    parent: Option<&'p StackFrame<'p, 'v, 'p>>,
+    parent: Option<&'p StackFrame<'g, 'p, 'p>>,
 
     /// A reference to the shared config
-    pub config: &'v Config<'v>,
+    pub config: &'g Config<'g>,
 
     /// Collection of variables and values at this level of the stack
-    variables: VariableSource<'v>,
+    variables: VariableSource<'g>,
 
     /// The owner (after mapping) of this level, inherited by children
     owner: &'l str,
@@ -33,10 +33,10 @@ where
     mode: Mode,
 }
 
-impl<'p, 'v, 'l> StackFrame<'p, 'v, 'l> {
+impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
     pub fn stack(
-        config: &'v Config<'v>,
-        variables: VariableSource<'v>,
+        config: &'g Config<'g>,
+        variables: VariableSource<'g>,
         owner: &'l str,
         group: &'l str,
         mode: Mode,
@@ -51,9 +51,9 @@ impl<'p, 'v, 'l> StackFrame<'p, 'v, 'l> {
         }
     }
 
-    pub fn push<'s, 'r>(&'s self, variables: VariableSource<'v>) -> StackFrame<'r, 'v, 'r>
+    pub fn push<'s, 'r>(&'s self, variables: VariableSource<'g>) -> StackFrame<'g, 'r, 'r>
     where
-        'v: 'r,
+        'g: 'r,
         's: 'r,
     {
         StackFrame {
@@ -74,19 +74,19 @@ impl<'p, 'v, 'l> StackFrame<'p, 'v, 'l> {
         self.group = group;
     }
 
-    pub fn inherit_owner(&self) -> &'l str {
+    pub fn owner(&self) -> &'l str {
         self.owner
     }
 
-    pub fn inherit_group(&self) -> &'l str {
+    pub fn group(&self) -> &'l str {
         self.group
     }
 
-    pub fn inherit_mode(&self) -> Mode {
+    pub fn mode(&self) -> Mode {
         self.mode
     }
 
-    pub fn variables(&self) -> &VariableSource<'v> {
+    pub fn variables(&self) -> &VariableSource<'l> {
         &self.variables
     }
 
@@ -106,14 +106,7 @@ impl<'p, 'v, 'l> StackFrame<'p, 'v, 'l> {
         .or_else(|| self.parent.and_then(|parent| parent.lookup(var)))
     }
 
-    pub fn find_definition<'a, 'c>(
-        &self,
-        // stack: &StackFrame<'_, 'v>,
-        var: &Identifier<'a>,
-    ) -> Option<&'c SchemaNode<'v>>
-    where
-        'a: 'c,
-    {
+    pub fn find_definition<'a>(&self, var: &Identifier<'a>) -> Option<&'a SchemaNode<'g>> {
         match self.variables {
             VariableSource::Directory(directory) => directory.get_def(var),
             _ => None,
