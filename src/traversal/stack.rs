@@ -12,6 +12,27 @@ use crate::{
 
 /// Keeps track of variables and provides access to definitions from parent
 /// nodes
+///
+/// Example:
+/// ```
+/// use diskplan::{
+///     schema::DirectorySchema,
+///     traversal::{StackFrame, VariableSource},
+/// };
+///
+/// // The stack lifetimes allow us to have a function that takes a stack...
+/// fn __<'g>(stack: &StackFrame<'g, '_, '_>, d: &'g DirectorySchema) {
+///     // ...provides access to items referenced by parent scopes...
+///     let var = stack.lookup(&"variable".into()).unwrap();
+///
+///     // ...can be extended with a mutable local scope...
+///     let mut local = stack.push(VariableSource::Directory(d));
+///
+///     // ...and capture local modifications...
+///     let owner = "root";
+///     local.put_owner(owner);
+/// }
+/// ```
 pub struct StackFrame<'g, 'p, 'l>
 where
     'g: 'p, // The shared values pointed to live longer than the whole stack

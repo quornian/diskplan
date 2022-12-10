@@ -46,13 +46,15 @@ fn main() -> Result<()> {
 
     let owner = users::get_current_username().unwrap();
     let owner = owner.to_string_lossy();
+    let owner = config.map_user(&owner);
     let group = users::get_current_groupname().unwrap();
     let group = group.to_string_lossy();
+    let group = config.map_group(&group);
     let mode = 0o755.into();
     let variables = vars
         .map(|vars| VariableSource::Map(vars.into()))
         .unwrap_or_default();
-    let stack = StackFrame::stack(&config, variables, owner.as_ref(), group.as_ref(), mode);
+    let stack = StackFrame::stack(&config, variables, owner, group, mode);
 
     if config.will_apply() {
         let mut fs = filesystem::DiskFilesystem::new();

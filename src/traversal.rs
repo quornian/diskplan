@@ -67,10 +67,51 @@ where
     FS: Filesystem,
 {
     let mut unresolved = if remaining == "" { None } else { Some(vec![]) };
-    for schema in expand_uses(schema, stack)? {
+    let expanded = expand_uses(schema, stack)?;
+
+    // Resolve attributes from all used definitions
+    let mut owner = None;
+    let mut group = None;
+    let mut mode = None;
+    for usage in std::iter::once(&schema).chain(expanded.iter()) {
+        owner = owner.or(usage.attributes.owner.as_ref());
+        group = group.or(usage.attributes.group.as_ref());
+        mode = mode.or(usage.attributes.mode);
+    }
+    // Evaluate attribute expressions
+    let evaluated_owner;
+    let owner = match owner {
+        Some(expr) => {
+            evaluated_owner = evaluate(expr, stack, path)?;
+            Some(stack.config.map_user(&evaluated_owner))
+        }
+        None => Some(stack.owner()),
+    };
+    let evaluated_group;
+    let group = match group {
+        Some(expr) => {
+            evaluated_group = evaluate(expr, stack, path)?;
+            Some(stack.config.map_group(&evaluated_group))
+        }
+        None => Some(stack.group()),
+    };
+    let mode = Some(mode.map(Into::into).unwrap_or_else(|| stack.mode()));
+    let attrs = SetAttrs { owner, group, mode };
+
+    let mut stack = stack.push(VariableSource::Empty);
+    if let Some(owner) = owner {
+        stack.put_owner(owner);
+    }
+    if let Some(group) = group {
+        stack.put_group(group);
+    }
+    let stack = &stack;
+
+    for schema in expanded {
         log::debug!("Applying: {}", schema);
         // Create this entry, following symlinks
-        create(schema, path, stack, filesystem).with_context(|| format!("Creating {}", &path))?;
+        create(schema, path, attrs.clone(), stack, filesystem)
+            .with_context(|| format!("Creating {}", &path))?;
 
         // Traverse over children
         if let SchemaType::Directory(ref directory_schema) = schema.schema {
@@ -175,16 +216,7 @@ fn traverse_directory<'a, FS>(
 where
     FS: Filesystem,
 {
-    let (local_owner, local_group);
-    let mut stack = stack.push(VariableSource::Directory(directory_schema));
-    if let Some(ref owner) = schema.attributes.owner {
-        local_owner = owner.to_string();
-        stack.put_owner(&local_owner);
-    }
-    if let Some(ref group) = schema.attributes.group {
-        local_group = group.to_string();
-        stack.put_group(&local_group);
-    }
+    let stack = stack.push(VariableSource::Directory(directory_schema));
 
     // Pull the front off the relative remaining_path
     let (sought, remaining) = remaining
@@ -382,40 +414,13 @@ where
 fn create<FS>(
     schema: &SchemaNode,
     path: &PlantedPath,
+    attrs: SetAttrs,
     stack: &StackFrame,
     filesystem: &mut FS,
 ) -> Result<()>
 where
     FS: Filesystem,
 {
-    let evaluated_owner;
-    let owner = match &schema.attributes.owner {
-        Some(expr) => {
-            evaluated_owner = evaluate(expr, stack, path)?;
-            Some(stack.config.map_user(&evaluated_owner))
-        }
-        None => Some(stack.owner()),
-    };
-    let evaluated_group;
-    let group = match &schema.attributes.group {
-        Some(expr) => {
-            evaluated_group = evaluate(expr, stack, path)?;
-            Some(stack.config.map_group(&evaluated_group))
-        }
-        None => Some(stack.group()),
-    };
-    let attrs = SetAttrs {
-        owner,
-        group,
-        mode: Some(
-            schema
-                .attributes
-                .mode
-                .map(Into::into)
-                .unwrap_or_else(|| stack.mode()),
-        ),
-    };
-
     // References held to data within by `to_create`, but only in the symlink branch
     let link_str;
     let link_path;
@@ -524,7 +529,7 @@ fn expand_uses<'a>(
         use_schemas.push(
             stack
                 .find_definition(used)
-                .ok_or_else(|| anyhow!("No definition (:def) found for {}", used))?,
+                .ok_or_else(|| anyhow!("No definition (:def) found for \"{}\"", used))?,
         );
     }
     Ok(use_schemas)
