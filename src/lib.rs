@@ -177,7 +177,6 @@
 //! fs.create_directory(target, SetAttrs::default());
 //! let mut config = Config::new(target, false);
 //! config.add_precached_stem(root, "schema.diskplan", schema_root);
-//! // FIXME: This needs some work
 //! let stack = StackFrame::stack(&config, Default::default(), "root", "root", 0o755.into());
 //! traverse(target, &stack, &mut fs)?;
 //!

@@ -128,14 +128,77 @@
 //! # ).unwrap();
 //! ```
 //!
+//! Variables will also pick up on names already on disk (even if a `:let` provides a different
+//! value). For example, if we had `assets/prop/Banana` on disk already, `$asset_type` would match
+//! against and take the value "prop" (as well as "character") and `$asset` would take the value
+//! "Banana" (as well as "Monkey"), producing:
+//! ```text
+//! assets
+//! ├── character
+//! │   └── Monkey
+//! │       └── reference
+//! └── prop
+//!     └── Banana
+//!         └── reference
+//! ```
+//!
 //! ## Pattern Matching
 //!
-//! **TODO**: Document `:match` and `$variable` named entries
+//! Any node of the schema can have a `:match` tag, which, via a Regular Expression, controls the
+//! possible values a variable can take.
+//!
+//! **IMPORTANT:** _No two variables can match the same value_. If they do, an error will occur during
+//! execution, so be careful to ensure there is no overlap between patterns. The use of `:avoid`
+//! can help restrict the pattern matching and ensure proper partitioning.
+//!
+//! Static names (without variables) always take precedence and do not need to be unique with
+//! respect to variable patterns (and vice versa).
+//!
+//! For example, this is legal in the schema but will always error in practice:
+//! ```text
+//! $first/
+//! $second/
+//! ```
+//! For instance, when operating on the path `/test`, it yields:
+//! ```text
+//! Error: "test" matches multiple dynamic bindings "$first" and "$second" (Any)
+//! ```
+//!
+//! A working example might be:
+//! ```text
+//! $first/
+//!     :match [A-Z].*
+//! $second/
+//!     :match [^A-Z].*
+//! ```
 //!
 //! ## Schema Reuse
 //!
-//! **TODO**: Document `:def` and `:use`
+//! Portions of a schema can be built from reusable definitions.
 //!
+//! A definition is formed using the `:def` keyword, followed by its name and a body like any
+//! other schema node:
+//! ```text
+//! :def reusable/
+//!     anything_inside/
+//! ```
+//! It is used by adding the `:use` tag inside any other (same or deeper level) node:
+//! ```text
+//! reused_here/
+//!     :use reusable
+//! ```
+//! Multiple `:use` tags may be used. Attributes are resolved in the following order:
+//! ```text
+//! example/
+//!     ## Attributes set here win (before or after any :use lines)
+//!     :owner root
+//!
+//!     ## First :use is next in precedence
+//!     :use one
+//!
+//!     ## Subsequent :use lines take lower precedence
+//!     :use two
+//! ```
 
 use std::{collections::HashMap, fmt::Display};
 
