@@ -34,7 +34,7 @@ where
     if !path.is_absolute() {
         bail!("Path must be absolute: {}", path);
     }
-    let (schema, root) = stack.config.schema_for(path)?;
+    let (schema_node, root) = stack.config.schema_for(path)?;
     let start_path = PlantedPath::new(root, None)?;
     let remaining_path = path
         .strip_prefix(root.path())
@@ -44,20 +44,22 @@ where
         start_path,
         remaining_path,
     );
-    traverse_node(schema, &start_path, remaining_path, stack, filesystem).with_context(|| {
-        schema_context(
-            "Failed to apply schema",
-            schema,
-            start_path.absolute(),
-            remaining_path,
-            stack,
-        )
-    })?;
+    traverse_node(schema_node, &start_path, remaining_path, stack, filesystem).with_context(
+        || {
+            schema_context(
+                "Failed to apply schema",
+                schema_node,
+                start_path.absolute(),
+                remaining_path,
+                stack,
+            )
+        },
+    )?;
     Ok(())
 }
 
 fn traverse_node<'a, FS>(
-    schema: &'a SchemaNode<'a>,
+    schema_node: &'a SchemaNode<'a>,
     path: &PlantedPath,
     remaining: &Utf8Path,
     stack: &StackFrame<'a, '_, '_>,
@@ -67,13 +69,13 @@ where
     FS: Filesystem,
 {
     let mut unresolved = if remaining == "" { None } else { Some(vec![]) };
-    let expanded = expand_uses(schema, stack)?;
+    let expanded = expand_uses(schema_node, stack)?;
 
     // Resolve attributes from all used definitions
     let mut owner = None;
     let mut group = None;
     let mut mode = None;
-    for usage in std::iter::once(&schema).chain(expanded.iter()) {
+    for usage in std::iter::once(&schema_node).chain(expanded.iter()) {
         owner = owner.or(usage.attributes.owner.as_ref());
         group = group.or(usage.attributes.group.as_ref());
         mode = mode.or(usage.attributes.mode);
@@ -107,30 +109,36 @@ where
     }
     let stack = &stack;
 
-    for schema in expanded {
-        log::debug!("Applying: {}", schema);
+    for schema_node in expanded {
+        log::debug!("Applying: {}", schema_node);
         // Create this entry, following symlinks
-        create(schema, path, attrs.clone(), stack, filesystem)
+        create(schema_node, path, attrs.clone(), stack, filesystem)
             .with_context(|| format!("Creating {}", &path))?;
 
         // Traverse over children
-        if let SchemaType::Directory(ref directory_schema) = schema.schema {
-            let resolution =
-                traverse_directory(schema, directory_schema, path, remaining, stack, filesystem)
-                    .with_context(|| {
-                        schema_context(
-                            "Applying directory schema",
-                            schema,
-                            path.absolute(),
-                            remaining,
-                            stack,
-                        )
-                    })?;
+        if let SchemaType::Directory(ref directory_schema) = schema_node.schema {
+            let resolution = traverse_directory(
+                schema_node,
+                directory_schema,
+                path,
+                remaining,
+                stack,
+                filesystem,
+            )
+            .with_context(|| {
+                schema_context(
+                    "Applying directory schema",
+                    schema_node,
+                    path.absolute(),
+                    remaining,
+                    stack,
+                )
+            })?;
             match resolution {
                 Resolution::FullyResolved => unresolved = None,
                 Resolution::Unresolved(path) => {
                     if let Some(ref mut issues) = unresolved {
-                        issues.push((schema, path));
+                        issues.push((schema_node, path));
                     }
                 }
             }
@@ -141,9 +149,9 @@ where
             "No schema within \"{}\" was able to produce \"{}\"",
             path, remaining
         );
-        for (schema, _) in issues {
-            write!(message, "\nInside: {}:", schema)?;
-            if let SchemaType::Directory(dir) = &schema.schema {
+        for (schema_node, _) in issues {
+            write!(message, "\nInside: {}:", schema_node)?;
+            if let SchemaType::Directory(dir) = &schema_node.schema {
                 if dir.entries().is_empty() {
                     write!(message, "\n  No entries to match",)?;
                 }
@@ -155,7 +163,7 @@ where
         Err(anyhow!("{}", message)).with_context(|| {
             schema_context(
                 "Applying directory entries",
-                schema,
+                schema_node,
                 path.absolute(),
                 remaining,
                 stack,
@@ -190,7 +198,7 @@ impl Display for Source {
 
 fn schema_context(
     message: &str,
-    schema: &SchemaNode,
+    schema_node: &SchemaNode,
     path: &Utf8Path,
     remaining: &Utf8Path,
     stack: &StackFrame,
@@ -200,13 +208,13 @@ fn schema_context(
         message,
         path,
         remaining,
-        schema,
+        schema_node,
         stack,
     )
 }
 
 fn traverse_directory<'a, FS>(
-    schema: &SchemaNode,
+    schema_node: &SchemaNode,
     directory_schema: &'a DirectorySchema,
     directory_path: &PlantedPath,
     remaining: &Utf8Path,
@@ -248,15 +256,15 @@ where
     );
     names.extend(sought.map(Cow::Borrowed).map(with_source(Source::Path)));
     let mut compiled_schema_entries = Vec::with_capacity(directory_schema.entries().len());
-    for (binding, node) in directory_schema.entries() {
+    for (binding, child_node) in directory_schema.entries() {
         // TODO: Only compile for Binding::Dynamic
 
         // Note: Since we don't know the name of the thing we're matching yet, any path
         // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
         // using the parent directory
         let pattern = CompiledPattern::compile(
-            node.match_pattern.as_ref(),
-            node.avoid_pattern.as_ref(),
+            child_node.match_pattern.as_ref(),
+            child_node.avoid_pattern.as_ref(),
             &stack,
             directory_path,
         )?;
@@ -272,7 +280,7 @@ where
         } {
             names.insert(name, (Source::Schema, None));
         }
-        compiled_schema_entries.push((binding, node, pattern));
+        compiled_schema_entries.push((binding, child_node, pattern));
     }
 
     log::trace!("Within {}...", directory_path);
@@ -335,7 +343,7 @@ where
                 name,
                 source,
                 directory_path,
-                schema
+                schema_node
             ),
             Some((Binding::Static(_), _)) => {
                 log::trace!(r#""{}" from {} matches same, binding static"#, name, source)
@@ -412,7 +420,7 @@ where
 }
 
 fn create<FS>(
-    schema: &SchemaNode,
+    schema_node: &SchemaNode,
     path: &PlantedPath,
     attrs: SetAttrs,
     stack: &StackFrame,
@@ -427,7 +435,7 @@ where
     let link_target;
 
     let to_create;
-    if let Some(expr) = &schema.symlink {
+    if let Some(expr) = &schema_node.symlink {
         link_str = evaluate(expr, stack, path)?;
         link_path = Utf8Path::new(&link_str);
         log::info!("Creating {} -> {}", path, link_path);
@@ -435,9 +443,9 @@ where
         // Allow relative symlinks only if there is no schema to apply to the target (allowing us
         // to create it and return early)
         if !link_path.is_absolute() {
-            if schema.attributes.is_empty()
-                && schema.uses.is_empty()
-                && schema
+            if schema_node.attributes.is_empty()
+                && schema_node.uses.is_empty()
+                && schema_node
                     .schema
                     .as_directory()
                     .map(|d| d.entries().is_empty())
@@ -482,7 +490,7 @@ where
         to_create = path.absolute();
     }
 
-    match &schema.schema {
+    match &schema_node.schema {
         SchemaType::Directory(_) => {
             if !filesystem.is_directory(to_create) {
                 log::debug!("Make directory: {}", to_create);
@@ -510,21 +518,21 @@ where
 }
 
 fn expand_uses<'a>(
-    node: &'a SchemaNode<'_>,
+    schema_node: &'a SchemaNode<'_>,
     stack: &StackFrame<'a, '_, '_>,
 ) -> Result<Vec<&'a SchemaNode<'a>>> {
-    // Expand `node` to itself and any `:use`s within
-    let mut use_schemas = Vec::with_capacity(1 + node.uses.len());
-    use_schemas.push(node);
-    // Include node itself and its :defs in the stack frame
-    let stack = stack.push(match node {
+    // Expand `schema_node` to itself and any `:use`s within
+    let mut use_schemas = Vec::with_capacity(1 + schema_node.uses.len());
+    use_schemas.push(schema_node);
+    // Include schema_node itself and its :defs in the stack frame
+    let stack = stack.push(match schema_node {
         SchemaNode {
             schema: SchemaType::Directory(d),
             ..
         } => VariableSource::Directory(d),
         _ => VariableSource::Empty,
     });
-    for used in &node.uses {
+    for used in &schema_node.uses {
         log::trace!("Seeking definition of '{}'", used);
         use_schemas.push(
             stack
