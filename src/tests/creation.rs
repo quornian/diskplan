@@ -98,3 +98,30 @@ fn test_create_relative_symlink() -> Result<()> {
                 "/versions/1.0.1" -> "1.0"
     }
 }
+
+#[test]
+fn symlink_two_schemas() -> Result<()> {
+    assert_effect_of! {
+        applying: "
+            $name/ -> /remote/$PATH
+                # Symlink target is created first then modified by this
+                :group adm
+            "
+        under: "/local"
+
+        applying: "
+            $_1/
+                # This applies first, but is overridden by schema above
+                :group sys
+            "
+        under: "/remote"
+
+        onto: "/local/example"
+        yields:
+            directories:
+                "/local"
+                "/remote/example" [ group = "adm" ]
+            symlinks:
+                "/local/example" -> "/remote/example"
+    }
+}

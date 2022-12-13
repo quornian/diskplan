@@ -257,8 +257,6 @@ where
     names.extend(sought.map(Cow::Borrowed).map(with_source(Source::Path)));
     let mut compiled_schema_entries = Vec::with_capacity(directory_schema.entries().len());
     for (binding, child_node) in directory_schema.entries() {
-        // TODO: Only compile for Binding::Dynamic
-
         // Note: Since we don't know the name of the thing we're matching yet, any path
         // variable (e.g. SAME_PATH_NAME) used in the pattern expression will be evaluated
         // using the parent directory
@@ -473,17 +471,17 @@ where
         link_target = PlantedPath::new(link_root, Some(link_path))
             .with_context(|| format!("Following symlink {} -> {}", path, link_path))?;
 
-        // TODO: Think about which schema wins? Target root, or local. Or if this is a link to the local one anyway?!
+        // Create the link target (using its own schema to build it)
         if !filesystem.exists(link_target.absolute()) {
             traverse(link_target.absolute(), stack, filesystem)?;
             assert!(filesystem.exists(link_target.absolute()));
         }
-        // Create the symlink pointing to its target before (forming the target itself)
+        // Create the symlink pointing to the target
         filesystem
             .create_symlink(path.absolute(), link_target.absolute())
             .context("As symlink")?;
-        // From here on, use the target path for creation. Further traversal will use the original
-        // path, and resolving canonical paths through the symlink
+        // Use the target path for creation. Further traversal will use the original
+        // path, and resolve canonical paths through the symlink
         to_create = link_target.absolute();
     } else {
         log::info!("Creating {}", path);
