@@ -9,16 +9,16 @@ use crate::schema::Root;
 /// Deserialization of diskplan.toml
 #[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
 pub struct ConfigFile {
-    /// A map of unique profile names to their individual configurations
-    pub profiles: HashMap<String, ConfigFileProfile>,
+    /// A map of unique names to individual stem configurations
+    pub stems: HashMap<String, ConfigStem>,
 
     /// Schema directory (defaults to directory containing config)
     pub schema_directory: Option<Utf8PathBuf>,
 }
 
-/// Configuration for a single profile within diskplan.toml
+/// Configuration for a single stem within diskplan.toml
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct ConfigFileProfile {
+pub struct ConfigStem {
     /// The absolute root directory on which to apply changes
     pub root: Root,
 

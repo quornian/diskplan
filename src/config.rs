@@ -12,7 +12,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use crate::schema::{Root, SchemaCache, SchemaNode};
 
 mod file;
-pub use file::{ConfigFile, ConfigFileProfile};
+pub use file::{ConfigFile, ConfigStem};
 
 mod args;
 pub use args::CommandLineArgs;
@@ -51,7 +51,7 @@ impl<'t> Config<'t> {
 
     pub fn load(&mut self, path: impl AsRef<Utf8Path>) -> Result<()> {
         let ConfigFile {
-            profiles,
+            stems,
             schema_directory,
         } = ConfigFile::load(path.as_ref())?;
         self.schema_directory = schema_directory.unwrap_or_else(|| {
@@ -60,9 +60,9 @@ impl<'t> Config<'t> {
                 .expect("No parent directory for config file")
                 .to_owned()
         });
-        for (_, profile) in profiles.into_iter() {
-            let schema_path = self.schema_directory.join(profile.schema);
-            self.stems.add(profile.root, schema_path)
+        for (_, stem) in stems.into_iter() {
+            let schema_path = self.schema_directory.join(stem.schema);
+            self.stems.add(stem.root, schema_path)
         }
         Ok(())
     }

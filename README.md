@@ -28,7 +28,7 @@ directory trees from a set of schemas. It can:
 
 To try out diskplan, a simple `diskplan.toml` file can be created:
 ```toml
-[profiles.example]
+[stems.example]
 root = "/tmp/diskplan-root"
 schema = "examples/simple-schema.diskplan"
 ```
