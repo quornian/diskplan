@@ -3,12 +3,12 @@ use anyhow::Result;
 #[test]
 fn match_binds_for_reuse() -> Result<()> {
     assert_effect_of! {
+        under: "/root"
         applying: "
             $var/
                 sub/
                     $var/
             "
-        under: "/root"
         onto: "/root"
         with:
             directories:
@@ -24,13 +24,13 @@ fn match_binds_for_reuse() -> Result<()> {
 #[test]
 fn let_binds_for_reuse() -> Result<()> {
     assert_effect_of! {
+        under: "/root"
         applying: "
             :let var = explicit
             $var/
                 sub/
                     $var/
             "
-        under: "/root"
         onto: "/root"
         with:
             directories:
@@ -46,13 +46,13 @@ fn let_binds_for_reuse() -> Result<()> {
 #[test]
 fn match_still_happens_with_let() -> Result<()> {
     assert_effect_of! {
+        under: "/root"
         applying: "
             :let var = explicit
             $var/
                 sub/
                     $var/
             "
-        under: "/root"
         onto: "/root"
         with:
             directories:
@@ -71,13 +71,13 @@ fn match_still_happens_with_let() -> Result<()> {
 #[test]
 fn let_overrides_match() -> Result<()> {
     assert_effect_of! {
+        under: "/root"
         applying: "
             $var/
                 :let var = explicit
                 sub/
                     $var/
             "
-        under: "/root"
         onto: "/root"
         with:
             directories:
@@ -93,6 +93,7 @@ fn let_overrides_match() -> Result<()> {
 #[test]
 fn let_overrides_let() -> Result<()> {
     assert_effect_of! {
+        under: "/root"
         applying: "
             :let var = first
             $var/
@@ -100,7 +101,6 @@ fn let_overrides_let() -> Result<()> {
                 sub/
                     $var/
             "
-        under: "/root"
         onto: "/root"
         with:
             directories:
@@ -116,6 +116,7 @@ fn let_overrides_let() -> Result<()> {
 #[test]
 fn name_from_use_target_not_definition() -> Result<()> {
     assert_effect_of!(
+        under: "/"
         applying: "
             :def defname/
                 :let complex = pre_${NAME}_post
@@ -123,7 +124,6 @@ fn name_from_use_target_not_definition() -> Result<()> {
             usename/
                 :use defname
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -136,6 +136,7 @@ fn name_from_use_target_not_definition() -> Result<()> {
 fn variable_not_matching_deeper() -> Result<()> {
     // TODO: Consider if this should be an error, or warning at least
     assert_effect_of!(
+        under: "/"
         applying: "
             :let variable = aaa
             
@@ -143,7 +144,6 @@ fn variable_not_matching_deeper() -> Result<()> {
                 :match b+
                 VARIABLE/
             "
-        under: "/"
         onto: "/"
         yields:
             // Doesn't create /aaa/VARIABLE
@@ -153,6 +153,7 @@ fn variable_not_matching_deeper() -> Result<()> {
 #[test]
 fn variable_will_not_match_other() -> Result<()> {
     assert_effect_of!(
+        under: "/"
         applying: "
             :let variable = aaa
             
@@ -163,7 +164,6 @@ fn variable_will_not_match_other() -> Result<()> {
                 :match a+
                 OTHER/
             "
-        under: "/"
         onto: "/"
         yields:
             // Doesn't create /aaa/OTHER
@@ -173,6 +173,7 @@ fn variable_will_not_match_other() -> Result<()> {
 #[test]
 fn repeat_variable_binding() -> Result<()> {
     assert_effect_of!(
+        under: "/"
         applying: "
             :let variable = aaa
             
@@ -183,7 +184,6 @@ fn repeat_variable_binding() -> Result<()> {
                 :match b+
                 VAR_B/
             "
-        under: "/"
         onto: "/"
         yields:
             directories:

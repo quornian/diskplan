@@ -3,6 +3,7 @@ use anyhow::Result;
 #[test]
 fn test_def_use_simple() -> Result<()> {
     assert_effect_of! {
+        under: "/"
         applying: "
             :def some_def/
                 sub/
@@ -10,7 +11,6 @@ fn test_def_use_simple() -> Result<()> {
             inner/
                 :use some_def
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -22,6 +22,7 @@ fn test_def_use_simple() -> Result<()> {
 #[test]
 fn test_def_use_at_top_level() -> Result<()> {
     assert_effect_of! {
+        under: "/"
         applying: "
             :use has_sub
 
@@ -31,7 +32,6 @@ fn test_def_use_at_top_level() -> Result<()> {
             inner/
                 :use has_sub
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -44,6 +44,7 @@ fn test_def_use_at_top_level() -> Result<()> {
 #[test]
 fn test_def_use_multiple() -> Result<()> {
     assert_effect_of! {
+        under: "/"
         applying: "
             :def def_a/
                 sub_a/
@@ -55,7 +56,6 @@ fn test_def_use_multiple() -> Result<()> {
                 :use def_b
                 sub_c/
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -71,6 +71,7 @@ fn test_use_owner() -> Result<()> {
     // Note: these rely on the user and group existing on the system. If user "sync" or group
     // "games" do not exist, change appropriately
     assert_effect_of! {
+        under: "/"
         applying: "
             :def definition/
                 :owner sync
@@ -79,7 +80,6 @@ fn test_use_owner() -> Result<()> {
             usage/
                 :use definition
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -92,6 +92,7 @@ fn test_use_owner_inherited() -> Result<()> {
     // Note: these rely on the user and group existing on the system. If user "sync" or group
     // "games" do not exist, change appropriately
     assert_effect_of! {
+        under: "/"
         applying: "
             :def definition/
                 :owner sync
@@ -101,7 +102,6 @@ fn test_use_owner_inherited() -> Result<()> {
                 :use definition
                 child/
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -113,6 +113,7 @@ fn test_use_owner_inherited() -> Result<()> {
 #[test]
 fn owner_inheritance() -> Result<()> {
     assert_effect_of! {
+        under: "/"
         applying: "
             :def o_root/
                 :owner root
@@ -135,7 +136,6 @@ fn owner_inheritance() -> Result<()> {
                 :use o_root
                 :owner sys
             "
-        under: "/"
         onto: "/"
         yields:
             directories:

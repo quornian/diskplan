@@ -5,11 +5,11 @@ use anyhow::Result;
 fn test_incorrect_attribute_assertion() {
     (|| -> Result<()> {
         assert_effect_of! {
+            under: "/target"
             applying: "
                 dir/
                     :mode 640
                 "
-            under: "/target"
             onto: "/target"
             yields:
                 directories:
@@ -23,6 +23,7 @@ fn test_incorrect_attribute_assertion() {
 fn test_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
+        under: "/target"
         applying: "
             dir/
                 :mode 640
@@ -30,7 +31,6 @@ fn test_attributes() -> Result<()> {
                 :owner daemon
                 :group sys
             "
-        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -47,13 +47,13 @@ fn test_attributes() -> Result<()> {
 fn test_top_level_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
+        under: "/target"
         applying: "
             :mode 640
             :owner daemon
             :group sys
             sub/
             "
-        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -70,6 +70,7 @@ fn test_top_level_attributes() -> Result<()> {
 fn test_attribute_expressions() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
+        under: "/target"
         applying: "
             :let x = dae
             :let y = s
@@ -77,7 +78,6 @@ fn test_attribute_expressions() -> Result<()> {
                 :owner ${x}mon
                 :group ${y}y${y}
             "
-        under: "/target"
         onto: "/target"
         yields:
             directories:
@@ -91,11 +91,11 @@ fn test_attribute_expressions() -> Result<()> {
 #[test]
 fn test_changing_attributes() -> Result<()> {
     assert_effect_of! {
+        under: "/target"
         applying: "
             dir/
                 :mode 750
             "
-        under: "/target"
         onto: "/target"
         with:
             directories:
@@ -113,13 +113,13 @@ fn test_changing_attributes() -> Result<()> {
 fn test_inherited_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
+        under: "/target"
         applying: "
             :mode 640
             :owner daemon
             :group sys
             sub/
             "
-        under: "/target"
         onto: "/target"
         yields:
             directories:

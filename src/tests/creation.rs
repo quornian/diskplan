@@ -3,11 +3,11 @@ use anyhow::Result;
 #[test]
 fn test_create_directory() -> Result<()> {
     assert_effect_of! {
+        under: "/primary"
         applying: "
             subdir/
                 subsubdir/
             "
-        under: "/primary"
         onto: "/primary"
         yields:
             directories:
@@ -20,6 +20,7 @@ fn test_create_directory() -> Result<()> {
 #[test]
 fn test_create_file() -> Result<()> {
     assert_effect_of! {
+        under: "/primary"
         applying: "
             subdir/
                 subsubfile
@@ -27,7 +28,6 @@ fn test_create_file() -> Result<()> {
             subfile
                 :source /resource/file2
             "
-        under: "/primary"
         onto: "/primary"
         with:
             directories:
@@ -47,19 +47,19 @@ fn test_create_file() -> Result<()> {
 #[test]
 fn test_create_symlink() -> Result<()> {
     assert_effect_of! {
+        under: "/primary"
         applying: "
             subdirlink/ -> /secondary/${NAME}
                 subfile
                     :source /resource/file
             "
-        under: "/primary"
 
+        under: "/secondary"
         applying: "
             $_a/
                 $_b/
                     $_c/
             "
-        under: "/secondary"
 
         onto: "/primary"
         with:
@@ -83,12 +83,12 @@ fn test_create_symlink() -> Result<()> {
 #[test]
 fn test_create_relative_symlink() -> Result<()> {
     assert_effect_of! {
+        under: "/"
         applying: "
             versions/
                 1.0/
                 1.0.1/ -> 1.0
             "
-        under: "/"
         onto: "/"
         yields:
             directories:
@@ -102,19 +102,19 @@ fn test_create_relative_symlink() -> Result<()> {
 #[test]
 fn symlink_two_schemas() -> Result<()> {
     assert_effect_of! {
+        under: "/local"
         applying: "
             $name/ -> /remote/$PATH
                 # Symlink target is created first then modified by this
                 :group adm
             "
-        under: "/local"
 
+        under: "/remote"
         applying: "
             $_1/
                 # This applies first, but is overridden by schema above
                 :group sys
             "
-        under: "/remote"
 
         onto: "/local/example"
         yields:

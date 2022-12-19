@@ -1,10 +1,10 @@
 macro_rules! assert_effect_of {
     {
         $(
-        applying:
-            $text:literal
         under:
             $root:literal
+        applying:
+            $text:literal
         )+
         onto:
             $path:literal
