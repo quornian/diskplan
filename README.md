@@ -32,8 +32,9 @@ To try out diskplan, a simple `diskplan.toml` file can be created:
 root = "/tmp/diskplan-root"
 schema = "examples/simple-schema.diskplan"
 ```
-The associated schema file must also exist relative to the `diskplan.toml`
-file:
+The schema file listed will also need to exist, in this case relative to the
+`diskplan.toml` file:
+:
 ```sh
 # Root directory configuration
 # ...

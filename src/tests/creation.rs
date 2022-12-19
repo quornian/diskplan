@@ -65,7 +65,6 @@ fn test_create_symlink() -> Result<()> {
         with:
             directories:
                 "/resource"
-                "/secondary" //TODO: Can we avoid this?
             files:
                 "/resource/file" ["FILE CONTENT"]
         yields:
