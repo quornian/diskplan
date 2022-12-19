@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 #[test]
-fn test_binding_static_beats_dynamic() -> Result<()> {
+fn binding_static_beats_dynamic() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "
@@ -22,7 +22,7 @@ fn test_binding_static_beats_dynamic() -> Result<()> {
 }
 
 #[test]
-fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
+fn binding_static_beats_dynamic_reordered() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "
@@ -46,7 +46,7 @@ fn test_binding_static_beats_dynamic_reordered() -> Result<()> {
 #[should_panic(
     expected = r#""existing" matches multiple dynamic bindings "$variable_a" and "$variable_b""#
 )]
-fn test_binding_multiple_variable_error() {
+fn binding_multiple_variable_error() {
     (|| -> Result<()> {
         assert_effect_of! {
             under: "/"
@@ -74,7 +74,7 @@ fn test_binding_multiple_variable_error() {
 #[should_panic(
     expected = r#""duplicate" matches multiple static bindings "duplicate" and "duplicate""#
 )]
-fn test_binding_multiple_static_error() {
+fn binding_multiple_static_error() {
     (|| -> Result<()> {
         assert_effect_of! {
             under: "/"
@@ -90,7 +90,7 @@ fn test_binding_multiple_static_error() {
 }
 
 #[test]
-fn test_match_let_variable() -> Result<()> {
+fn match_let_variable() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -108,7 +108,7 @@ fn test_match_let_variable() -> Result<()> {
 }
 
 #[test]
-fn test_match_let_variable_overridden_by_static() -> Result<()> {
+fn match_let_variable_overridden_by_static() -> Result<()> {
     // TODO: Consider if this should fail
     assert_effect_of! {
         under: "/target"
@@ -129,7 +129,7 @@ fn test_match_let_variable_overridden_by_static() -> Result<()> {
 }
 
 #[test]
-fn test_match_variable() -> Result<()> {
+fn match_variable() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -160,7 +160,7 @@ fn test_match_variable() -> Result<()> {
 }
 
 #[test]
-fn test_match_variable_inherited() -> Result<()> {
+fn match_variable_inherited() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -184,7 +184,7 @@ fn test_match_variable_inherited() -> Result<()> {
 }
 
 #[test]
-fn test_match_let() -> Result<()> {
+fn match_let() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -253,7 +253,7 @@ fn inherited_variable_with_match_avoids_rebind() -> Result<()> {
 }
 
 #[test]
-fn test_match_categories() -> Result<()> {
+fn match_categories() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "

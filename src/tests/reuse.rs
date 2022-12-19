@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 #[test]
-fn test_def_use_simple() -> Result<()> {
+fn def_use_simple() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "
@@ -20,7 +20,7 @@ fn test_def_use_simple() -> Result<()> {
 }
 
 #[test]
-fn test_def_use_at_top_level() -> Result<()> {
+fn def_use_at_top_level() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "
@@ -42,7 +42,7 @@ fn test_def_use_at_top_level() -> Result<()> {
 }
 
 #[test]
-fn test_def_use_multiple() -> Result<()> {
+fn def_use_multiple() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "
@@ -67,7 +67,7 @@ fn test_def_use_multiple() -> Result<()> {
 }
 
 #[test]
-fn test_use_owner() -> Result<()> {
+fn use_owner() -> Result<()> {
     // Note: these rely on the user and group existing on the system. If user "sync" or group
     // "games" do not exist, change appropriately
     assert_effect_of! {
@@ -88,7 +88,7 @@ fn test_use_owner() -> Result<()> {
 }
 
 #[test]
-fn test_use_owner_inherited() -> Result<()> {
+fn use_owner_inherited() -> Result<()> {
     // Note: these rely on the user and group existing on the system. If user "sync" or group
     // "games" do not exist, change appropriately
     assert_effect_of! {

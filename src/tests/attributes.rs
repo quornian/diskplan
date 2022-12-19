@@ -2,7 +2,7 @@ use anyhow::Result;
 
 #[test]
 #[should_panic]
-fn test_incorrect_attribute_assertion() {
+fn incorrect_attribute_assertion() {
     (|| -> Result<()> {
         assert_effect_of! {
             under: "/target"
@@ -20,7 +20,7 @@ fn test_incorrect_attribute_assertion() {
 }
 
 #[test]
-fn test_attributes() -> Result<()> {
+fn attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
@@ -44,7 +44,7 @@ fn test_attributes() -> Result<()> {
 }
 
 #[test]
-fn test_top_level_attributes() -> Result<()> {
+fn top_level_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
@@ -67,7 +67,7 @@ fn test_top_level_attributes() -> Result<()> {
 }
 
 #[test]
-fn test_attribute_expressions() -> Result<()> {
+fn attribute_expressions() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
@@ -89,7 +89,7 @@ fn test_attribute_expressions() -> Result<()> {
 }
 
 #[test]
-fn test_changing_attributes() -> Result<()> {
+fn changing_attributes() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -110,7 +110,7 @@ fn test_changing_attributes() -> Result<()> {
 }
 
 #[test]
-fn test_inherited_attributes() -> Result<()> {
+fn inherited_attributes() -> Result<()> {
     use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"

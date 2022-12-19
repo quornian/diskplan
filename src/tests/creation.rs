@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 #[test]
-fn test_create_directory() -> Result<()> {
+fn create_directory() -> Result<()> {
     assert_effect_of! {
         under: "/primary"
         applying: "
@@ -18,7 +18,7 @@ fn test_create_directory() -> Result<()> {
 }
 
 #[test]
-fn test_create_file() -> Result<()> {
+fn create_file() -> Result<()> {
     assert_effect_of! {
         under: "/primary"
         applying: "
@@ -45,7 +45,7 @@ fn test_create_file() -> Result<()> {
 }
 
 #[test]
-fn test_create_symlink() -> Result<()> {
+fn create_symlink() -> Result<()> {
     assert_effect_of! {
         under: "/primary"
         applying: "
@@ -80,7 +80,7 @@ fn test_create_symlink() -> Result<()> {
 }
 
 #[test]
-fn test_create_relative_symlink() -> Result<()> {
+fn create_relative_symlink() -> Result<()> {
     assert_effect_of! {
         under: "/"
         applying: "

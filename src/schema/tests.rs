@@ -5,7 +5,7 @@ use super::{
 };
 
 #[test]
-fn test_def_is_recorded() {
+fn def_is_recorded() {
     let root = parse_schema(":def empty/").unwrap();
     let root_directory = root.schema.as_directory().unwrap();
     assert_eq!(root_directory.defs().len(), 1);
@@ -16,7 +16,7 @@ fn test_def_is_recorded() {
 }
 
 #[test]
-fn test_use_is_recorded() {
+fn use_is_recorded() {
     let root = parse_schema(":def empty/\nsub/\n    :use empty").unwrap();
     assert_eq!(root.uses.len(), 0);
     let root_directory = root.schema.as_directory().unwrap();
@@ -26,7 +26,7 @@ fn test_use_is_recorded() {
 }
 
 #[test]
-fn test_def_and_use_compare_equal() {
+fn def_and_use_compare_equal() {
     let root = parse_schema(":def empty/\nsub/\n    :use empty").unwrap();
     let root_directory = root.schema.as_directory().unwrap();
     assert_eq!(root_directory.entries.len(), 1);
@@ -40,7 +40,7 @@ fn test_def_and_use_compare_equal() {
 }
 
 #[test]
-fn test_directory_binding_sort_order() {
+fn directory_binding_sort_order() {
     let empty_subdirectory = SchemaType::Directory(DirectorySchema::default());
     let empty_directory_node = SchemaNode {
         line: "N/A",

@@ -18,13 +18,13 @@ use crate::schema::{
 };
 
 #[test]
-fn test_invalid_space() {
+fn invalid_space() {
     assert!(parse_schema("okay_entry/").is_ok());
     assert!(parse_schema("invalid entry/").is_err());
 }
 
 #[test]
-fn test_indentation() {
+fn various_indentations() {
     assert!(operator(0)("entry/").is_ok());
     assert!(operator(0)("  entry/").is_err());
     assert!(operator(1)("  entry/").is_err());
@@ -35,7 +35,7 @@ fn test_indentation() {
 }
 
 #[test]
-fn test_line_endings() {
+fn line_endings() {
     let text = "line1\n\nline3\n";
     let (rem, ws) = preceded(alphanumeric1, end_of_lines)(text).unwrap();
     assert_eq!(ws, "\n\n");
@@ -45,7 +45,7 @@ fn test_line_endings() {
 }
 
 #[test]
-fn test_comment_parse() {
+fn comment_parse() {
     assert_eq!(comment("# Comment").unwrap(), ("", "# Comment"));
     assert_eq!(comment("# Comment\n").unwrap(), ("\n", "# Comment"));
     assert_eq!(comment("# Comment\nx").unwrap(), ("\nx", "# Comment"));
@@ -60,7 +60,7 @@ fn test_comment_parse() {
 }
 
 #[test]
-fn test_extraneous_whitespace() {
+fn extraneous_whitespace() {
     // Baseline
     let text = "dir/";
     let schema = parse_schema(text).unwrap();
@@ -84,7 +84,7 @@ fn test_extraneous_whitespace() {
 /// Operators should span a number of whole lines:
 /// the actual operator, any children, and any subsequent blank lines
 #[test]
-fn test_operator_span() {
+fn operator_span() {
     // Each line is 10 characters including \n to make the indexing easier
     let text = "\
           a23456789\
@@ -113,7 +113,7 @@ fn test_operator_span() {
 }
 
 #[test]
-fn test_invalid_child() {
+fn invalid_child() {
     parse_schema(
         "
         okay_entry
@@ -140,7 +140,7 @@ fn test_invalid_child() {
 }
 
 #[test]
-fn test_let() {
+fn let_statements() {
     let s = ":let something = expr";
     assert_eq!(
         operator(0)(s),
@@ -186,7 +186,7 @@ fn test_let() {
 }
 
 #[test]
-fn test_def_header() {
+fn def_headers() {
     assert_eq!(
         def_header(":def something"),
         Ok(("", (Identifier::new("something"), false, None)))
@@ -198,7 +198,7 @@ fn test_def_header() {
 }
 
 #[test]
-fn test_def_op_no_children() {
+fn def_op_no_children() {
     let s0 = ":def something_";
     let level = 0;
     let (s1, o1) = terminated(
@@ -254,7 +254,7 @@ fn test_def_op_no_children() {
 }
 
 #[test]
-fn test_def_op_with_children() {
+fn def_op_with_children() {
     let s = ":def something -> /some$where/else";
     assert_eq!(
         operator(0)(s),
@@ -279,7 +279,7 @@ fn test_def_op_with_children() {
 }
 
 #[test]
-fn test_dynamic_binding() {
+fn dynamic_binding() {
     assert_eq!(
         expression("$folder"),
         Ok((
@@ -291,14 +291,14 @@ fn test_dynamic_binding() {
 
 /// Line ending may be a newline or the EOF
 #[test]
-fn test_line_ending() {
+fn line_end() {
     assert_eq!(end_of_lines(""), Ok(("", "")));
     assert_eq!(end_of_lines("\n"), Ok(("", "\n")));
 }
 
 /// Trailing whitespace is only allowed on otherwise blank lines
 #[test]
-fn test_no_trailing_whitespace() {
+fn no_trailing_whitespace() {
     let s = "\n    \n\n    \n\n";
     assert!(matches!(end_of_lines(s), Ok(_)));
     let s = "    \n\n    \n\n";
@@ -306,13 +306,13 @@ fn test_no_trailing_whitespace() {
 }
 
 #[test]
-fn test_single_line_mode_op() {
+fn single_line_mode_op() {
     let s = ":mode 777";
     assert_eq!(operator(0)(s), Ok(("", (s, Operator::Mode(0o777)))));
 }
 
 #[test]
-fn test_single_line_mode_trailing() {
+fn single_line_mode_trailing() {
     assert!(operator(0)(":mode 777:owner x").is_err());
     assert!(operator(0)(":mode 777-").is_err());
     assert!(operator(0)(":mode 777").is_ok());
@@ -322,7 +322,7 @@ fn test_single_line_mode_trailing() {
 }
 
 #[test]
-fn test_trailing_whitespace() {
+fn trailing_whitespace() {
     parse_schema("").unwrap();
     assert!(parse_schema("dir/    \n").is_err());
     parse_schema("dir/\n").unwrap();
@@ -331,7 +331,7 @@ fn test_trailing_whitespace() {
 }
 
 #[test]
-fn test_multiline_meta_ops() {
+fn multiline_meta_ops() {
     let s = "
         :mode 777
         :owner usr-1
@@ -368,7 +368,7 @@ fn test_multiline_meta_ops() {
 }
 
 #[test]
-fn test_match_pattern() {
+fn match_pattern() {
     let s = ":match [A-Z][A-Za-z]+";
     assert_eq!(
         operator(0)(s),
@@ -383,7 +383,7 @@ fn test_match_pattern() {
 }
 
 #[test]
-fn test_source_pattern() {
+fn source_pattern() {
     let s = ":source /a/file/path";
     assert_eq!(
         operator(0)(s),
@@ -398,7 +398,7 @@ fn test_source_pattern() {
 }
 
 #[test]
-fn test_def_with_newline() {
+fn def_with_newline() {
     let s = ":def defined/\n";
     assert_eq!(
         operator(0)(s),
@@ -419,7 +419,7 @@ fn test_def_with_newline() {
 }
 
 #[test]
-fn test_def_with_block() {
+fn def_with_block() {
     let s = "
         :def defined/
             file
@@ -466,7 +466,7 @@ fn test_def_with_block() {
 }
 
 #[test]
-fn test_usage() {
+fn usage() {
     let s = "
         :def defined/
             file
@@ -533,7 +533,7 @@ fn test_usage() {
 }
 
 #[test]
-fn test_duplicate() {
+fn duplicate() {
     let schema = "
         directory/
             :owner admin
@@ -555,7 +555,7 @@ fn test_duplicate() {
 }
 
 #[test]
-fn test_symlink_directory() {
+fn symlink_directory() {
     let schema = parse_schema(
         "
         directory/ -> /another/place
@@ -586,7 +586,7 @@ fn test_symlink_directory() {
 }
 
 #[test]
-fn test_symlink_file() {
+fn symlink_file() {
     let schema = parse_schema(
         "
         file -> /another/place

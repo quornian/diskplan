@@ -303,7 +303,7 @@ mod tests {
     use super::MemoryFilesystem;
 
     #[test]
-    fn test_exists() {
+    fn exists() {
         let mut fs = MemoryFilesystem::new();
         assert!(fs.exists("/"));
         assert!(!fs.exists("/entry"));
@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn test_symlink_make_sub_directory() {
+    fn symlink_make_sub_directory() {
         let mut fs = MemoryFilesystem::new();
         fs.create_directory("/primary", SetAttrs::default())
             .unwrap();
