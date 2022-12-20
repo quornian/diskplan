@@ -60,11 +60,11 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
         error.unwrap()
     })?;
     let ops = ops.unwrap_or_default();
-    let schema_node = schema_node("root", text, text, NodeType::Directory, None, ops)?;
+    let schema_node = schema_node("root", text, text, false, NodeType::Directory, None, ops)?;
     if schema_node.match_pattern.is_some() {
         return Err(ParseError::new(
             "Top level :match is not allowed".into(),
-            // TODO: Or is it?
+            // TODO: Or is it? (Could alternatively say is_def=true)
             text,
             text.find("\n:match")
                 .map(|pos| &text[pos + 1..pos + 7])
@@ -79,6 +79,7 @@ fn schema_node<'t>(
     line: &'t str,
     whole: &'t str,
     part: &'t str,
+    is_def: bool,
     item_type: NodeType,
     symlink: Option<Expression<'t>>,
     ops: Vec<(&'t str, Operator<'t>)>,
@@ -86,6 +87,7 @@ fn schema_node<'t>(
     let part_parse_error = |e: anyhow::Error| ParseError::new(e.to_string(), whole, part, None);
     let mut builder = SchemaNodeBuilder::new(
         line,
+        is_def,
         match item_type {
             NodeType::Directory => NodeType::Directory,
             NodeType::File => NodeType::File,
@@ -118,15 +120,17 @@ fn schema_node<'t>(
                     false => NodeType::File,
                     true => NodeType::Directory,
                 };
-                let item_node = schema_node(line, whole, span, sub_item_type, link, children)
-                    .map_err(|e| {
-                        ParseError::new(
-                            format!(r#"Problem within "{}""#, binding),
-                            whole,
-                            span,
-                            Some(Box::new(e)),
-                        )
-                    })?;
+                let item_node =
+                    schema_node(line, whole, span, false, sub_item_type, link, children).map_err(
+                        |e| {
+                            ParseError::new(
+                                format!(r#"Problem within "{}""#, binding),
+                                whole,
+                                span,
+                                Some(Box::new(e)),
+                            )
+                        },
+                    )?;
                 builder.add_entry(binding, item_node)
             }
             Operator::Def {
@@ -148,15 +152,17 @@ fn schema_node<'t>(
                     false => NodeType::File,
                     true => NodeType::Directory,
                 };
-                let properties = schema_node(line, whole, span, sub_item_type, link, children)
-                    .map_err(|e| {
-                        ParseError::new(
-                            format!(r#"Error within definition "{}""#, name),
-                            whole,
-                            span,
-                            Some(Box::new(e)),
-                        )
-                    })?;
+                let properties =
+                    schema_node(line, whole, span, true, sub_item_type, link, children).map_err(
+                        |e| {
+                            ParseError::new(
+                                format!(r#"Error within definition "{}""#, name),
+                                whole,
+                                span,
+                                Some(Box::new(e)),
+                            )
+                        },
+                    )?;
 
                 // TODO: Consider if this is an issue
                 // if properties.match_expr.is_some() {

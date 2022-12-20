@@ -12,6 +12,7 @@ use super::NodeType;
 #[derive(Debug)]
 pub struct SchemaNodeBuilder<'t> {
     line: &'t str,
+    is_def: bool,
     match_pattern: Option<Expression<'t>>,
     avoid_pattern: Option<Expression<'t>>,
     symlink: Option<Expression<'t>>,
@@ -33,9 +34,15 @@ enum TypeSpecific<'t> {
 }
 
 impl<'t> SchemaNodeBuilder<'t> {
-    pub fn new(line: &'t str, node_type: NodeType, symlink: Option<Expression<'t>>) -> Self {
+    pub fn new(
+        line: &'t str,
+        is_def: bool,
+        node_type: NodeType,
+        symlink: Option<Expression<'t>>,
+    ) -> Self {
         SchemaNodeBuilder {
             line,
+            is_def,
             match_pattern: None,
             avoid_pattern: None,
             symlink,
@@ -57,6 +64,9 @@ impl<'t> SchemaNodeBuilder<'t> {
         if self.match_pattern.is_some() {
             return Err(anyhow!(":match occurs twice"));
         }
+        if self.is_def {
+            return Err(anyhow!(":match cannot be used in definition"));
+        }
         self.match_pattern = Some(pattern);
         Ok(())
     }
@@ -64,6 +74,9 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn avoid_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.avoid_pattern.is_some() {
             return Err(anyhow!(":avoid occurs twice"));
+        }
+        if self.is_def {
+            return Err(anyhow!(":avoid cannot be used in definition"));
         }
         self.avoid_pattern = Some(pattern);
         Ok(())
@@ -171,6 +184,7 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn build(self) -> Result<SchemaNode<'t>> {
         let SchemaNodeBuilder {
             line,
+            is_def: _,
             match_pattern,
             avoid_pattern,
             symlink,

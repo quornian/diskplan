@@ -145,3 +145,26 @@ fn owner_inheritance() -> Result<()> {
                 "/local_wins_sys_owned" [owner = "sys"]
     }
 }
+
+#[test]
+#[should_panic(expected = r#"Error: :match cannot be used in definition"#)]
+fn disallow_match_in_definition() {
+    (|| -> Result<()> {
+        assert_effect_of! {
+            under: "/"
+            applying: "
+                :def capital/
+                    :match [A-Z]
+
+                $variable/
+                    :use capital
+                    made/
+                "
+            onto: "/no"
+            yields:
+                directories:
+                    "/"
+        }
+    })()
+    .unwrap();
+}
