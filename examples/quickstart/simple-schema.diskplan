@@ -4,12 +4,13 @@
 
 # Sub-directory
 sub-directory/
-    
+
     # Variable directory...
     $variable/
-        # ...whose name must match this pattern:
+        # ...whose name must match this pattern...
         :match [A-Z][a-z]*
 
+        # ...will then create this
         inner-directory/
 
     # An empty file

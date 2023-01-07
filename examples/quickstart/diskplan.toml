@@ -1,0 +1,3 @@
+[stems.main]
+root = "/tmp/diskplan-root"
+schema = "simple-schema.diskplan"

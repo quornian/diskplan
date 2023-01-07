@@ -1,5 +1,16 @@
 //! Configuration for the system
 //!
+//! Example config file:
+//! ```
+//! # use diskplan::{config::{ConfigFile, ConfigStem}, schema::Root};
+//! # let config_text = r#"
+#![doc = include_str!("../examples/quickstart/diskplan.toml")]
+//! # "#;
+//! # let config: ConfigFile = config_text.try_into().unwrap();
+//! # let stem = config.stems.get("main").expect("no main stem");
+//! # assert_eq!(stem.root, "/tmp/diskplan-root".try_into().expect("invalid root"));
+//! # assert_eq!(stem.schema.as_str(), "simple-schema.diskplan");
+//! ```
 use std::{
     collections::HashMap,
     fmt::{Debug, Write as _},

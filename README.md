@@ -26,37 +26,23 @@ directory trees from a set of schemas. It can:
 
 ## Quickstart
 
-To try out diskplan, a simple `diskplan.toml` file can be created:
-```toml
-[stems.example]
-root = "/tmp/diskplan-root"
-schema = "examples/simple-schema.diskplan"
-```
-The schema file listed will also need to exist, in this case relative to the
-`diskplan.toml` file:
-:
+The examples expect `diskplan` to be an available command. If you have the
+code checked out, you can do something like this to make it available in the
+current terminal:
 ```sh
-# Root directory configuration
-# ...
-:let emptyfile = /dev/null
-
-# Sub-directory
-sub-directory/
-    
-    # Variable directory...
-    $variable/
-        # ...whose name must match this pattern:
-        :match [A-Z][a-z]*
-
-    # An empty file
-    blank_file
-        :source ${emptyfile}
-
+$ cargo build
+$ export PATH="$PWD/target/debug:$PATH"
 ```
-We can now run diskplan in simulation mode (without `--apply`) to preview
-the result:
-```
+Proper installation is left to the reader at present.
+
+To run diskplan with a very quick example (and no changes to disk), run:
+```sh
+$ cd examples/quickstart
 $ diskplan /tmp/diskplan-root
+```
+
+You'll be shown the following preview:
+```
 [WARN  diskplan] Simulating in memory only, use --apply to apply to disk
 [WARN  diskplan] Displaying in-memory filesystem...
 
@@ -66,13 +52,45 @@ drwxr-xr-x root       root         sub-directory/
 -rw-r--r-- root       root           blank_file
 ```
 
-Sub-directories that match the schema may be created either by path or
-variable assignment:
+Diskplan looks in the current directory for a `diskplan.toml` file. Here are
+the contents of that file for this example:
+```toml
+[stems.main]
+root = "/tmp/diskplan-root"
+schema = "simple-schema.diskplan"
+```
+The "main" stem associates a root path on disk (inside which construction will
+be contained) with a schema to apply to paths within this root. The schema file
+is found relative to the config and for this example contains the following:
+```sh
+# Root directory configuration
+# ...
+:let emptyfile = /dev/null
+
+# Sub-directory
+sub-directory/
+
+    # Variable directory...
+    $variable/
+        # ...whose name must match this pattern...
+        :match [A-Z][a-z]*
+
+        # ...will then create this
+        inner-directory/
+
+    # An empty file
+    blank_file
+        :source ${emptyfile}
+```
+
+Note that in the earlier output, the `sub-directory` and `blank_file` were
+created, but nothing for `$variable`. This variable directory can be created
+either directly either by path or by assigning a value to this variable:
 ```
 $ diskplan /tmp/diskplan-root/sub-directory/Example
 $ diskplan /tmp/diskplan-root --vars 'variable:Example'
 ```
-Both of these produce the following:
+Both of these produce the following output:
 ```
 [Root: /tmp/diskplan-root]
 drwxr-xr-x root       root       /tmp/diskplan-root/
