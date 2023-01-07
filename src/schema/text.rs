@@ -164,15 +164,14 @@ fn schema_node<'t>(
                         },
                     )?;
 
-                // TODO: Consider if this is an issue
-                // if properties.match_expr.is_some() {
-                //     return Err(ParseError::new(
-                //         format!(":def has own :match"),
-                //         whole,
-                //         span,
-                //         None,
-                //     ));
-                // }
+                if properties.match_pattern.is_some() {
+                    return Err(ParseError::new(
+                        format!(":def has own :match"),
+                        whole,
+                        span,
+                        None,
+                    ));
+                }
                 builder.define(name, properties)
             }
         }

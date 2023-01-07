@@ -40,7 +40,6 @@ impl Filesystem for DiskFilesystem {
         path: impl AsRef<Utf8Path>,
         target: impl AsRef<Utf8Path>,
     ) -> Result<()> {
-        // TODO: Not allocate
         Ok(std::os::unix::fs::symlink(target.as_ref(), path.as_ref())?)
     }
 
