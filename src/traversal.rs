@@ -454,10 +454,10 @@ where
                     .context("As symlink")?;
                 return Ok(());
             } else {
-                return Err(anyhow!(concat!(
+                bail!(concat!(
                     "Relative paths in symlinks are only supported for directories whose schema ",
                     "nodes have no attributes, use statements, or child entries"
-                )));
+                ));
             }
         }
 
@@ -505,7 +505,7 @@ where
         SchemaType::File(file) => {
             if !filesystem.is_file(to_create) {
                 let source = evaluate(file.source(), stack, path)?;
-                let content = filesystem.read_file(&source)?;
+                let content = filesystem.read_file(source)?;
                 filesystem
                     .create_file(to_create, attrs, content)
                     .context("As file")?;

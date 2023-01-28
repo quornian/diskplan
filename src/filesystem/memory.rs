@@ -3,7 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::unistd;
 use users::{Groups, Users, UsersCache};
@@ -149,28 +149,27 @@ impl Filesystem for MemoryFilesystem {
 
     fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>> {
         let path = self.canonicalize(path)?;
-        match self.node_from_path(&path)? {
-            Node::Directory { children, .. } => Ok(children.clone()),
-            Node::File { .. } => Err(anyhow!("Tried to list directory of a file")),
-            Node::Symlink { .. } => panic!("Non-canonical path: {}", path),
-        }
-        .with_context(|| format!("Listing directory: {}", path))
+        Ok(match self.node_from_path(&path)? {
+            Node::Directory { children, .. } => children.clone(),
+            Node::File { .. } => bail!("Tried to list directory of a file: {}", path),
+            Node::Symlink { .. } => unreachable!("Non-canonical path: {}", path),
+        })
     }
 
     fn read_file(&self, path: impl AsRef<Utf8Path>) -> Result<String> {
         let path = self.canonicalize(path)?;
-        match self.node_from_path(&path)? {
-            Node::File { content, .. } => Ok(content.clone()),
-            Node::Directory { .. } => Err(anyhow!("Tried to read a directory")),
-            Node::Symlink { .. } => panic!("Non-canonical path: {}", path),
-        }
+        Ok(match self.node_from_path(&path)? {
+            Node::File { content, .. } => content.clone(),
+            Node::Directory { .. } => bail!("Tried to read directory as a file: {}", path),
+            Node::Symlink { .. } => unreachable!("Non-canonical path: {}", path),
+        })
     }
 
     fn read_link(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
-        match self.node_from_path(&path)? {
-            Node::Symlink { target } => Ok(target.clone()),
-            _ => Err(anyhow!("Not a symlink: {}", path.as_ref())),
-        }
+        Ok(match self.node_from_path(&path)? {
+            Node::Symlink { target } => target.clone(),
+            _ => bail!("Not a symlink: {}", path.as_ref()),
+        })
     }
 
     fn attributes(&self, path: impl AsRef<Utf8Path>) -> Result<Attrs> {
@@ -270,7 +269,7 @@ impl MemoryFilesystem {
         let parent = parent.as_ref();
         let path = parent.join(name);
         if self.map.contains_key(&path) {
-            return Err(anyhow!("File exists: {:?}", path));
+            bail!("File exists: {:?}", path);
         }
         let parent_node = self
             .map

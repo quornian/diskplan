@@ -1,6 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 
 use crate::schema::{
     Attributes, Binding, DirectorySchema, Expression, FileSchema, Identifier, SchemaNode,
@@ -62,10 +62,10 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn match_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.match_pattern.is_some() {
-            return Err(anyhow!(":match occurs twice"));
+            bail!(":match occurs twice");
         }
         if self.is_def {
-            return Err(anyhow!(":match cannot be used in definition"));
+            bail!(":match cannot be used in definition");
         }
         self.match_pattern = Some(pattern);
         Ok(())
@@ -73,10 +73,10 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn avoid_pattern(&mut self, pattern: Expression<'t>) -> Result<()> {
         if self.avoid_pattern.is_some() {
-            return Err(anyhow!(":avoid occurs twice"));
+            bail!(":avoid occurs twice");
         }
         if self.is_def {
-            return Err(anyhow!(":avoid cannot be used in definition"));
+            bail!(":avoid cannot be used in definition");
         }
         self.avoid_pattern = Some(pattern);
         Ok(())
@@ -117,7 +117,7 @@ impl<'t> SchemaNodeBuilder<'t> {
     pub fn use_definition(&mut self, id: Identifier<'t>) -> Result<()> {
         if let TypeSpecific::File { source, .. } = &self.type_specific {
             if source.is_some() {
-                return Err(anyhow!(":use cannot be used in conjunction with :source"));
+                bail!(":use cannot be used in conjunction with :source");
             }
         }
         self.uses.push(id);
@@ -126,7 +126,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn owner(&mut self, owner: Expression<'t>) -> Result<()> {
         if self.attributes.owner.is_some() {
-            return Err(anyhow!(":owner occurs twice"));
+            bail!(":owner occurs twice");
         }
         self.attributes.owner = Some(owner);
         Ok(())
@@ -134,7 +134,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn group(&mut self, group: Expression<'t>) -> Result<()> {
         if self.attributes.group.is_some() {
-            return Err(anyhow!(":group occurs twice"));
+            bail!(":group occurs twice");
         }
         self.attributes.group = Some(group);
         Ok(())
@@ -142,7 +142,7 @@ impl<'t> SchemaNodeBuilder<'t> {
 
     pub fn mode(&mut self, mode: u16) -> Result<()> {
         if self.attributes.mode.is_some() {
-            return Err(anyhow!(":mode occurs twice"));
+            bail!(":mode occurs twice");
         }
         self.attributes.mode = Some(mode);
         Ok(())

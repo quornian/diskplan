@@ -166,7 +166,7 @@ fn schema_node<'t>(
 
                 if properties.match_pattern.is_some() {
                     return Err(ParseError::new(
-                        format!(":def has own :match"),
+                        ":def has own :match".to_owned(),
                         whole,
                         span,
                         None,

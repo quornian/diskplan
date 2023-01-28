@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
@@ -27,10 +27,10 @@ impl TryFrom<Utf8PathBuf> for Root {
 
     fn try_from(value: Utf8PathBuf) -> Result<Self, Self::Error> {
         if !is_normalized(value.as_str()) {
-            return Err(anyhow!("Root must be a normalized path: {}", value));
+            bail!("Root must be a normalized path: {}", value);
         }
         if !value.is_absolute() {
-            return Err(anyhow!("Invalid root; path must be absolute: {}", value));
+            bail!("Invalid root; path must be absolute: {}", value);
         }
         Ok(Root(value))
     }
