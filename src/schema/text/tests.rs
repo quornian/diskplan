@@ -548,7 +548,7 @@ fn duplicate() {
 
     let err = match parse_schema(schema) {
         Err(e) => e,
-        ok => panic!("Unexpected: {:?}", ok),
+        ok => panic!("Unexpected: {ok:?}"),
     };
     let e = err.into_iter().last().unwrap();
     assert_eq!(e.line_number(), 8);

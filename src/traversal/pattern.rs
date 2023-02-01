@@ -31,15 +31,15 @@ impl CompiledPattern {
             (None, None) => CompiledPattern::Any,
             (Some(pattern), None) => {
                 Regex::new(pattern)?; // Ensure it's valid before encasing to avoid injection
-                CompiledPattern::Regex(Regex::new(&format!("^(?:{})$", pattern))?)
+                CompiledPattern::Regex(Regex::new(&format!("^(?:{pattern})$"))?)
             }
             (_, Some(avoiding)) => {
                 let pattern = match_pattern.as_deref().unwrap_or(".*");
                 Regex::new(pattern)?;
                 Regex::new(avoiding)?;
                 CompiledPattern::RegexWithExclusions(
-                    Regex::new(&format!("^(?:{})$", pattern))?,
-                    Regex::new(&format!("^(?:{})$", avoiding))?,
+                    Regex::new(&format!("^(?:{pattern})$"))?,
+                    Regex::new(&format!("^(?:{avoiding})$"))?,
                 )
             }
         })

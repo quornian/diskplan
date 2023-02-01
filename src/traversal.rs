@@ -145,18 +145,16 @@ where
         }
     }
     if let Some(issues) = unresolved {
-        let mut message = format!(
-            "No schema within \"{}\" was able to produce \"{}\"",
-            path, remaining
-        );
+        let mut message =
+            format!("No schema within \"{path}\" was able to produce \"{remaining}\"");
         for (schema_node, _) in issues {
-            write!(message, "\nInside: {}:", schema_node)?;
+            write!(message, "\nInside: {schema_node}:")?;
             if let SchemaType::Directory(dir) = &schema_node.schema {
                 if dir.entries().is_empty() {
                     write!(message, "\n  No entries to match",)?;
                 }
                 for (binding, node) in dir.entries() {
-                    write!(message, "\n  Considered: {} - {}", binding, node)?;
+                    write!(message, "\n  Considered: {binding} - {node}")?;
                 }
             }
         }
@@ -402,7 +400,7 @@ where
                             &stack
                                 .variables()
                                 .as_binding()
-                                .map(|(var, value)| format!("${} = {}", var, value))
+                                .map(|(var, value)| format!("${var} = {value}"))
                                 .unwrap_or_else(|| "<no binding>".into()),
                         )
                     })?;
@@ -469,7 +467,7 @@ where
             )
         })?;
         link_target = PlantedPath::new(link_root, Some(link_path))
-            .with_context(|| format!("Following symlink {} -> {}", path, link_path))?;
+            .with_context(|| format!("Following symlink {path} -> {link_path}"))?;
 
         // Create the link target (using its own schema to build it)
         if !filesystem.exists(link_target.absolute()) {

@@ -32,7 +32,7 @@ impl ConfigFile {
     ///
     pub fn load(path: impl AsRef<Utf8Path>) -> Result<Self> {
         let path = path.as_ref();
-        let config_context = || format!("Reading config file {:?}", path);
+        let config_context = || format!("Reading config file {path:?}");
         let config_data = std::fs::read_to_string(path).with_context(config_context)?;
         config_data.as_str().try_into()
     }

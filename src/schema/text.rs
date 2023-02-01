@@ -48,9 +48,9 @@ pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
             error = Some(ParseError::new(
                 match e {
                     VerboseErrorKind::Nom(p) => {
-                        format!("Invalid token while looking for: {:?}", p)
+                        format!("Invalid token while looking for: {p:?}")
                     }
-                    _ => format!("Error parsing {:?}", e),
+                    _ => format!("Error parsing {e:?}"),
                 },
                 text,
                 r,
@@ -124,7 +124,7 @@ fn schema_node<'t>(
                     schema_node(line, whole, span, false, sub_item_type, link, children).map_err(
                         |e| {
                             ParseError::new(
-                                format!(r#"Problem within "{}""#, binding),
+                                format!(r#"Problem within "{binding}""#),
                                 whole,
                                 span,
                                 Some(Box::new(e)),
@@ -156,7 +156,7 @@ fn schema_node<'t>(
                     schema_node(line, whole, span, true, sub_item_type, link, children).map_err(
                         |e| {
                             ParseError::new(
-                                format!(r#"Error within definition "{}""#, name),
+                                format!(r#"Error within definition "{name}""#),
                                 whole,
                                 span,
                                 Some(Box::new(e)),

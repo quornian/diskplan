@@ -72,8 +72,8 @@ pub(super) fn evaluate(
 impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Expression(e) => write!(f, "{}", e),
-            Value::String(s) => write!(f, "{}", s),
+            Value::Expression(e) => write!(f, "{e}"),
+            Value::String(s) => write!(f, "{s}"),
         }
     }
 }

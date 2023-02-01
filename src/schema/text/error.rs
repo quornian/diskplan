@@ -15,14 +15,14 @@ impl Display for ParseError<'_> {
         let column = self.span.as_ptr() as usize - line.as_ptr() as usize;
         writeln!(f, "Error: {}", self.error)?;
         writeln!(f, "     |")?;
-        writeln!(f, "{:4} | {}", lineno, line)?;
+        writeln!(f, "{lineno:4} | {line}")?;
         if column == 0 {
             writeln!(f, "     |")?;
         } else {
             writeln!(f, "     | {0:1$}^", "", column)?;
         }
         if let Some(next) = &self.next {
-            write!(f, "{}", next)?;
+            write!(f, "{next}")?;
         }
         Ok(())
     }

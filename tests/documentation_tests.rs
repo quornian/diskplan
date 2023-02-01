@@ -6,8 +6,7 @@ fn check_readme_contains_quickstart_toml() -> anyhow::Result<()> {
     quickstart_toml.push_str("```\n");
     assert!(
         readme.contains(&quickstart_toml),
-        "README.md does not contain:\n{}",
-        quickstart_toml
+        "README.md does not contain:\n{quickstart_toml}"
     );
     Ok(())
 }
@@ -21,8 +20,7 @@ fn check_readme_contains_quickstart_schema() -> anyhow::Result<()> {
     quickstart_schema.push_str("```\n");
     assert!(
         readme.contains(&quickstart_schema),
-        "README.md does not contain:\n{}",
-        quickstart_schema
+        "README.md does not contain:\n{quickstart_schema}"
     );
     Ok(())
 }

@@ -24,7 +24,7 @@ impl<'t> From<&[Token<'t>]> for Expression<'t> {
 impl Display for Expression<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for token in self.0.iter() {
-            write!(f, "{}", token)?;
+            write!(f, "{token}")?;
         }
         Ok(())
     }
@@ -52,8 +52,8 @@ impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Text(s) => f.write_str(s),
-            Token::Variable(v) => write!(f, "${{{}}}", v),
-            Token::Special(sp) => write!(f, "{}", sp),
+            Token::Variable(v) => write!(f, "${{{v}}}"),
+            Token::Special(sp) => write!(f, "{sp}"),
         }
     }
 }
@@ -146,9 +146,6 @@ mod tests {
             Token::Text("/"),
             Token::Special(Special::ParentRelative),
         ]);
-        assert_eq!(
-            &format!("{}", expr),
-            "normal text/${a_variable}/PARENT_PATH"
-        );
+        assert_eq!(&format!("{expr}"), "normal text/${a_variable}/PARENT_PATH");
     }
 }

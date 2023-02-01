@@ -85,11 +85,11 @@ impl Filesystem for MemoryFilesystem {
         let path = path.as_ref();
         let (parent, name) = self
             .canonical_split(path)
-            .with_context(|| format!("Splitting {}", path))?;
+            .with_context(|| format!("Splitting {path}"))?;
         let attrs = self.internal_attrs(attrs, DEFAULT_DIRECTORY_MODE)?;
         let children = vec![];
         self.insert_node(&parent, name, Node::Directory { attrs, children })
-            .with_context(|| format!("Creating directory: {}", path))
+            .with_context(|| format!("Creating directory: {path}"))
     }
 
     fn create_file(
@@ -102,7 +102,7 @@ impl Filesystem for MemoryFilesystem {
         let (parent, name) = self.canonical_split(path)?;
         let attrs = self.internal_attrs(attrs, DEFAULT_FILE_MODE)?;
         self.insert_node(&parent, name, Node::File { attrs, content })
-            .with_context(|| format!("Creating file: {}", path))
+            .with_context(|| format!("Creating file: {path}"))
     }
 
     fn create_symlink(
@@ -119,7 +119,7 @@ impl Filesystem for MemoryFilesystem {
                 target: target.as_ref().to_owned(),
             },
         )
-        .with_context(|| format!("Creating symlink: {}", path))
+        .with_context(|| format!("Creating symlink: {path}"))
     }
 
     fn exists(&self, path: impl AsRef<Utf8Path>) -> bool {
@@ -177,7 +177,7 @@ impl Filesystem for MemoryFilesystem {
         let node = self.node_from_path(&path)?;
         let attrs = match node {
             Node::Directory { attrs, .. } | Node::File { attrs, .. } => attrs,
-            Node::Symlink { .. } => panic!("Non-canonical path: {}", path),
+            Node::Symlink { .. } => panic!("Non-canonical path: {path}"),
         };
         let owner = Cow::Owned(
             self.users
@@ -280,7 +280,7 @@ impl MemoryFilesystem {
             Node::Directory {
                 ref mut children, ..
             } => children.push(name.into()),
-            _ => panic!("Parent not a directory: {}", parent),
+            _ => panic!("Parent not a directory: {parent}"),
         }
         // Insert full path and node into map
         self.map.insert(path, node);

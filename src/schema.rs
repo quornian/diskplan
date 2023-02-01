@@ -245,10 +245,10 @@ impl<'t> std::fmt::Display for SchemaNode<'t> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Schema node \"{}\"", self.line)?;
         if let Some(ref match_pattern) = self.match_pattern {
-            write!(f, ", matching \"{}\"", match_pattern)?;
+            write!(f, ", matching \"{match_pattern}\"")?;
         }
         if let Some(ref avoid_pattern) = self.avoid_pattern {
-            write!(f, ", avoiding \"{}\"", avoid_pattern)?;
+            write!(f, ", avoiding \"{avoid_pattern}\"")?;
         }
 
         match &self.schema {
@@ -343,8 +343,8 @@ pub enum Binding<'t> {
 impl Display for Binding<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Binding::Static(s) => write!(f, "{}", s),
-            Binding::Dynamic(id) => write!(f, "${}", id.value()),
+            Binding::Static(s) => write!(f, "{s}"),
+            Binding::Dynamic(id) => write!(f, "${id}"),
         }
     }
 }

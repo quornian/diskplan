@@ -98,7 +98,7 @@ where
         symbol = if dir { "/" } else { "" }
     );
     if let Ok(target) = fs.read_link(path) {
-        println!(" -> {}", target);
+        println!(" -> {target}");
     } else {
         println!();
 
