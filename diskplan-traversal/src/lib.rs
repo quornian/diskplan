@@ -10,10 +10,8 @@ use std::{
 use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::{
-    filesystem::{Filesystem, PlantedPath, SetAttrs},
-    schema::{Binding, DirectorySchema, SchemaNode, SchemaType},
-};
+use diskplan_filesystem::{Filesystem, PlantedPath, SetAttrs};
+use diskplan_schema::{Binding, DirectorySchema, SchemaNode, SchemaType};
 
 use self::{eval::evaluate, pattern::CompiledPattern};
 

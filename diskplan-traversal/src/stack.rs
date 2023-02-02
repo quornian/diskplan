@@ -3,22 +3,18 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use crate::{
-    config::{Config, NameMap},
-    filesystem::Mode,
-    schema::{DirectorySchema, Identifier, SchemaNode},
-    traversal::eval::Value,
-};
+use crate::eval::Value;
+use diskplan_config::{Config, NameMap};
+use diskplan_filesystem::Mode;
+use diskplan_schema::{DirectorySchema, Identifier, SchemaNode};
 
 /// Keeps track of variables and provides access to definitions from parent
 /// nodes
 ///
 /// Example:
 /// ```
-/// use diskplan::{
-///     schema::DirectorySchema,
-///     traversal::{StackFrame, VariableSource},
-/// };
+/// use diskplan_schema::DirectorySchema;
+/// use diskplan_traversal::{StackFrame, VariableSource};
 ///
 /// // The stack lifetimes allow us to have a function that takes a stack...
 /// fn __<'g>(stack: &StackFrame<'g, '_, '_>, d: &'g DirectorySchema) {

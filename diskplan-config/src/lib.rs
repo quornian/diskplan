@@ -2,9 +2,9 @@
 //!
 //! Example config file:
 //! ```
-//! # use diskplan::{config::{ConfigFile, ConfigStem}, schema::Root};
+//! # use diskplan_config::{ConfigFile, ConfigStem, Root};
 //! # let config_text = r#"
-#![doc = include_str!("../../../examples/quickstart/diskplan.toml")]
+#![doc = include_str!("../../examples/quickstart/diskplan.toml")]
 //! # "#;
 //! # let config: ConfigFile = config_text.try_into().unwrap();
 //! # let stem = config.stems.get("main").expect("no main stem");
@@ -20,7 +20,10 @@ use std::{
 use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::schema::{Root, SchemaCache, SchemaNode};
+use diskplan_schema::{SchemaCache, SchemaNode};
+
+mod roots;
+pub use roots::Root;
 
 mod file;
 pub use file::{ConfigFile, ConfigStem};

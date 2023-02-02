@@ -29,7 +29,7 @@
 //!
 //! The top level of a schema describes a directory, whose [attributes][Attributes] may be set by `:owner`, `:group` and `:mode` tags:
 //! ```
-//! use diskplan::schema::*;
+//! use diskplan_schema::*;
 //!
 //! let schema_root = parse_schema("
 //!     :owner person
@@ -46,7 +46,7 @@
 //!
 //! A [DirectorySchema] may contain sub-directories and files:
 //! ```
-//! # use diskplan::schema::*;
+//! # use diskplan_schema::*;
 //! #
 //! // ...
 //! # let text =
@@ -76,7 +76,7 @@
 //! target:
 //!
 //! ```
-//! # use diskplan::schema::*;
+//! # use diskplan_schema::*;
 //! #
 //! // ...
 //! # let text =
@@ -115,7 +115,7 @@
 //!
 //! Variables can be used to drive construction, for example:
 //! ```
-//! # diskplan::schema::parse_schema(
+//! # diskplan_schema::parse_schema(
 //! "
 //!     :let asset_type = character
 //!     :let asset_name = Monkey
@@ -210,9 +210,6 @@ pub use cache::SchemaCache;
 
 mod expression;
 pub use expression::{Expression, Identifier, Special, Token};
-
-mod roots;
-pub use roots::Root;
 
 mod text;
 pub use text::{parse_schema, ParseError};

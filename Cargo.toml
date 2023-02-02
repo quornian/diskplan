@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "diskplan-cli",
+    "diskplan-config",
+    "diskplan-filesystem",
+    "diskplan-schema",
+    "diskplan-traversal",
+]

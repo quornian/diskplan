@@ -8,7 +8,7 @@ use nom::{
     sequence::{preceded, terminated},
 };
 
-use crate::schema::{
+use crate::{
     expression::{Expression, Identifier, Token},
     text::{
         blank_line, comment, def_header, end_of_lines, expression, indentation, operator,

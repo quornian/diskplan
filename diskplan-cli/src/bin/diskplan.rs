@@ -2,11 +2,9 @@ use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use clap::Parser;
 
-use diskplan::{
-    config::{CommandLineArgs, Config},
-    filesystem::{self, Filesystem},
-    traversal::{self, StackFrame, VariableSource},
-};
+use diskplan_config::{CommandLineArgs, Config};
+use diskplan_filesystem::{self as filesystem, Filesystem};
+use diskplan_traversal::{self as traversal, StackFrame, VariableSource};
 
 fn init_logger(verbosity: u8) {
     let env = env_logger::Env::new().filter("DISKPLAN_LOG");

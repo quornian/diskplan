@@ -2,10 +2,8 @@ use std::fmt::Display;
 
 use anyhow::{anyhow, Result};
 
-use crate::{
-    filesystem::PlantedPath,
-    schema::{Expression, Special, Token},
-};
+use diskplan_filesystem::PlantedPath;
+use diskplan_schema::{Expression, Special, Token};
 
 use super::stack;
 

@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry, HashMap};
 
 use anyhow::{anyhow, bail, Result};
 
-use crate::schema::{
+use crate::{
     Attributes, Binding, DirectorySchema, Expression, FileSchema, Identifier, SchemaNode,
     SchemaType,
 };

@@ -2,12 +2,10 @@
 use anyhow::Result;
 use regex::Regex;
 
-use diskplan::{
-    config::Config,
-    filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-    schema::{Root, SchemaNode},
-    traversal::{traverse, StackFrame},
-};
+use diskplan_config::Config;
+use diskplan_filesystem::{Filesystem, MemoryFilesystem, SetAttrs};
+use diskplan_schema::{Root, SchemaNode};
+use diskplan_traversal::{traverse, StackFrame};
 
 pub fn verify_trees<'s, 't>(
     config: &'s Config<'t>,

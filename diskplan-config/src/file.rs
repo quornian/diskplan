@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
-use crate::schema::Root;
+use crate::Root;
 
 /// Deserialization of diskplan.toml
 #[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]

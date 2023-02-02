@@ -10,7 +10,7 @@ use nom::{
 };
 
 use super::{Binding, SchemaNode};
-use crate::schema::{Expression, Identifier, Special, Token};
+use crate::{Expression, Identifier, Special, Token};
 
 type Res<T, U> = IResult<T, U, VerboseError<T>>;
 

@@ -297,7 +297,7 @@ impl MemoryFilesystem {
 
 #[cfg(test)]
 mod tests {
-    use crate::filesystem::{Filesystem, SetAttrs};
+    use crate::{Filesystem, SetAttrs};
 
     use super::MemoryFilesystem;
 

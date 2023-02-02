@@ -1,7 +1,8 @@
 use anyhow::Result;
 use regex::Regex;
 
-use crate::{filesystem::PlantedPath, schema::Expression};
+use diskplan_filesystem::PlantedPath;
+use diskplan_schema::Expression;
 
 use super::{eval::evaluate, stack};
 

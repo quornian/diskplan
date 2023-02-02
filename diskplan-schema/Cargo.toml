@@ -1,9 +1,10 @@
 [package]
-name = "diskplan"
+name = "diskplan-schema"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+
 # Command line argument parsing
 clap = { version = "4", features = ["derive"] }
 # Error handling and chaining

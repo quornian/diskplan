@@ -9,7 +9,7 @@ mod attributes;
 mod memory;
 mod physical;
 
-use crate::schema::Root;
+use diskplan_config::Root;
 
 pub use self::{
     attributes::{Attrs, Mode, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},

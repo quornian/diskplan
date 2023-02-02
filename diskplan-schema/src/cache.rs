@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Mutex};
 use anyhow::{anyhow, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::schema::SchemaNode;
+use crate::SchemaNode;
 
 #[derive(Default)]
 pub struct SchemaCache<'a> {
@@ -33,7 +33,7 @@ impl<'a> SchemaCache<'a> {
             std::fs::read_to_string(path.as_ref())
                 .with_context(|| format!("Failed to load config from: {}", path.as_ref()))?,
         );
-        let schema = crate::schema::parse_schema(text)
+        let schema = crate::parse_schema(text)
             // ParseError lifetime is tricky, flattern
             .map_err(|e| anyhow!("{}", e))?;
         locked.insert(path.as_ref().to_owned(), self.schemas.len());
