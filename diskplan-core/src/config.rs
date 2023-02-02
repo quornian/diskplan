@@ -4,7 +4,7 @@
 //! ```
 //! # use diskplan::{config::{ConfigFile, ConfigStem}, schema::Root};
 //! # let config_text = r#"
-#![doc = include_str!("../examples/quickstart/diskplan.toml")]
+#![doc = include_str!("../../../examples/quickstart/diskplan.toml")]
 //! # "#;
 //! # let config: ConfigFile = config_text.try_into().unwrap();
 //! # let stem = config.stems.get("main").expect("no main stem");
