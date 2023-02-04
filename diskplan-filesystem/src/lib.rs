@@ -1,6 +1,7 @@
 //! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
 //! and virtual ([`MemoryFilesystem`]) implementation.
-use std::{borrow::Cow, fmt::Display};
+
+use std::fmt::Display;
 
 use anyhow::{bail, Result};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -80,7 +81,6 @@ pub trait Filesystem {
             // TODO: Keep a current_directory to provide relative path support
             bail!("Only absolute paths supported");
         }
-        let path = normalize(path);
         let mut canon = Utf8PathBuf::with_capacity(path.as_str().len());
         for part in path.components() {
             if part == Utf8Component::ParentDir {
@@ -113,21 +113,6 @@ fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
             (parent.into(), child)
         }
     })
-}
-
-fn normalize(path: &Utf8Path) -> Cow<'_, Utf8Path> {
-    let mut path = Cow::Borrowed(if path == "/" {
-        path
-    } else {
-        path.as_str().trim_end_matches('/').into()
-    });
-    while path.as_str().contains("//") {
-        path = Cow::Owned(Utf8PathBuf::from(path.to_string().replace("//", "/")));
-    }
-    while path.as_str().contains("/./") {
-        path = Cow::Owned(Utf8PathBuf::from(path.to_string().replace("/./", "/")));
-    }
-    path
 }
 
 /// An absolute path that can be split easily into its Root and relative path parts
@@ -176,17 +161,17 @@ impl PlantedPath {
     }
 
     /// Produces a new planted path with the given path part appended
-    pub fn join(&self, path: impl AsRef<Utf8Path>) -> Result<Self> {
-        let path = normalize(path.as_ref());
-        if path.is_absolute() {
+    pub fn join(&self, name: impl AsRef<str>) -> Result<Self> {
+        let name = name.as_ref();
+        if name.contains('/') {
             bail!(
-                "Absolute paths cannot be joined to a planted path: {}",
-                path
+                "Only single path components can be joined to a planted path: {}",
+                name
             );
         }
         Ok(PlantedPath {
             root_len: self.root_len,
-            full: self.full.join(&path),
+            full: self.full.join(name),
         })
     }
 }
