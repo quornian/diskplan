@@ -120,6 +120,7 @@ impl Filesystem for DiskFilesystem {
 }
 
 impl DiskFilesystem {
+    /// Constructs a new accessor to the on-disk filesystem(s)
     pub fn new() -> Self {
         DiskFilesystem {
             users: UsersCache::new(),

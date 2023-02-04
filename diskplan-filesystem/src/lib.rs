@@ -1,5 +1,6 @@
 //! Provides an abstract [`Filesystem`] trait, together with a physical ([`DiskFilesystem`])
 //! and virtual ([`MemoryFilesystem`]) implementation.
+#![warn(missing_docs)]
 
 use std::fmt::Display;
 
@@ -19,6 +20,7 @@ pub use self::{
 };
 
 impl SetAttrs<'_> {
+    /// Returns true if this `SetAttrs` matches the given, existing `attrs`
     pub fn matches(&self, attrs: &Attrs) -> bool {
         let SetAttrs { owner, group, mode } = self;
         owner.map(|owner| owner == attrs.owner).unwrap_or(true)
@@ -29,8 +31,10 @@ impl SetAttrs<'_> {
 
 /// Operations of a file system
 pub trait Filesystem {
+    /// Create a directory at the given path, with any number of attributes set
     fn create_directory(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()>;
 
+    /// Create a directory and all of its parents
     fn create_directory_all(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()> {
         let path = path.as_ref();
         if let Some((parent, _)) = split(path) {
@@ -44,6 +48,7 @@ pub trait Filesystem {
         Ok(())
     }
 
+    /// Create a file with the given content and any number of attributes set
     fn create_file(
         &mut self,
         path: impl AsRef<Utf8Path>,
@@ -51,30 +56,47 @@ pub trait Filesystem {
         content: String,
     ) -> Result<()>;
 
+    /// Create a symlink pointing to the given target
     fn create_symlink(
         &mut self,
         path: impl AsRef<Utf8Path>,
         target: impl AsRef<Utf8Path>,
     ) -> Result<()>;
 
+    /// Returns true if the path exists
     fn exists(&self, path: impl AsRef<Utf8Path>) -> bool;
 
+    /// Returns true if the path is a directory
     fn is_directory(&self, path: impl AsRef<Utf8Path>) -> bool;
 
+    /// Returns true if the path is a regular file
     fn is_file(&self, path: impl AsRef<Utf8Path>) -> bool;
 
+    /// Returns true if the path is a symbolic link
     fn is_link(&self, path: impl AsRef<Utf8Path>) -> bool;
 
+    /// Lists the contents of the given directory
     fn list_directory(&self, path: impl AsRef<Utf8Path>) -> Result<Vec<String>>;
 
+    /// Reads the contents of the given file
     fn read_file(&self, path: impl AsRef<Utf8Path>) -> Result<String>;
 
+    /// Reads the path pointed to by the given symbolic link
     fn read_link(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf>;
 
+    /// Returns the attributes of the given file, directory
+    ///
+    /// If the path is a symlink, the file/directory pointed to by the symlink will be checked
+    /// and its attributes returned (i.e. paths are dereferenced)
     fn attributes(&self, path: impl AsRef<Utf8Path>) -> Result<Attrs>;
 
+    /// Sets the attributes of the given file or directory
+    ///
+    /// If the path is a symlink, the file/directory pointed to by the symlink will be updated
+    /// with the given attributes (i.e. paths are dereferenced)
     fn set_attributes(&mut self, path: impl AsRef<Utf8Path>, attrs: SetAttrs) -> Result<()>;
 
+    /// Returns the path after following all symlinks, normalized and absolute
     fn canonicalize(&self, path: impl AsRef<Utf8Path>) -> Result<Utf8PathBuf> {
         let path = path.as_ref();
         if !path.is_absolute() {
@@ -104,6 +126,7 @@ pub trait Filesystem {
     }
 }
 
+/// Splits the dirname and basename of the path if possible to do so
 fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
     // TODO: Consider join(parent, "/absolute/child")
     path.as_str().rsplit_once('/').map(|(parent, child)| {
@@ -115,7 +138,7 @@ fn split(path: &Utf8Path) -> Option<(&Utf8Path, &str)> {
     })
 }
 
-/// An absolute path that can be split easily into its Root and relative path parts
+/// An absolute path that can be split easily into its [`Root`] and relative path parts
 pub struct PlantedPath {
     root_len: usize,
     full: Utf8PathBuf,
@@ -126,7 +149,6 @@ impl PlantedPath {
     ///
     /// If no path is given the root's path will be used. If a given path is not prefixed with
     /// the root's path, an error is returned.
-    ///
     pub fn new(root: &Root, path: Option<&Utf8Path>) -> Result<Self> {
         let path = match path {
             Some(path) => {

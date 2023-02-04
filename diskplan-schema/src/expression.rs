@@ -1,9 +1,11 @@
 use std::{fmt::Display, vec};
 
+/// A string expression made from one or more [`Token`]s
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Expression<'t>(Vec<Token<'t>>);
 
 impl<'t> Expression<'t> {
+    /// Provides access to the slice of tokens that make up this expression
     pub fn tokens(&self) -> &[Token<'t>] {
         &self.0[..]
     }
@@ -41,10 +43,14 @@ impl PartialEq<&str> for Expression<'_> {
     }
 }
 
+/// Part of an [`Expression`]; a constant string, or a variable for later expansion to a string
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Token<'t> {
+    /// A constant string of plain text
     Text(&'t str),
+    /// The name of a variable
     Variable(Identifier<'t>),
+    /// A special variable whose value is provided by the current scope
     Special(Special),
 }
 
@@ -58,24 +64,39 @@ impl Display for Token<'_> {
     }
 }
 
+/// A choice of built-in variables that are used to provide context information during traversal
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Special {
+    /// The current path relative to the active root
     PathRelative,
+    /// The current absolute path
     PathAbsolute,
+    /// The final component of the current path
     PathNameOnly,
+    /// The current relative path without the final component
     ParentRelative,
+    /// The current absolute path without the final component
     ParentAbsolute,
+    /// The penultimate component of the current path
     ParentNameOnly,
+    /// The absolute path of the active root
     RootPath,
 }
 
 impl Special {
+    /// The current path relative to the active root
     pub const SAME_PATH_RELATIVE: &'static str = "PATH";
+    /// The current absolute path
     pub const SAME_PATH_ABSOLUTE: &'static str = "FULL_PATH";
+    /// The final component of the current path
     pub const SAME_PATH_NAME: &'static str = "NAME";
+    /// The current relative path without the final component
     pub const PARENT_PATH_RELATIVE: &'static str = "PARENT_PATH";
+    /// The current absolute path without the final component
     pub const PARENT_PATH_ABSOLUTE: &'static str = "PARENT_FULL_PATH";
+    /// The penultimate component of the current path
     pub const PARENT_PATH_NAME: &'static str = "PARENT_NAME";
+    /// The absolute path of the active root
     pub const ROOT_PATH: &'static str = "ROOT_PATH";
 }
 
@@ -93,14 +114,17 @@ impl Display for Special {
     }
 }
 
+/// The name given to a variable
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Identifier<'t>(&'t str);
 
 impl<'t> Identifier<'t> {
+    /// Creates a new Identifier from the given string
     pub fn new(s: &'t str) -> Self {
         Identifier(s)
     }
 
+    /// Returns a reference to the underlying string
     pub fn value(&self) -> &'t str {
         self.0
     }

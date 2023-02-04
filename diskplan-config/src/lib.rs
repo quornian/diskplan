@@ -11,6 +11,8 @@
 //! # assert_eq!(stem.root, "/tmp/diskplan-root".try_into().expect("invalid root"));
 //! # assert_eq!(stem.schema.as_str(), "simple-schema.diskplan");
 //! ```
+#![warn(missing_docs)]
+
 use std::{
     collections::HashMap,
     fmt::{Debug, Write as _},
@@ -52,6 +54,12 @@ pub struct Config<'t> {
 }
 
 impl<'t> Config<'t> {
+    /// Constructs a new application configuration
+    ///
+    /// The `target` path defines a directory into which we will begin
+    ///
+    /// The `apply` flag controls whether changes should be applied to
+    /// the filesystem or just reported
     pub fn new(target: impl AsRef<Utf8Path>, apply: bool) -> Self {
         Config {
             target: target.as_ref().to_owned(),
@@ -63,6 +71,7 @@ impl<'t> Config<'t> {
         }
     }
 
+    /// Loads configuation options from the given `path`
     pub fn load(&mut self, path: impl AsRef<Utf8Path>) -> Result<()> {
         let ConfigFile {
             stems,
@@ -81,10 +90,12 @@ impl<'t> Config<'t> {
         Ok(())
     }
 
+    /// Updates this configuration's user name map with the one provided
     pub fn apply_user_map(&mut self, usermap: NameMap) {
         self.usermap.0.extend(usermap.0.into_iter())
     }
 
+    /// Updates this configuration's group name map with the one provided
     pub fn apply_group_map(&mut self, groupmap: NameMap) {
         self.groupmap.0.extend(groupmap.0.into_iter())
     }
@@ -107,7 +118,6 @@ impl<'t> Config<'t> {
     /// Add a root and schema definition file path pair, adding its already parsed schema to the cache
     ///
     /// The file path will not be read; this can be used for testing
-    ///
     pub fn add_precached_stem(
         &mut self,
         root: Root,
@@ -124,7 +134,6 @@ impl<'t> Config<'t> {
 
     /// Returns the schema for a given path, loaded on demand, or an error if the schema cannot be
     /// found, has a syntax error, or otherwise fails to load
-    ///
     pub fn schema_for<'s, 'p>(&'s self, path: &'p Utf8Path) -> Result<(&SchemaNode<'t>, &Root)>
     where
         's: 't,
@@ -145,6 +154,7 @@ impl<'t> Config<'t> {
     }
 }
 
+/// Collection of rooted schemas; a map of each [`Root`] to the [`SchemaNode`] configured for this root
 #[derive(Default)]
 pub struct Stems<'t> {
     /// Maps root path to the schema definition's file path
@@ -155,14 +165,20 @@ pub struct Stems<'t> {
 }
 
 impl<'t> Stems<'t> {
+    /// Constructs an empty mapping
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Configures the given `root` path with the path where a schema for this root may be found
     pub fn add(&mut self, root: Root, schema_path: impl AsRef<Utf8Path>) {
         self.path_map.insert(root, schema_path.as_ref().to_owned());
     }
 
+    /// Configures the given `root` path with the path where a schema for this root may be found
+    /// but then populates the internal cache with the schema data itself, avoiding any disk access
+    ///
+    /// This is primarily used for tests
     pub fn add_precached(
         &mut self,
         root: Root,
@@ -174,10 +190,12 @@ impl<'t> Stems<'t> {
         self.add(root, schema_path);
     }
 
+    /// Returns an iterator over the roots configures in this map
     pub fn roots(&self) -> impl Iterator<Item = &Root> {
         self.path_map.keys()
     }
 
+    /// Looks up the schema associated with the root of a given `path` within this root
     pub fn schema_for<'s, 'p>(&'s self, path: &'p Utf8Path) -> Result<(&SchemaNode<'t>, &Root)>
     where
         's: 't,
@@ -226,10 +244,13 @@ impl<'t> Stems<'t> {
     }
 }
 
+/// A string-to-string mapping of names to new names that can be parsed
+/// from string form `"name1:newname1,name2:newname2"` and used as a lookup
 #[derive(Debug, Default, Clone)]
 pub struct NameMap(HashMap<String, String>);
 
 impl NameMap {
+    /// Returns the mapped name, or the original if no mapping exists
     pub fn map<'a>(&'a self, name: &'a str) -> &'a str {
         self.0.get(name).map(|s| s.deref()).unwrap_or(name)
     }

@@ -5,6 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::SchemaNode;
 
+/// An append-only cache of schemas ([`SchemaNode`] roots) keyed by their on-disk file path
 #[derive(Default)]
 pub struct SchemaCache<'a> {
     mapped: Mutex<HashMap<Utf8PathBuf, usize>>,
@@ -13,10 +14,12 @@ pub struct SchemaCache<'a> {
 }
 
 impl<'a> SchemaCache<'a> {
+    /// Constructs an new cache
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Parses the file at the given `path`, caches the parsed schema, and returns a reference to it
     pub fn load<'s, 'r>(&'s self, path: impl AsRef<Utf8Path>) -> Result<&'r SchemaNode<'a>>
     where
         's: 'a,
@@ -40,6 +43,9 @@ impl<'a> SchemaCache<'a> {
         Ok(self.schemas.push_get(Box::new(schema)))
     }
 
+    /// Injects a path to schema mapping into the cache without loading from disk
+    ///
+    /// This is primarily used for tests
     pub fn inject(&self, path: impl AsRef<Utf8Path>, schema: SchemaNode<'a>) {
         let mut locked = self.mapped.lock().expect("Lock poisoned");
         locked.insert(path.as_ref().to_owned(), self.schemas.len());

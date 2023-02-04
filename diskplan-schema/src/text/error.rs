@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+/// A detailed error for an issue encountered during parsing
 #[derive(Debug, PartialEq)]
 pub struct ParseError<'a> {
     error: String,
@@ -31,6 +32,7 @@ impl Display for ParseError<'_> {
 impl std::error::Error for ParseError<'_> {}
 
 impl<'a> ParseError<'a> {
+    /// Constructs a detailed error for an issue encountered during parsing
     pub fn new(
         error: String,
         text: &'a str,
@@ -45,6 +47,7 @@ impl<'a> ParseError<'a> {
         }
     }
 
+    /// Returns the calculated line number of the span within the text
     pub fn line_number(&self) -> usize {
         let pos = self.span.as_ptr() as usize - self.text.as_ptr() as usize;
         self.text[..pos].chars().filter(|&c| c == '\n').count() + 1

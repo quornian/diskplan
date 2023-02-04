@@ -1,4 +1,5 @@
-//! Provides the means to constuct a tree of [SchemaNode]s from text form (see [parse_schema]).
+//! This crate provides the means to constuct a tree of [SchemaNode]s from text form (see
+//! [parse_schema]).
 //!
 //! The language of the text form uses significant whitespace (four spaces) for indentation,
 //! distinguishes between files and directories by the presence of a `/`, and whether
@@ -199,6 +200,7 @@
 //!     ## Subsequent :use lines take lower precedence
 //!     :use two
 //! ```
+#![warn(missing_docs)]
 
 use std::{collections::HashMap, fmt::Display};
 
@@ -217,6 +219,7 @@ pub use text::{parse_schema, ParseError};
 /// A node in an abstract directory hierarchy
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaNode<'t> {
+    /// A reference to the line in the text representation where this node was defined
     pub line: &'t str,
 
     /// Condition against which to match file/directory names
@@ -267,11 +270,14 @@ impl<'t> std::fmt::Display for SchemaNode<'t> {
 /// File/directory specific aspects of a node in the tree
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchemaType<'t> {
+    /// Indicates that this node describes a directory
     Directory(DirectorySchema<'t>),
+    /// Indicates that this node describes a file
     File(FileSchema<'t>),
 }
 
 impl<'t> SchemaType<'t> {
+    /// Returns the inner [`DirectorySchema`] if this node is a directory node
     pub fn as_directory(&self) -> Option<&DirectorySchema<'t>> {
         match self {
             SchemaType::Directory(directory) => Some(directory),
@@ -279,6 +285,7 @@ impl<'t> SchemaType<'t> {
         }
     }
 
+    /// Returns the inner [`FileSchema`] if this node is a file node
     pub fn as_file(&self) -> Option<&FileSchema<'t>> {
         match self {
             SchemaType::File(file) => Some(file),
@@ -301,6 +308,7 @@ pub struct DirectorySchema<'t> {
 }
 
 impl<'t> DirectorySchema<'t> {
+    /// Constructs a new description of a directory in the schema
     pub fn new(
         vars: HashMap<Identifier<'t>, Expression<'t>>,
         defs: HashMap<Identifier<'t>, SchemaNode<'t>>,
@@ -314,26 +322,36 @@ impl<'t> DirectorySchema<'t> {
             entries,
         }
     }
+    /// Provides access to the variables defined in this node
     pub fn vars(&self) -> &HashMap<Identifier<'t>, Expression<'t>> {
         &self.vars
     }
+    /// Returns the expression associated with the given variable, if any was set in the schema
     pub fn get_var<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a Expression<'t>> {
         self.vars.get(id)
     }
+
+    /// Provides access to the sub-schema definitions defined in this node
     pub fn defs(&self) -> &HashMap<Identifier, SchemaNode> {
         &self.defs
     }
+    /// Returns the sub-schema associated with the given definition, if any was set in the schema
     pub fn get_def<'a>(&'a self, id: &Identifier<'a>) -> Option<&'a SchemaNode<'t>> {
         self.defs.get(id)
     }
+
+    /// Provides access to the child nodes of this node, with their bindings
     pub fn entries(&self) -> &[(Binding<'t>, SchemaNode<'t>)] {
         &self.entries[..]
     }
 }
 
+/// How an entry is bound in a schema, either to a static fixed name or to a variable
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Binding<'t> {
+    /// A static, fixed name
     Static(&'t str), // Static is ordered first
+    /// A dynamic name bound to the given variable
     Dynamic(Identifier<'t>),
 }
 
@@ -346,6 +364,7 @@ impl Display for Binding<'_> {
     }
 }
 
+/// A description of a file
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileSchema<'t> {
     /// Path to the resource to be copied as file content
@@ -354,9 +373,11 @@ pub struct FileSchema<'t> {
 }
 
 impl<'t> FileSchema<'t> {
+    /// Constructs a new description of a file
     pub fn new(source: Expression<'t>) -> Self {
         FileSchema { source }
     }
+    /// Returns the expression of the path from where the file will inherit its content
     pub fn source(&self) -> &Expression<'t> {
         &self.source
     }

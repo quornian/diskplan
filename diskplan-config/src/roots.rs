@@ -2,11 +2,13 @@ use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
+/// An absolute path to a configured location on disk
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(try_from = "Utf8PathBuf")]
 pub struct Root(Utf8PathBuf);
 
 impl Root {
+    /// Constructs a new root from the given path, which must be absolute
     pub fn new(path: impl AsRef<Utf8Path>) -> Result<Self> {
         path.as_ref().to_owned().try_into()
     }

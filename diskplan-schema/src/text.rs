@@ -26,6 +26,7 @@ pub enum NodeType {
     File,
 }
 
+/// Parses the given text representation into a tree of [`SchemaNode`]s
 pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
     // Strip several levels of initial indentation to help with indented literal schemas
     let any_indent = |s| {
@@ -356,7 +357,6 @@ fn identifier(s: &str) -> Res<&str, Identifier> {
 }
 
 /// Expression, such as "static/$varA/${varB}v2/${NAME}"
-///
 fn expression(s: &str) -> Res<&str, Expression> {
     map(many1(alt((non_variable, variable))), |tokens| {
         Expression::from(tokens)
@@ -364,13 +364,11 @@ fn expression(s: &str) -> Res<&str, Expression> {
 }
 
 /// A sequence of characters that are not part of any variable
-///
 fn non_variable(s: &str) -> Res<&str, Token> {
     map(is_not("$\n"), Token::Text)(s)
 }
 
 /// A variable name, optionally braced, prefixed by a dollar sign, such as `${example}`
-///
 fn variable(s: &str) -> Res<&str, Token> {
     let braced = |parser| alt((delimited(char('{'), parser, char('}')), parser));
     let vars = |s| {

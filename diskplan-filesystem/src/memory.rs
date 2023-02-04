@@ -45,6 +45,7 @@ impl MemoryFilesystem {
     const DEFAULT_OWNER: u32 = Self::ROOT;
     const DEFAULT_GROUP: u32 = Self::ROOT;
 
+    /// Constructs a new in-memory filesystem
     pub fn new() -> Self {
         let mut map = HashMap::new();
         map.insert(

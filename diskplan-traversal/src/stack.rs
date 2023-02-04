@@ -51,6 +51,7 @@ where
 }
 
 impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
+    /// Constructs a new stack
     pub fn stack(
         config: &'g Config<'g>,
         variables: VariableSource<'g>,
@@ -68,6 +69,7 @@ impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
         }
     }
 
+    /// Adds a new scope onto the stack, returning it
     pub fn push<'s, 'r>(&'s self, variables: VariableSource<'g>) -> StackFrame<'g, 'r, 'r>
     where
         'g: 'r,
@@ -83,30 +85,37 @@ impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
         }
     }
 
+    /// Changes the owner in the current scope
     pub fn put_owner(&mut self, owner: &'l str) {
         self.owner = owner;
     }
 
+    /// Changes the group in the current scope
     pub fn put_group(&mut self, group: &'l str) {
         self.group = group;
     }
 
+    /// Returns the owner in the current scope
     pub fn owner(&self) -> &'l str {
         self.owner
     }
 
+    /// Returns the group in the current scope
     pub fn group(&self) -> &'l str {
         self.group
     }
 
+    /// Returns the UNIX permissions set for the current scope
     pub fn mode(&self) -> Mode {
         self.mode
     }
 
+    /// Provides access to variables in the current scope
     pub fn variables(&self) -> &VariableSource<'l> {
         &self.variables
     }
 
+    /// Looks up the value of a variable in the current or parent scope(s)
     pub fn lookup<'a>(&'a self, var: &Identifier<'a>) -> Option<Value<'a>> {
         match &self.variables {
             VariableSource::Empty => None,
@@ -123,6 +132,7 @@ impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
         .or_else(|| self.parent.and_then(|parent| parent.lookup(var)))
     }
 
+    /// Looks up the definition of a sub-schema in the current or parent scope(s)
     pub fn find_definition<'a>(&self, var: &Identifier<'a>) -> Option<&'a SchemaNode<'g>> {
         match self.variables {
             VariableSource::Directory(directory) => directory.get_def(var),
@@ -132,11 +142,16 @@ impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
     }
 }
 
+/// Ways in which variables may be provided by the current scope
 #[derive(Debug)]
 pub enum VariableSource<'a> {
+    /// No available variables
     Empty,
+    /// A directory schema description, with its own variables
     Directory(&'a DirectorySchema<'a>),
+    /// A binding of a schema to a single name
     Binding(&'a Identifier<'a>, String),
+    /// A simple key-value map
     Map(HashMap<String, String>),
 }
 
@@ -159,6 +174,7 @@ impl From<NameMap> for VariableSource<'_> {
 }
 
 impl<'a> VariableSource<'a> {
+    /// Convenience for attempting to cast to a single schema binding
     pub fn as_binding(&self) -> Option<(&Identifier<'a>, &String)> {
         match self {
             VariableSource::Binding(id, value) => Some((id, value)),

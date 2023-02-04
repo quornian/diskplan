@@ -1,6 +1,7 @@
 //! A mechanism for traversing a schema and applying its nodes to an underlying
 //! filesystem structure
-//!
+#![warn(missing_docs)]
+
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -20,6 +21,7 @@ mod pattern;
 mod stack;
 pub use stack::{StackFrame, VariableSource};
 
+/// Walks the schema and directory structure in concert, applying or reporting changes
 pub fn traverse<FS>(
     path: impl AsRef<Utf8Path>,
     stack: &StackFrame,
