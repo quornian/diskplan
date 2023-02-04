@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::{anyhow, bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -67,10 +64,6 @@ impl MemoryFilesystem {
             uid: unistd::getuid().as_raw(),
             gid: unistd::getgid().as_raw(),
         }
-    }
-
-    pub fn to_path_set(&self) -> HashSet<&Utf8Path> {
-        self.map.keys().map(|i| i.as_ref()).collect()
     }
 }
 
