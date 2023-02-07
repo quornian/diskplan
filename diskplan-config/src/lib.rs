@@ -13,13 +13,9 @@
 //! ```
 #![warn(missing_docs)]
 
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Write as _},
-    ops::Deref,
-};
+use std::{collections::HashMap, fmt::Write as _, ops::Deref};
 
-use anyhow::{anyhow, bail, Context as _, Result};
+use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
 use diskplan_schema::{SchemaCache, SchemaNode};
@@ -29,9 +25,6 @@ pub use roots::Root;
 
 mod file;
 pub use file::{ConfigFile, ConfigStem};
-
-mod args;
-pub use args::CommandLineArgs;
 
 /// Application configuration
 pub struct Config<'t> {
@@ -45,10 +38,10 @@ pub struct Config<'t> {
     schema_directory: Utf8PathBuf,
 
     /// Map user names, for example "root:admin,janine:jfu"
-    usermap: NameMap,
+    usermap: HashMap<String, String>,
 
     /// Map groups names
-    groupmap: NameMap,
+    groupmap: HashMap<String, String>,
 
     stems: Stems<'t>,
 }
@@ -91,13 +84,13 @@ impl<'t> Config<'t> {
     }
 
     /// Updates this configuration's user name map with the one provided
-    pub fn apply_user_map(&mut self, usermap: NameMap) {
-        self.usermap.0.extend(usermap.0.into_iter())
+    pub fn apply_user_map(&mut self, usermap: HashMap<String, String>) {
+        self.usermap.extend(usermap.into_iter())
     }
 
     /// Updates this configuration's group name map with the one provided
-    pub fn apply_group_map(&mut self, groupmap: NameMap) {
-        self.groupmap.0.extend(groupmap.0.into_iter())
+    pub fn apply_group_map(&mut self, groupmap: HashMap<String, String>) {
+        self.groupmap.extend(groupmap.into_iter())
     }
 
     /// The path intended to be constructed
@@ -144,13 +137,13 @@ impl<'t> Config<'t> {
     /// Applies the user map to the given user name, returning itself if no mapping exists for
     /// this name
     pub fn map_user<'a>(&'a self, name: &'a str) -> &'a str {
-        self.usermap.map(name)
+        self.usermap.get(name).map(|s| s.deref()).unwrap_or(name)
     }
 
     /// Applies the group map to the given group name, returning itself if no mapping exists for
     /// this name
     pub fn map_group<'a>(&'a self, name: &'a str) -> &'a str {
-        self.groupmap.map(name)
+        self.groupmap.get(name).map(|s| s.deref()).unwrap_or(name)
     }
 }
 
@@ -241,46 +234,5 @@ impl<'t> Stems<'t> {
                 roots
             ))
         }
-    }
-}
-
-/// A string-to-string mapping of names to new names that can be parsed
-/// from string form `"name1:newname1,name2:newname2"` and used as a lookup
-#[derive(Debug, Default, Clone)]
-pub struct NameMap(HashMap<String, String>);
-
-impl NameMap {
-    /// Returns the mapped name, or the original if no mapping exists
-    pub fn map<'a>(&'a self, name: &'a str) -> &'a str {
-        self.0.get(name).map(|s| s.deref()).unwrap_or(name)
-    }
-}
-
-impl TryFrom<&str> for NameMap {
-    type Error = anyhow::Error;
-
-    fn try_from(line: &str) -> Result<Self, Self::Error> {
-        let mut map = HashMap::new();
-        for pair in line.split(',') {
-            let mut kv_iter = pair.split(':');
-            let key = kv_iter.next().unwrap();
-            let value = kv_iter
-                .next()
-                .ok_or_else(|| anyhow!("Expected ':' separated key value pair"))?;
-            if key.is_empty() || value.is_empty() {
-                bail!("Key and value must be non-empty");
-            }
-            if let Some(unexpected) = kv_iter.next() {
-                bail!("Unexpected third value \"{}\"", unexpected);
-            }
-            map.insert(key.to_owned(), value.to_owned());
-        }
-        Ok(NameMap(map))
-    }
-}
-
-impl From<NameMap> for HashMap<String, String> {
-    fn from(name_map: NameMap) -> Self {
-        name_map.0
     }
 }

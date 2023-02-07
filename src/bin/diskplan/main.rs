@@ -4,7 +4,9 @@ use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use clap::Parser;
 
-use diskplan_config::{CommandLineArgs, Config};
+mod args;
+use args::CommandLineArgs;
+use diskplan_config::Config;
 use diskplan_filesystem::{self as filesystem, Filesystem};
 use diskplan_traversal::{self as traversal, StackFrame, VariableSource};
 
@@ -38,10 +40,10 @@ fn main() -> Result<()> {
     config.load(config_file)?;
 
     if let Some(usermap) = usermap {
-        config.apply_user_map(usermap)
+        config.apply_user_map(usermap.into())
     }
     if let Some(groupmap) = groupmap {
-        config.apply_group_map(groupmap)
+        config.apply_group_map(groupmap.into())
     }
 
     let owner = users::get_current_username().unwrap();

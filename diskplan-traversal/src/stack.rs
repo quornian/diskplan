@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::eval::Value;
-use diskplan_config::{Config, NameMap};
+use diskplan_config::Config;
 use diskplan_filesystem::Mode;
 use diskplan_schema::{DirectorySchema, Identifier, SchemaNode};
 
@@ -164,12 +164,6 @@ impl Default for VariableSource<'_> {
 impl From<HashMap<String, String>> for VariableSource<'_> {
     fn from(map: HashMap<String, String>) -> Self {
         VariableSource::Map(map)
-    }
-}
-
-impl From<NameMap> for VariableSource<'_> {
-    fn from(map: NameMap) -> Self {
-        VariableSource::Map(map.into())
     }
 }
 

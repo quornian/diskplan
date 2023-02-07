@@ -22,7 +22,7 @@ directory trees from a set of schemas. It can:
 - create directory entries with fixed names, or variable entries matching
   regular expressions
 - define and reuse schema sub-trees
-- with multiple roots, create and traverse symlinks into other stems
+- with multiple rooted stems, create and traverse symlinks into other stems
 
 ## Quickstart
 

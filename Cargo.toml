@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "diskplan-cli",
     "diskplan-config",
     "diskplan-filesystem",
     "diskplan-schema",
@@ -30,3 +29,24 @@ serde = { version = "1.0.148", features = ["derive"] }
 camino = { version = "1.1.1", features = ["serde1"] }
 # Caching with append only data structures
 elsa = "1.7.0"
+
+
+[package]
+name = "diskplan"
+version = "0.1.0"
+edition = "2021"
+description = "A command line tool and configuration system for constructing directory trees from a set of schemas"
+license-file = "LICENSE.md"
+repository = "https://github.com/quornian/diskplan"
+default-run = "diskplan"
+
+[dependencies]
+diskplan-config = { path = "diskplan-config" }
+diskplan-filesystem = { path = "diskplan-filesystem" }
+diskplan-traversal = { path = "diskplan-traversal" }
+anyhow.workspace = true
+camino.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+log.workspace = true
+users.workspace = true
