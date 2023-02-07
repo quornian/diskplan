@@ -16,15 +16,35 @@ pub struct ConfigFile {
     pub schema_directory: Option<Utf8PathBuf>,
 }
 
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[serde(try_from = "Utf8PathBuf")]
+struct _Root(Root);
+
+impl TryFrom<Utf8PathBuf> for _Root {
+    type Error = <Root as TryFrom<Utf8PathBuf>>::Error;
+    fn try_from(value: Utf8PathBuf) -> std::result::Result<Self, Self::Error> {
+        Root::try_from(value).map(_Root)
+    }
+}
+
 /// Configuration for a single stem within diskplan.toml
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ConfigStem {
+    root: _Root,
+    schema: Utf8PathBuf,
+}
+
+impl ConfigStem {
     /// The absolute root directory on which to apply changes
-    pub root: Root,
+    pub fn root(&self) -> &Root {
+        &self.root.0
+    }
 
     /// The path to a schema definition file that describes how files and directories under the
     /// root should be structured (may be absolute or relative to the config file's directory)
-    pub schema: Utf8PathBuf,
+    pub fn schema(&self) -> &Utf8Path {
+        &self.schema
+    }
 }
 
 impl ConfigFile {

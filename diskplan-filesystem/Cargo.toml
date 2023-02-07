@@ -4,10 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-diskplan-config = { path = "../diskplan-config" }
-diskplan-schema = { path = "../diskplan-schema" }
 anyhow.workspace = true
 camino.workspace = true
-nix.workspace = true
 log.workspace = true
+nix.workspace = true
 users.workspace = true

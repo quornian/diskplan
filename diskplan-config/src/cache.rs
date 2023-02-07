@@ -36,7 +36,7 @@ impl<'a> SchemaCache<'a> {
             std::fs::read_to_string(path.as_ref())
                 .with_context(|| format!("Failed to load config from: {}", path.as_ref()))?,
         );
-        let schema = crate::parse_schema(text)
+        let schema = diskplan_schema::parse_schema(text)
             // ParseError lifetime is tricky, flattern
             .map_err(|e| anyhow!("{}", e))?;
         locked.insert(path.as_ref().to_owned(), self.schemas.len());

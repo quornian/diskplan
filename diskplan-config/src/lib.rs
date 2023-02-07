@@ -2,14 +2,14 @@
 //!
 //! Example config file:
 //! ```
-//! # use diskplan_config::{ConfigFile, ConfigStem, Root};
+//! # use diskplan_config::ConfigFile;
 //! # let config_text = r#"
 #![doc = include_str!("../../examples/quickstart/diskplan.toml")]
 //! # "#;
 //! # let config: ConfigFile = config_text.try_into().unwrap();
 //! # let stem = config.stems.get("main").expect("no main stem");
-//! # assert_eq!(stem.root, "/tmp/diskplan-root".try_into().expect("invalid root"));
-//! # assert_eq!(stem.schema.as_str(), "simple-schema.diskplan");
+//! # assert_eq!(stem.root().path().as_str(), "/tmp/diskplan-root");
+//! # assert_eq!(stem.schema().as_str(), "simple-schema.diskplan");
 //! ```
 #![warn(missing_docs)]
 
@@ -18,13 +18,15 @@ use std::{collections::HashMap, fmt::Write as _, ops::Deref};
 use anyhow::{anyhow, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
-use diskplan_schema::{SchemaCache, SchemaNode};
+use diskplan_filesystem::Root;
+use diskplan_schema::SchemaNode;
 
-mod roots;
-pub use roots::Root;
-
+mod cache;
 mod file;
-pub use file::{ConfigFile, ConfigStem};
+pub use self::{
+    cache::SchemaCache,
+    file::{ConfigFile, ConfigStem},
+};
 
 /// Application configuration
 pub struct Config<'t> {
@@ -77,8 +79,8 @@ impl<'t> Config<'t> {
                 .to_owned()
         });
         for (_, stem) in stems.into_iter() {
-            let schema_path = self.schema_directory.join(stem.schema);
-            self.stems.add(stem.root, schema_path)
+            let schema_path = self.schema_directory.join(stem.schema());
+            self.stems.add(stem.root().to_owned(), schema_path)
         }
         Ok(())
     }

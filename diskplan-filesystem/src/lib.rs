@@ -10,13 +10,13 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 mod attributes;
 mod memory;
 mod physical;
-
-use diskplan_config::Root;
+mod root;
 
 pub use self::{
     attributes::{Attrs, Mode, SetAttrs, DEFAULT_DIRECTORY_MODE, DEFAULT_FILE_MODE},
     memory::MemoryFilesystem,
     physical::DiskFilesystem,
+    root::Root,
 };
 
 impl SetAttrs<'_> {

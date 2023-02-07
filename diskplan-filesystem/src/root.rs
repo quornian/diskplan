@@ -1,10 +1,8 @@
 use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use serde::Deserialize;
 
 /// An absolute path to a configured location on disk
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(try_from = "Utf8PathBuf")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Root(Utf8PathBuf);
 
 impl Root {
