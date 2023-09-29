@@ -59,7 +59,7 @@ impl Display for Token<'_> {
         match self {
             Token::Text(s) => f.write_str(s),
             Token::Variable(v) => write!(f, "${{{v}}}"),
-            Token::Special(sp) => write!(f, "{sp}"),
+            Token::Special(sp) => write!(f, "${{{sp}}}"),
         }
     }
 }
@@ -151,6 +151,17 @@ impl<'a> From<Identifier<'a>> for Expression<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_expression() -> Expression<'static> {
+        Expression(vec![
+            Token::Text("normal text/"),
+            Token::Variable(Identifier("a_variable")),
+            Token::Text("/"),
+            Token::Special(Special::ParentRelative),
+            Token::Text("_AAA"),
+        ])
+    }
+
     #[test]
     fn format_identifier() {
         assert_eq!(&format!("{}", Identifier("something")), "something");
@@ -164,12 +175,22 @@ mod tests {
 
     #[test]
     fn format_expression_all_types() {
-        let expr = Expression(vec![
-            Token::Text("normal text/"),
-            Token::Variable(Identifier("a_variable")),
-            Token::Text("/"),
-            Token::Special(Special::ParentRelative),
-        ]);
-        assert_eq!(&format!("{expr}"), "normal text/${a_variable}/PARENT_PATH");
+        let expr = test_expression();
+        assert_eq!(
+            &format!("{expr}"),
+            "normal text/${a_variable}/${PARENT_PATH}_AAA"
+        );
+    }
+
+    #[test]
+    fn formatted_expression_is_valid_schema_expression() {
+        let expr = test_expression();
+        let schema_text = format!("symlink/ -> {expr}");
+        let schema_node = crate::parse_schema(&schema_text).unwrap();
+        let directory_schema = schema_node.schema.as_directory().unwrap();
+        let (_, symlink_node) = directory_schema.entries().first().unwrap();
+        let symlink_expression = symlink_node.symlink.as_ref().unwrap();
+
+        assert_eq!(*symlink_expression, expr);
     }
 }
