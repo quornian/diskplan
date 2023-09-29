@@ -9,6 +9,6 @@ diskplan-filesystem = { path = "../diskplan-filesystem" }
 anyhow.workspace = true
 camino.workspace = true
 elsa.workspace = true
-log.workspace = true
 serde.workspace = true
 toml.workspace = true
+tracing.workspace = true

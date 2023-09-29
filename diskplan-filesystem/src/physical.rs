@@ -153,7 +153,7 @@ impl DiskFilesystem {
         };
         let mode = PermissionsExt::from_mode(attrs.mode.unwrap_or(default_mode).into());
 
-        log::trace!("chown {:?} {:?}:{:?}", path.as_ref(), uid, gid);
+        tracing::trace!("chown {:?} {:?}:{:?}", path.as_ref(), uid, gid);
         nix::unistd::chown(path.as_ref().as_std_path(), uid, gid)
             .with_context(|| format!("Changing ownership of {:?}", path.as_ref()))?;
         fs::set_permissions(path.as_ref(), mode)?;

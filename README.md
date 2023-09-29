@@ -92,7 +92,7 @@ sub-directory/
 
 Note that in the earlier output, the `sub-directory` and `blank_file` were
 created, but nothing for `$variable`. This variable directory can be created
-either directly either by path or by assigning a value to this variable:
+either directly by path or by assigning a value to this variable:
 
 ```text
 $ diskplan /tmp/diskplan-root/sub-directory/Example

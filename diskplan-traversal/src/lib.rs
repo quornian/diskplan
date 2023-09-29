@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context as _, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use tracing::{span, Level};
 
 use diskplan_filesystem::{Filesystem, PlantedPath, SetAttrs};
 use diskplan_schema::{Binding, DirectorySchema, SchemaNode, SchemaType};
@@ -31,6 +32,9 @@ where
     FS: Filesystem,
 {
     let path = path.as_ref();
+    let span = span!(Level::DEBUG, "traverse", path = path.as_str());
+    let _span = span.enter();
+
     if !path.is_absolute() {
         bail!("Path must be absolute: {}", path);
     }
@@ -39,7 +43,7 @@ where
     let remaining_path = path
         .strip_prefix(root.path())
         .expect("Located root must prefix path");
-    log::debug!(
+    tracing::debug!(
         r#"Traversing root directory "{}" ("{}" relative path remains)"#,
         start_path,
         remaining_path,
@@ -68,6 +72,9 @@ fn traverse_node<'a, FS>(
 where
     FS: Filesystem,
 {
+    let span = span!(Level::DEBUG, "traverse_node", node = schema_node.line);
+    let _span = span.enter();
+
     let mut unresolved = if remaining == "" { None } else { Some(vec![]) };
     let expanded = expand_uses(schema_node, stack)?;
 
@@ -110,7 +117,7 @@ where
     let stack = &stack;
 
     for schema_node in expanded {
-        log::debug!("Applying: {}", schema_node);
+        tracing::debug!("Applying: {}", schema_node);
         // Create this entry, following symlinks
         create(schema_node, path, attrs.clone(), stack, filesystem)
             .with_context(|| format!("Creating {}", &path))?;
@@ -279,7 +286,7 @@ where
         compiled_schema_entries.push((binding, child_node, pattern));
     }
 
-    log::trace!("Within {}...", directory_path);
+    tracing::trace!("Within {}...", directory_path);
 
     // Traverse the directory schema's sub-entries (static first, then variable), updating the
     // map of names so each matched name points to its binding and schema node.
@@ -334,7 +341,7 @@ where
     // Report
     for (name, (source, have_match)) in names.iter() {
         match have_match {
-            None => log::warn!(
+            None => tracing::warn!(
                 r#""{}" from {} has no match in "{}" under {}"#,
                 name,
                 source,
@@ -342,9 +349,9 @@ where
                 schema_node
             ),
             Some((Binding::Static(_), _)) => {
-                log::trace!(r#""{}" from {} matches same, binding static"#, name, source)
+                tracing::trace!(r#""{}" from {} matches same, binding static"#, name, source)
             }
-            Some((Binding::Dynamic(id), node)) => log::trace!(
+            Some((Binding::Dynamic(id), node)) => tracing::trace!(
                 r#""{}" from {} matches {:?}, binding to variable ${{{}}}"#,
                 name,
                 source,
@@ -374,7 +381,7 @@ where
 
         match binding {
             Binding::Static(s) => {
-                log::debug!(
+                tracing::debug!(
                     r#"Traversing static directory entry "{}" at {} ("{}" relative path remains)"#,
                     s,
                     &child_path,
@@ -384,7 +391,7 @@ where
                     .with_context(|| format!("Processing path {}", &child_path))?;
             }
             Binding::Dynamic(var) => {
-                log::debug!(
+                tracing::debug!(
                     r#"Traversing variable directory entry ${}="{}" at {} ("{}" relative path remains)"#,
                     var,
                     name,
@@ -425,6 +432,15 @@ fn create<FS>(
 where
     FS: Filesystem,
 {
+    let span = span!(
+        Level::DEBUG,
+        "create",
+        node = schema_node.line,
+        path = path.absolute().as_str(),
+        attrs = &attrs.owner
+    );
+    let _span = span.enter();
+
     // References held to data within by `to_create`, but only in the symlink branch
     let link_str;
     let link_path;
@@ -434,7 +450,7 @@ where
     if let Some(expr) = &schema_node.symlink {
         link_str = evaluate(expr, stack, path)?;
         link_path = Utf8Path::new(&link_str);
-        log::info!("Creating {} -> {}", path, link_path);
+        tracing::info!("Creating {} -> {}", path, link_path);
 
         // Allow relative symlinks only if there is no schema to apply to the target (allowing us
         // to create it and return early)
@@ -482,14 +498,14 @@ where
         // path, and resolve canonical paths through the symlink
         to_create = link_target.absolute();
     } else {
-        log::info!("Creating {}", path);
+        tracing::info!("Creating {}", path);
         to_create = path.absolute();
     }
 
     match &schema_node.schema {
         SchemaType::Directory(_) => {
             if !filesystem.is_directory(to_create) {
-                log::debug!("Make directory: {}", to_create);
+                tracing::debug!("Make directory: {}", to_create);
                 filesystem
                     .create_directory(to_create, attrs)
                     .context("As directory")?;
@@ -529,7 +545,7 @@ fn expand_uses<'a>(
         _ => VariableSource::Empty,
     });
     for used in &schema_node.uses {
-        log::trace!("Seeking definition of '{}'", used);
+        tracing::trace!("Seeking definition of '{}'", used);
         use_schemas.push(
             stack
                 .find_definition(used)

@@ -17,7 +17,7 @@ pub(super) fn evaluate(
     stack: &stack::StackFrame,
     path: &PlantedPath,
 ) -> Result<String> {
-    log::trace!(r#"Evaluating expression "{}""#, expr);
+    tracing::trace!(r#"Evaluating expression "{}""#, expr);
     let mut value = String::new();
     for token in expr.tokens() {
         match token {
@@ -26,10 +26,10 @@ pub(super) fn evaluate(
                 let sub = stack.lookup(var).ok_or_else(|| {
                     anyhow!(r#"Undefined variable "{}" in expression "{}""#, var, expr)
                 })?;
-                log::trace!(r#"Variable ${{{}}} = "{}""#, var, sub);
+                tracing::trace!(r#"Variable ${{{}}} = "{}""#, var, sub);
                 match sub {
                     Value::Expression(expr) => {
-                        log::trace!("Going deeper...");
+                        tracing::trace!("Going deeper...");
                         value.push_str(&evaluate(expr, stack, path)?)
                     }
                     Value::String(s) => value.push_str(s),
@@ -58,12 +58,12 @@ pub(super) fn evaluate(
                         .ok_or_else(|| anyhow!("Path has no parent: {}", path.relative()))?,
                     Special::RootPath => path.root().as_str(),
                 };
-                log::trace!(r#"Special {} = "{}""#, special, it);
+                tracing::trace!(r#"Special {} = "{}""#, special, it);
                 value.push_str(it);
             }
         }
     }
-    log::trace!(r#"Expression "{}" fully evaluated as "{}""#, expr, value);
+    tracing::trace!(r#"Expression "{}" fully evaluated as "{}""#, expr, value);
     Ok(value)
 }
 

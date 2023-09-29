@@ -210,7 +210,7 @@ impl<'t> Stems<'t> {
         }
 
         if let Some((root, schema_path)) = longest_candidate {
-            log::trace!(
+            tracing::trace!(
                 r#"Schema for path "{}", found root "{}", schema "{}""#,
                 path,
                 root.path(),

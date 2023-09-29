@@ -3,6 +3,7 @@
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
 use clap::Parser;
+use tracing::{span, Level};
 
 mod args;
 use args::CommandLineArgs;
@@ -11,16 +12,23 @@ use diskplan_filesystem::{self as filesystem, Filesystem};
 use diskplan_traversal::{self as traversal, StackFrame, VariableSource};
 
 fn init_logger(verbosity: u8) {
-    let env = env_logger::Env::new().filter("DISKPLAN_LOG");
-    env_logger::Builder::from_env(env)
-        .filter_level(match verbosity {
-            0 => log::LevelFilter::Warn,
-            1 => log::LevelFilter::Info,
-            2 => log::LevelFilter::Debug,
-            _ => log::LevelFilter::Trace,
-        })
-        .format_timestamp(None)
-        .init();
+    let sub = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_file(false)
+        .with_line_number(false);
+    let (level, pretty) = match verbosity {
+        0 => (Level::WARN, false),
+        1 => (Level::INFO, false),
+        2 => (Level::INFO, true),
+        3 => (Level::DEBUG, true),
+        _ => (Level::TRACE, true),
+    };
+    let sub = sub.with_max_level(level);
+    if pretty {
+        sub.pretty().init();
+    } else {
+        sub.init();
+    }
 }
 
 fn main() -> Result<()> {
@@ -35,6 +43,8 @@ fn main() -> Result<()> {
     } = CommandLineArgs::parse();
 
     init_logger(verbose);
+    let span = span!(Level::DEBUG, "main", target = target.as_str());
+    let _guard = span.enter();
 
     let mut config = Config::new(target, apply);
     config.load(config_file)?;
@@ -62,7 +72,7 @@ fn main() -> Result<()> {
         let mut fs = filesystem::DiskFilesystem::new();
         traversal::traverse(config.target_path(), &stack, &mut fs)?;
     } else {
-        log::warn!("Simulating in memory only, use --apply to apply to disk");
+        tracing::warn!("Simulating in memory only, use --apply to apply to disk");
         let mut fs = filesystem::MemoryFilesystem::new();
         for root in config.stem_roots() {
             fs.create_directory_all(root.path(), Default::default())?;
@@ -70,7 +80,7 @@ fn main() -> Result<()> {
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
         traversal::traverse(config.target_path(), &stack, &mut fs)?;
-        log::warn!("Displaying in-memory filesystem...");
+        tracing::warn!("Displaying in-memory filesystem...");
         for root in config.stem_roots() {
             println!("\n[Root: {}]", root.path());
             print_tree(root.path(), &fs, 0)?;

@@ -9,5 +9,5 @@ diskplan-filesystem = { path = "../diskplan-filesystem" }
 diskplan-schema = { path = "../diskplan-schema" }
 anyhow.workspace = true
 camino.workspace = true
-log.workspace = true
 regex.workspace = true
+tracing.workspace = true

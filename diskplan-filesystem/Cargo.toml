@@ -6,6 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow.workspace = true
 camino.workspace = true
-log.workspace = true
 nix.workspace = true
 users.workspace = true
+tracing.workspace = true

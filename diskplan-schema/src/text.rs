@@ -8,6 +8,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
 };
+use tracing::{span, Level};
 
 use super::{Binding, SchemaNode};
 use crate::{Expression, Identifier, Special, Token};
@@ -28,6 +29,9 @@ pub enum NodeType {
 
 /// Parses the given text representation into a tree of [`SchemaNode`]s
 pub fn parse_schema(text: &str) -> std::result::Result<SchemaNode, ParseError> {
+    let span = span!(Level::INFO, "parse_schema");
+    let _enter = span.enter();
+
     // Strip several levels of initial indentation to help with indented literal schemas
     let any_indent = |s| {
         opt(alt((

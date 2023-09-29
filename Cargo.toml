@@ -19,9 +19,6 @@ nom = "7.1.1"
 nix = "0.26.1"
 # Owners and groups
 users = "0.11.0"
-# Logging
-env_logger = "0.10.0"
-log = "0.4.17"
 # Config file format
 toml = "0.5.9"
 serde = { version = "1.0.148", features = ["derive"] }
@@ -30,6 +27,8 @@ camino = { version = "1.1.1", features = ["serde1"] }
 # Caching with append only data structures
 elsa = "1.7.0"
 
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing = "0.1"
 
 [package]
 name = "diskplan"
@@ -47,6 +46,6 @@ diskplan-traversal = { path = "diskplan-traversal" }
 anyhow.workspace = true
 camino.workspace = true
 clap.workspace = true
-env_logger.workspace = true
-log.workspace = true
 users.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
