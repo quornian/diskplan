@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-diskplan-config = { path = "../diskplan-config" }
-diskplan-filesystem = { path = "../diskplan-filesystem" }
-diskplan-schema = { path = "../diskplan-schema" }
+diskplan-config = { path = "../diskplan-config", version = "0.1.0" }
+diskplan-filesystem = { path = "../diskplan-filesystem", version = "0.1.0" }
+diskplan-schema = { path = "../diskplan-schema", version = "0.1.0" }
 anyhow.workspace = true
 camino.workspace = true
 regex.workspace = true

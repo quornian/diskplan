@@ -40,9 +40,9 @@ repository = "https://github.com/quornian/diskplan"
 default-run = "diskplan"
 
 [dependencies]
-diskplan-config = { path = "diskplan-config" }
-diskplan-filesystem = { path = "diskplan-filesystem" }
-diskplan-traversal = { path = "diskplan-traversal" }
+diskplan-config = { path = "diskplan-config", version = "0.1.0" }
+diskplan-filesystem = { path = "diskplan-filesystem", version = "0.1.0" }
+diskplan-traversal = { path = "diskplan-traversal", version = "0.1.0" }
 anyhow.workspace = true
 camino.workspace = true
 clap.workspace = true
