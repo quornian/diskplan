@@ -32,10 +32,13 @@ tracing = "0.1"
 
 [package]
 name = "diskplan"
-version = "0.1.0"
-edition = "2021"
 description = "A command line tool and configuration system for constructing directory trees from a set of schemas"
-license-file = "LICENSE.md"
+version = "0.1.0"
+authors = ["Ian Thompson <quornian@gmail.com>"]
+edition = "2021"
+license = "MIT"
+documentation = "https://quornian.github.io/diskplan/diskplan/"
+homepage = "https://quornian.github.io/diskplan/diskplan/"
 repository = "https://github.com/quornian/diskplan"
 default-run = "diskplan"
 

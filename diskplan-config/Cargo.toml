@@ -1,7 +1,13 @@
 [package]
 name = "diskplan-config"
+description = "A library component for the configuration of Diskplan"
 version = "0.1.0"
+authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"
+license = "MIT"
+documentation = "https://quornian.github.io/diskplan/diskplan_config/"
+homepage = "https://quornian.github.io/diskplan/diskplan_config/"
+repository = "https://github.com/quornian/diskplan"
 
 [dependencies]
 diskplan-schema = { path = "../diskplan-schema", version = "0.1.0" }

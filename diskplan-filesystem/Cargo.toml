@@ -1,7 +1,13 @@
 [package]
 name = "diskplan-filesystem"
+description = "A library component of Diskplan for applying schemas to disk"
 version = "0.1.0"
+authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"
+license = "MIT"
+documentation = "https://quornian.github.io/diskplan/diskplan_filesystem/"
+homepage = "https://quornian.github.io/diskplan/diskplan_filesystem/"
+repository = "https://github.com/quornian/diskplan"
 
 [dependencies]
 anyhow.workspace = true

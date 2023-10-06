@@ -1,7 +1,13 @@
 [package]
 name = "diskplan-schema"
+description = "A library component of Diskplan for defining and parsing schemas"
 version = "0.1.0"
+authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"
+license = "MIT"
+documentation = "https://quornian.github.io/diskplan/diskplan_schema/"
+homepage = "https://quornian.github.io/diskplan/diskplan_schema/"
+repository = "https://github.com/quornian/diskplan"
 
 [dependencies]
 anyhow.workspace = true
