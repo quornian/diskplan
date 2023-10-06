@@ -554,3 +554,6 @@ fn expand_uses<'a>(
     }
     Ok(use_schemas)
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,5 +1,7 @@
-use crate::{filesystem::DEFAULT_DIRECTORY_MODE, schema::parse_schema};
 use anyhow::Result;
+
+use diskplan_filesystem::DEFAULT_DIRECTORY_MODE;
+use diskplan_schema::parse_schema;
 
 #[test]
 fn empty_text_yields_empty_schema() -> Result<()> {

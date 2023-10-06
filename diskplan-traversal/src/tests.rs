@@ -44,12 +44,11 @@ macro_rules! assert_effect_of {
         use camino::Utf8Path;
 
         #[allow(unused_imports)]
-        use crate::{
-            config::Config,
-            filesystem::{Filesystem, MemoryFilesystem, SetAttrs},
-            schema::{parse_schema, Root, SchemaCache},
-            traversal::{self, StackFrame},
-        };
+        use diskplan_config::{SchemaCache, Config};
+        #[allow(unused_imports)]
+        use diskplan_filesystem::{Root, Filesystem, MemoryFilesystem, SetAttrs};
+        use diskplan_schema::{parse_schema, };
+        use crate::{StackFrame};
         let mut fs = MemoryFilesystem::new();
         let mut expected_paths: HashSet<&Utf8Path> = HashSet::new();
         let mut config = Config::new($path, false);
@@ -103,7 +102,7 @@ macro_rules! assert_effect_of {
         )?
 
         // yields:
-        traversal::traverse(path, &stack, &mut fs)?;
+        crate::traverse(path, &stack, &mut fs)?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root.path()));
         $($(

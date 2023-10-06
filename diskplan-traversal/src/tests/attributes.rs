@@ -1,4 +1,5 @@
 use anyhow::Result;
+use diskplan_filesystem::DEFAULT_DIRECTORY_MODE;
 
 #[test]
 #[should_panic]
@@ -21,7 +22,6 @@ fn incorrect_attribute_assertion() {
 
 #[test]
 fn attributes() -> Result<()> {
-    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -45,7 +45,6 @@ fn attributes() -> Result<()> {
 
 #[test]
 fn top_level_attributes() -> Result<()> {
-    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -68,7 +67,6 @@ fn top_level_attributes() -> Result<()> {
 
 #[test]
 fn attribute_expressions() -> Result<()> {
-    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -111,7 +109,6 @@ fn changing_attributes() -> Result<()> {
 
 #[test]
 fn inherited_attributes() -> Result<()> {
-    use crate::filesystem::DEFAULT_DIRECTORY_MODE;
     assert_effect_of! {
         under: "/target"
         applying: "
