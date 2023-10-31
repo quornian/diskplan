@@ -111,6 +111,7 @@ fn schema_node<'t>(
             Operator::Owner(owner) => builder.owner(owner),
             Operator::Group(group) => builder.group(group),
             Operator::Source(source) => builder.source(source),
+            Operator::Target(target) => builder.target(target),
 
             // Operators that apply to child items
             Operator::Let { name, expr } => builder.let_var(name, expr),
@@ -210,6 +211,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
         let owner_op = op("owner", expression);
         let group_op = op("group", expression);
         let source_op = op("source", expression);
+        let target_op = op("target", expression);
 
         consumed(alt((
             delimited(
@@ -223,6 +225,7 @@ fn operator(level: usize) -> impl Fn(&str) -> Res<&str, (&str, Operator)> {
                     map(owner_op, Operator::Owner),
                     map(group_op, Operator::Group),
                     map(source_op, Operator::Source),
+                    map(target_op, Operator::Target),
                 )),
                 end_of_lines,
             ),
@@ -287,6 +290,7 @@ enum Operator<'t> {
     Owner(Expression<'t>),
     Group(Expression<'t>),
     Source(Expression<'t>),
+    Target(Expression<'t>),
 }
 
 fn blank_line(s: &str) -> Res<&str, &str> {
