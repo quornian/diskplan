@@ -129,7 +129,7 @@ fn match_let_variable_overridden_by_static() -> Result<()> {
 }
 
 #[test]
-fn match_variable() -> Result<()> {
+fn match_pattern_start_or_end() -> Result<()> {
     assert_effect_of! {
         under: "/target"
         applying: "
@@ -157,6 +157,38 @@ fn match_variable() -> Result<()> {
                 "/target/x_at_the_beginning/starts" [""]
                 "/target/ends_with_an_x/ends" [""]
     }
+}
+
+#[test]
+#[should_panic(
+    expected = r#""x_at_start_and_end_x" matches multiple dynamic bindings "$a" and "$b"#
+)]
+fn match_pattern_start_or_end_collision() {
+    (|| -> Result<()> {
+        assert_effect_of! {
+            under: "/target"
+            applying: "
+            $a/
+                :match x.*
+                starts
+                    :source /src/empty
+            $b/
+                :match .*x
+                ends
+                    :source /src/empty
+            "
+            onto: "/target"
+            with:
+                directories:
+                    "/src"
+                    "/target"
+                    "/target/x_at_start_and_end_x"
+                files:
+                    "/src/empty" [""]
+            yields:
+        }
+    })()
+    .unwrap();
 }
 
 #[test]
