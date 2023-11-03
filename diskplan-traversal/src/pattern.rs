@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use anyhow::Result;
 use regex::Regex;
 
@@ -11,6 +13,18 @@ pub(super) enum CompiledPattern {
     Any,
     Regex(regex::Regex),
     RegexWithExclusions(regex::Regex, regex::Regex),
+}
+
+impl Display for CompiledPattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompiledPattern::Any => write!(f, ".*"),
+            CompiledPattern::Regex(re) => write!(f, "{re}"),
+            CompiledPattern::RegexWithExclusions(re, not_re) => {
+                write!(f, "{re} excluding {not_re}")
+            }
+        }
+    }
 }
 
 impl CompiledPattern {

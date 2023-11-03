@@ -143,9 +143,10 @@ impl<'g, 'p, 'l> StackFrame<'g, 'p, 'l> {
 }
 
 /// Ways in which variables may be provided by the current scope
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum VariableSource<'a> {
     /// No available variables
+    #[default]
     Empty,
     /// A directory schema description, with its own variables
     Directory(&'a DirectorySchema<'a>),
@@ -153,12 +154,6 @@ pub enum VariableSource<'a> {
     Binding(&'a Identifier<'a>, String),
     /// A simple key-value map
     Map(HashMap<String, String>),
-}
-
-impl Default for VariableSource<'_> {
-    fn default() -> Self {
-        VariableSource::Empty
-    }
 }
 
 impl From<HashMap<String, String>> for VariableSource<'_> {

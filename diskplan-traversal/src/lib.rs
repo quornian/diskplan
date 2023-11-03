@@ -324,7 +324,7 @@ where
                         Some((bound, _)) => match bound {
                             Binding::Static(_) => Ok(()), // Keep previous static binding
                             Binding::Dynamic(_) => Err(anyhow!(
-                                r#""{}" matches multiple dynamic bindings "{}" and "{}" ({:?})"#,
+                                r#""{}" matches multiple dynamic bindings "{}" and "{}" (latter matched: {})"#,
                                 name,
                                 bound,
                                 binding,
