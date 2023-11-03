@@ -80,6 +80,42 @@ fn create_symlink() -> Result<()> {
 }
 
 #[test]
+fn create_symlink_using_target() -> Result<()> {
+    assert_effect_of! {
+        under: "/primary"
+        applying: "
+            subdirlink/
+                :target /secondary/${NAME}
+                subfile
+                    :source /resource/file
+            "
+
+        under: "/secondary"
+        applying: "
+            $_a/
+                $_b/
+                    $_c/
+            "
+
+        onto: "/primary"
+        with:
+            directories:
+                "/resource"
+            files:
+                "/resource/file" ["FILE CONTENT"]
+        yields:
+            directories:
+                "/primary"
+                "/secondary"
+                "/secondary/subdirlink"
+            files:
+                "/secondary/subdirlink/subfile" ["FILE CONTENT"]
+            symlinks:
+                "/primary/subdirlink" -> "/secondary/subdirlink"
+    }
+}
+
+#[test]
 fn create_relative_symlink() -> Result<()> {
     assert_effect_of! {
         under: "/"

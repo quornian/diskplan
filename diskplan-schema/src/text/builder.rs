@@ -168,6 +168,14 @@ impl<'t> SchemaNodeBuilder<'t> {
         }
     }
 
+    pub fn target(&mut self, target: Expression<'t>) -> Result<()> {
+        if self.symlink.is_some() {
+            bail!(":target occurs twice");
+        }
+        self.symlink = Some(target);
+        Ok(())
+    }
+
     pub fn add_entry(&mut self, binding: Binding<'t>, entry: SchemaNode<'t>) -> Result<()> {
         match &mut self.type_specific {
             TypeSpecific::File { .. } => Err(anyhow!(
