@@ -70,7 +70,7 @@ fn main() -> Result<()> {
 
     if config.will_apply() {
         let mut fs = filesystem::DiskFilesystem::new();
-        traversal::traverse(config.target_path(), &stack, &mut fs)?;
+        traversal::traverse(config.target_path(), &stack, &mut fs, Default::default())?;
     } else {
         tracing::warn!("Simulating in memory only, use --apply to apply to disk");
         let mut fs = filesystem::MemoryFilesystem::new();
@@ -79,7 +79,7 @@ fn main() -> Result<()> {
         }
         fs.create_directory("/dev", Default::default())?;
         fs.create_file("/dev/null", Default::default(), "".to_owned())?;
-        traversal::traverse(config.target_path(), &stack, &mut fs)?;
+        traversal::traverse(config.target_path(), &stack, &mut fs, Default::default())?;
         tracing::warn!("Displaying in-memory filesystem...");
         for root in config.stem_roots() {
             println!("\n[Root: {}]", root.path());

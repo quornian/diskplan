@@ -5,6 +5,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
+    default,
     fmt::{Display, Write as _},
 };
 
@@ -22,11 +23,22 @@ mod pattern;
 mod stack;
 pub use stack::{StackFrame, VariableSource};
 
+/// Indicates whether to traverse the entire schema or a limited subset
+#[derive(Copy, Clone, Default)]
+pub enum Extent {
+    /// Take all routes to populate the schema in full
+    #[default]
+    Full,
+    /// Only traverse the target path through the schema
+    Restricted,
+}
+
 /// Walks the schema and directory structure in concert, applying or reporting changes
 pub fn traverse<FS>(
     path: impl AsRef<Utf8Path>,
     stack: &StackFrame,
     filesystem: &mut FS,
+    extent: Extent,
 ) -> Result<()>
 where
     FS: Filesystem,
@@ -48,17 +60,23 @@ where
         start_path,
         remaining_path,
     );
-    traverse_node(schema_node, &start_path, remaining_path, stack, filesystem).with_context(
-        || {
-            schema_context(
-                "Failed to apply schema",
-                schema_node,
-                start_path.absolute(),
-                remaining_path,
-                stack,
-            )
-        },
-    )?;
+    traverse_node(
+        schema_node,
+        &start_path,
+        remaining_path,
+        extent,
+        stack,
+        filesystem,
+    )
+    .with_context(|| {
+        schema_context(
+            "Failed to apply schema",
+            schema_node,
+            start_path.absolute(),
+            remaining_path,
+            stack,
+        )
+    })?;
     Ok(())
 }
 
@@ -66,6 +84,7 @@ fn traverse_node<'a, FS>(
     schema_node: &'a SchemaNode<'a>,
     path: &PlantedPath,
     remaining: &Utf8Path,
+    extent: Extent,
     stack: &StackFrame<'a, '_, '_>,
     filesystem: &mut FS,
 ) -> Result<()>
@@ -129,6 +148,7 @@ where
                 directory_schema,
                 path,
                 remaining,
+                extent,
                 stack,
                 filesystem,
             )
@@ -223,12 +243,16 @@ fn traverse_directory<'a, FS>(
     directory_schema: &'a DirectorySchema,
     directory_path: &PlantedPath,
     remaining: &Utf8Path,
+    extent: Extent,
     stack: &StackFrame<'a, '_, '_>,
     filesystem: &mut FS,
 ) -> Result<Resolution>
 where
     FS: Filesystem,
 {
+    if let (Extent::Restricted, "") = (extent, remaining.as_ref()) {
+        return Ok(Resolution::FullyResolved);
+    }
     let stack = stack.push(VariableSource::Directory(directory_schema));
 
     // Pull the front off the relative remaining_path
@@ -251,14 +275,16 @@ where
     //
     let mut names: HashMap<Cow<str>, (Source, Option<_>)> = HashMap::new();
     let with_source = |src: Source| move |key| (key, (src, None));
-    names.extend(
-        filesystem
-            .list_directory(directory_path.absolute())
-            .unwrap_or_default()
-            .into_iter()
-            .map(Cow::Owned)
-            .map(with_source(Source::Disk)),
-    );
+    if let Extent::Full = extent {
+        names.extend(
+            filesystem
+                .list_directory(directory_path.absolute())
+                .unwrap_or_default()
+                .into_iter()
+                .map(Cow::Owned)
+                .map(with_source(Source::Disk)),
+        );
+    }
     names.extend(sought.map(Cow::Borrowed).map(with_source(Source::Path)));
     let mut compiled_schema_entries = Vec::with_capacity(directory_schema.entries().len());
     for (binding, child_node) in directory_schema.entries() {
@@ -376,6 +402,9 @@ where
             sought_matched = true;
             remaining
         } else {
+            if let Extent::Restricted = extent {
+                continue;
+            }
             Utf8Path::new("")
         };
 
@@ -387,8 +416,15 @@ where
                     &child_path,
                     remaining,
                 );
-                traverse_node(child_schema, &child_path, remaining, &stack, filesystem)
-                    .with_context(|| format!("Processing path {}", &child_path))?;
+                traverse_node(
+                    child_schema,
+                    &child_path,
+                    remaining,
+                    extent,
+                    &stack,
+                    filesystem,
+                )
+                .with_context(|| format!("Processing path {}", &child_path))?;
             }
             Binding::Dynamic(var) => {
                 tracing::debug!(
@@ -399,18 +435,25 @@ where
                     remaining,
                 );
                 let stack = StackFrame::push(&stack, VariableSource::Binding(var, name.into()));
-                traverse_node(child_schema, &child_path, remaining, &stack, filesystem)
-                    .with_context(|| {
-                        format!(
-                            r#"Processing path {} (with {})"#,
-                            &child_path,
-                            &stack
-                                .variables()
-                                .as_binding()
-                                .map(|(var, value)| format!("${var} = {value}"))
-                                .unwrap_or_else(|| "<no binding>".into()),
-                        )
-                    })?;
+                traverse_node(
+                    child_schema,
+                    &child_path,
+                    remaining,
+                    extent,
+                    &stack,
+                    filesystem,
+                )
+                .with_context(|| {
+                    format!(
+                        r#"Processing path {} (with {})"#,
+                        &child_path,
+                        &stack
+                            .variables()
+                            .as_binding()
+                            .map(|(var, value)| format!("${var} = {value}"))
+                            .unwrap_or_else(|| "<no binding>".into()),
+                    )
+                })?;
             }
         }
     }
@@ -487,7 +530,12 @@ where
 
         // Create the link target (using its own schema to build it)
         if !filesystem.exists(link_target.absolute()) {
-            traverse(link_target.absolute(), stack, filesystem)?;
+            traverse(
+                link_target.absolute(),
+                stack,
+                filesystem,
+                Extent::Restricted,
+            )?;
             assert!(filesystem.exists(link_target.absolute()));
         }
         // Create the symlink pointing to the target

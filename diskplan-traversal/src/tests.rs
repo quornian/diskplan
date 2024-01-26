@@ -102,7 +102,7 @@ macro_rules! assert_effect_of {
         )?
 
         // yields:
-        crate::traverse(path, &stack, &mut fs)?;
+        crate::traverse(path, &stack, &mut fs, Default::default())?;
         expected_paths.insert(Utf8Path::new("/"));
         expected_paths.insert(Utf8Path::new(root.path()));
         $($(

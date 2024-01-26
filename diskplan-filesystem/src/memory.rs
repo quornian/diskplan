@@ -113,15 +113,16 @@ impl Filesystem for MemoryFilesystem {
         target: impl AsRef<Utf8Path>,
     ) -> Result<()> {
         let path = path.as_ref();
+        let target = target.as_ref();
         let (parent, name) = self.canonical_split(path)?;
         self.insert_node(
             &parent,
             name,
             Node::Symlink {
-                target: target.as_ref().to_owned(),
+                target: target.to_owned(),
             },
         )
-        .with_context(|| format!("Creating symlink: {path}"))
+        .with_context(|| format!("Creating symlink: {path} -> {target}"))
     }
 
     fn exists(&self, path: impl AsRef<Utf8Path>) -> bool {
